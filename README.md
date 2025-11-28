@@ -116,8 +116,8 @@ APIProxy 是一个基于 FastAPI 构建的高性能 AI 代理网关。它为上�
 
 | 环境变量          | 描述                                     | 默认值                                    |
 | ----------------- | ---------------------------------------- | ----------------------------------------- |
-| `A4F_BASE_URL`    | 上游 AI 服务的基地址。                   | `REDACTED_API_URL`                      |
-| `A4F_API_KEY`     | 用于访问上游服务的 API 密钥。            | `REDACTED_API_KEY` |
+| `A4F_BASE_URL`    | 上游 AI 服务的基地址。                   | `需在 .env 文件中设置`                      |
+| `A4F_API_KEY`     | 用于访问上游服务的 API 密钥。            | `需在 .env 文件中设置`                    |
 | `REDIS_URL`       | Redis 连接字符串。                       | `redis://redis:6379/0`                    |
 | `MODELS_CACHE_TTL`| 模型列表缓存的过期时间（秒）。             | `300`                                     |
 | `MASK_AS_BROWSER` | 是否将发往上游的请求伪装成浏览器。         | `True`                                    |
