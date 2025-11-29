@@ -5,6 +5,10 @@
 
 所有配置都来自 `.env` 文件（或 Docker Compose 的 `env_file`），模板见仓库根目录的 `.env.example`。
 
+> 鉴权提示：在 `.env` 中设置 `APIPROXY_AUTH_TOKEN`，客户端需要在请求头里发送它的 Base64 编码：
+> `Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>`。可以运行
+> `uv run scripts/encode_token.py <token>` 来快速生成编码结果。
+
 
 1. 基本步骤
 -----------
@@ -138,7 +142,7 @@ LLM_PROVIDER_local_REGION=local
 
    ```bash
    curl -X GET "http://localhost:8000/providers" \
-     -H "Authorization: Bearer <your-api-key>"
+     -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>"
    ```
 
    返回中应包含你在 `LLM_PROVIDERS` 中配置的各个 `id`。
@@ -147,7 +151,7 @@ LLM_PROVIDER_local_REGION=local
 
    ```bash
    curl -X GET "http://localhost:8000/providers/openai/models" \
-     -H "Authorization: Bearer <your-api-key>"
+     -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>"
    ```
 
    如果能看到模型列表，说明：
@@ -158,7 +162,7 @@ LLM_PROVIDER_local_REGION=local
 
    ```bash
    curl -X GET "http://localhost:8000/providers/openai/health" \
-     -H "Authorization: Bearer <your-api-key>"
+     -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>"
    ```
 
 
@@ -183,15 +187,15 @@ LLM_PROVIDER_local_REGION=local
 ```bash
 # 列出所有逻辑模型
 curl -X GET "http://localhost:8000/logical-models" \
-  -H "Authorization: Bearer <your-api-key>"
+  -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>"
 
 # 查看某个逻辑模型
 curl -X GET "http://localhost:8000/logical-models/gpt-4" \
-  -H "Authorization: Bearer <your-api-key>"
+  -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>"
 
 # 查看逻辑模型的上游列表
 curl -X GET "http://localhost:8000/logical-models/gpt-4/upstreams" \
-  -H "Authorization: Bearer <your-api-key>"
+  -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>"
 ```
 
 
@@ -203,7 +207,7 @@ curl -X GET "http://localhost:8000/logical-models/gpt-4/upstreams" \
 ```bash
 curl -X POST "http://localhost:8000/routing/decide" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your-api-key>" \
+  -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>" \
   -d '{
     "logical_model": "gpt-4",
     "strategy": "latency_first",
@@ -222,14 +226,14 @@ curl -X POST "http://localhost:8000/routing/decide" \
 
   ```bash
   curl -X GET "http://localhost:8000/routing/sessions/conv_123" \
-    -H "Authorization: Bearer <your-api-key>"
+    -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>"
   ```
 
   查看，删除粘连用：
 
   ```bash
   curl -X DELETE "http://localhost:8000/routing/sessions/conv_123" \
-    -H "Authorization: Bearer <your-api-key>"
+    -H "Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>"
   ```
 
 

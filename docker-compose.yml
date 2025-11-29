@@ -7,21 +7,34 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   api:
     build:
       context: .
+      dockerfile: Dockerfile
+    image: apiproxy-api:latest
     container_name: apiproxy-api
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      # Fallbacks if .env is missing
-      REDIS_URL: "redis://redis:6379/0"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     ports:
       - "8000:8000"
-    command: >
-      sh -c "python -m pip install . && apiproxy"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
+volumes:
+  redis-data:

@@ -1,0 +1,22 @@
+# Ignore version control and local tooling artefacts
+.git
+.gitignore
+
+# Virtual environments and caches
+.venv
+.uv-cache
+.pytest_cache
+__pycache__
+
+# Local config / secrets / logs
+.env
+.env.*
+logs
+*.log
+
+# Editor / IDE files
+.vscode
+.idea
+
+# Misc build artefacts
+*.py[cod]

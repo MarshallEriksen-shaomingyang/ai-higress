@@ -59,6 +59,7 @@ APIProxy 是一个基于 FastAPI 构建的高性能 AI 代理网关。它为上�
    ```
 
    - 配置 `REDIS_URL` 指向你的 Redis；
+   - 配置 `APIPROXY_AUTH_TOKEN` 作为外部调用本网关的 API token（可用 `uv run scripts/encode_token.py <token>` 生成 Base64；客户端需要携带其 Base64 编码）；
    - 通过 `LLM_PROVIDERS` 与 `LLM_PROVIDER_{id}_*` 配置各个提供商；
    - 若需要自定义跨厂商故障转移行为，可为每个提供商设置：
 
@@ -109,6 +110,7 @@ APIProxy 是一个基于 FastAPI 构建的高性能 AI 代理网关。它为上�
    ```
 
    - 将 `REDIS_URL` 指向本地 Redis；
+   - 配置 `APIPROXY_AUTH_TOKEN` 作为外部调用本网关的 API token（可用 `uv run scripts/encode_token.py <token>` 生成 Base64；客户端需要携带其 Base64 编码）；
    - 配置 `LLM_PROVIDERS` 与 `LLM_PROVIDER_{id}_*`；
    - 如需自定义重试状态码，设置 `LLM_PROVIDER_{id}_RETRYABLE_STATUS_CODES`。
 
@@ -133,6 +135,7 @@ APIProxy 是一个基于 FastAPI 构建的高性能 AI 代理网关。它为上�
 | 变量名                          | 说明                                                                 | 默认值                    |
 | ------------------------------- | -------------------------------------------------------------------- | ------------------------- |
 | `REDIS_URL`                     | Redis 连接字符串                                                     | `redis://redis:6379/0`    |
+| `APIPROXY_AUTH_TOKEN`           | 网关对外认证 token（可用 `uv run scripts/encode_token.py <token>` 生成 Base64），客户端需在 Authorization 头中携带其 Base64 编码 | `timeline`                |
 | `MODELS_CACHE_TTL`              | 模型列表缓存过期时间（秒）                                           | `300`                     |
 | `MASK_AS_BROWSER`               | 是否伪装为浏览器（附加 UA/Origin/Referer 等头）                      | `True`                    |
 | `MASK_USER_AGENT`               | 伪装为浏览器时使用的 User-Agent                                     | 见 `.env.example`         |

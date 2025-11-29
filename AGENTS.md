@@ -1,5 +1,5 @@
 # Repository Guidelines
-
+请使用中文回答
 ## Project Structure & Module Organization
 - `main.py`: FastAPI entrypoint and `apiproxy` script target.
 - `service/`: Core gateway logic (`routes.py`, `upstream.py`, `auth.py`, `model_cache.py`, `context_store.py`, `settings.py`, `logging_config.py`).

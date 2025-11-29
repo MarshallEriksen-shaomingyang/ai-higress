@@ -70,6 +70,13 @@ class Settings(BaseSettings):
         description="Application log level: DEBUG, INFO, WARNING, ERROR, CRITICAL",
     )
 
+    # Shared API token required by clients when calling this gateway.
+    api_auth_token: str = Field(
+        "timeline",
+        alias="APIPROXY_AUTH_TOKEN",
+        description="Expected token after base64 decoding the Authorization header",
+    )
+
     def get_llm_provider_ids(self) -> List[str]:
         """
         Return configured provider ids from LLM_PROVIDERS.

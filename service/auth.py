@@ -2,6 +2,8 @@ import base64
 
 from fastapi import Header, HTTPException, status
 
+from service.settings import settings
+
 
 def _decode_token(token: str) -> str:
     """
@@ -16,8 +18,15 @@ def _decode_token(token: str) -> str:
             detail="Invalid API token",
         )
 
-    if decoded != "timeline":
-        # Only accept the literal value "timeline" after decoding.
+    expected = settings.api_auth_token
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Gateway token is not configured",
+        )
+
+    if decoded != expected:
+        # Only accept the literal configured value after decoding.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API token",
@@ -31,7 +40,7 @@ async def require_api_key(authorization: str | None = Header(default=None)) -> s
     Simple API key guard.
 
     Expects header: Authorization: Bearer <base64(token)>
-    After base64 解码结果必须是字符串 'timeline'，否则返回 401。
+    After base64 解码结果必须与 APIPROXY_AUTH_TOKEN 的值一致，否则返回 401。
     """
     if not authorization:
         raise HTTPException(
@@ -47,4 +56,3 @@ async def require_api_key(authorization: str | None = Header(default=None)) -> s
         )
 
     return _decode_token(token)
-

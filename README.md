@@ -76,6 +76,7 @@ Docker is the easiest way to run APIProxy locally or in production.
    ```
 
    - Set `REDIS_URL` to point to your Redis instance;  
+   - Configure `APIPROXY_AUTH_TOKEN` as the gateway API token (clients must send its Base64-encoded form in `Authorization` headers; use `uv run scripts/encode_token.py <token>` to generate the encoded value);  
    - Configure `LLM_PROVIDERS` and `LLM_PROVIDER_{id}_*` for each provider;  
    - Optionally configure cross-provider failover per provider:
 
@@ -126,6 +127,7 @@ Docker is the easiest way to run APIProxy locally or in production.
    ```
 
    - Point `REDIS_URL` at your local Redis;  
+   - Configure `APIPROXY_AUTH_TOKEN` as the gateway API token (clients must send its Base64-encoded form; generate it via `uv run scripts/encode_token.py <token>`);  
    - Set up `LLM_PROVIDERS` and `LLM_PROVIDER_{id}_*`;  
    - Optionally override retryable status codes per provider with `LLM_PROVIDER_{id}_RETRYABLE_STATUS_CODES`.
 
@@ -150,6 +152,7 @@ Common settings:
 | Variable                           | Description                                                                                         | Default                     |
 |------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------|
 | `REDIS_URL`                        | Redis connection URL                                                                                | `redis://redis:6379/0`      |
+| `APIPROXY_AUTH_TOKEN`              | Gateway API token; clients must send `Authorization: Bearer <base64(APIPROXY_AUTH_TOKEN)>` (generate via `uv run scripts/encode_token.py <token>`) | `timeline`                  |
 | `MODELS_CACHE_TTL`                 | TTL for the aggregated models cache (seconds)                                                       | `300`                       |
 | `MASK_AS_BROWSER`                  | When true, adds browser-like headers (User-Agent/Origin/Referer) to upstream requests              | `True`                      |
 | `MASK_USER_AGENT`                  | User-Agent string to use when `MASK_AS_BROWSER` is enabled                                         | see `.env.example`          |
