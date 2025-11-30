@@ -8,33 +8,38 @@ APIProxy is a FastAPI-based AI gateway that exposes a single, OpenAI-compatible 
 
 ## Features
 
-- OpenAI-compatible API  
-  Exposes `/v1/chat/completions` and `/models` so you can reuse existing OpenAI SDKs and tools.
+- **OpenAI-compatible API**  
+  Exposes `/v1/chat/completions`, `/v1/responses`, and `/models` so you can reuse existing OpenAI SDKs and tools.
 
-- Multi-provider routing with logical models  
-  Configure multiple providers via environment variables, map them into logical models stored in Redis, and let the gateway choose the best upstream based on weights and runtime metrics.
+- **Dynamic Multi-provider Routing**  
+  - **Logical Models**: Map multiple physical provider models to a single logical model (e.g., "fast-model" -> OpenAI's `gpt-3.5-turbo`, Gemini's `gemini-pro`).
+  - **Zero-Configuration Model Routing**: If a requested model is not explicitly mapped, the gateway automatically discovers which providers support it and creates a dynamic routing group on the fly.
+  - **Weighted & Metrics-based Scheduling**: Distributes traffic based on configured weights and runtime performance metrics.
 
-- Cross-provider failover (non-streaming and streaming)  
-  - Non-streaming: when the selected provider returns a retryable error (e.g. 429, 5xx) or a transport error, the gateway automatically falls back to the next candidate provider.  
-  - Streaming: if an upstream fails before any bytes have been sent, the gateway retries on the next provider; once output has started, a structured SSE error event is sent to the client instead.  
-  - Retryable HTTP status codes are configurable per provider via `LLM_PROVIDER_{id}_RETRYABLE_STATUS_CODES`, with sensible defaults for `openai`, `gemini` and `claude/anthropic` (429, 500, 502, 503, 504).
+- **Cross-provider Failover**  
+  Automatically retries requests on a different provider upon retryable errors (e.g., 429, 5xx) for both streaming and non-streaming requests.
 
-- Request format adapters  
-  Automatically detects and adapts different request shapes, such as Gemini-style `input` lists, into the OpenAI-style `messages` format expected by upstream chat APIs.
+- **Request Format Adapters**  
+  - Automatically converts different request formats into a unified OpenAI-style `messages` structure.
+  - Supports Gemini-style `input`, Claude-style requests, and the OpenAI Responses API (`/v1/responses`).
+  - Handles prefixed model names (e.g., `my-provider/some-model`) for simpler routing logic.
 
-- Model list aggregation and caching  
+- **Session Stickiness**  
+  Binds a conversation (via `X-Session-Id` header) to the first-chosen provider to maintain context in multi-message conversations.
+
+- **Model List Aggregation & Caching**  
   Fetches model lists from all configured providers, normalises them into an OpenAI-style `/models` response and caches them in Redis.
 
-- Session context storage  
-  Uses the `X-Session-Id` header to persist request/response snippets into Redis so you can inspect simple conversation history via an HTTP endpoint.
-
-- Streaming and non-streaming support  
+- **Streaming and Non-streaming Support**  
   Detects `stream` in the payload and `Accept: text/event-stream` to support both SSE streaming and plain JSON responses.
 
-- Flexible configuration  
+- **Session Context Storage**  
+  Uses the `X-Session-Id` header to persist request/response snippets into Redis so you can inspect simple conversation history via an HTTP endpoint.
+
+- **Flexible Configuration**  
   Upstream addresses, API keys, Redis URL, provider weights and failover behaviour are all controlled through environment variables.
 
-- Docker-friendly  
+- **Docker-friendly**  
   Includes a `docker-compose.yml` that starts the API gateway and Redis with a single command.
 
 ---
@@ -52,7 +57,7 @@ APIProxy is a FastAPI-based AI gateway that exposes a single, OpenAI-compatible 
 
 ## 🚀 Quick Start
 
-Docker is the easiest way to run APIProxy locally or in production.
+APIProxy provides a robust and flexible solution for managing AI model interactions. This section guides you through setting up and running the gateway, whether for local development or larger-scale deployments. The recommended approach utilizes Docker for ease of setup and consistency across environments.
 
 ### Prerequisites
 

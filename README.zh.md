@@ -8,18 +8,39 @@ APIProxy 是一个基于 FastAPI 构建的高性能 AI 代理网关。它为上�
 
 ## 功能特性
 
-- OpenAI 兼容接口：提供标准的 `/v1/chat/completions` 和 `/models` 端点，适配现有 OpenAI SDK 和生态。
-- 多提供商 + 逻辑模型：通过环境变量配置多家模型提供商，并在 Redis 中维护逻辑模型（LogicalModel），统一对外暴露模型名，对内按权重和健康度调度物理模型。
-- 跨厂商故障转移（Failover）：
-  - 非流式请求：当选中的上游返回可重试错误（如 429、5xx）或网络异常时，会自动按候选顺序切换到下一家提供商。
-  - 流式请求：在尚未向客户端发送任何内容前，如果上游返回可重试错误，也会自动尝试下一家；一旦已经开始输出，将在流中返回结构化的错误事件。
-  - 可重试的状态码可以通过 `LLM_PROVIDER_{id}_RETRYABLE_STATUS_CODES` 配置；对于 `openai`、`gemini`、`claude/anthropic` 会自动使用合理的默认值（429, 500, 502, 503, 504）。
-- 格式自动转换：自动检测并转换不同厂商的 API 请求格式，例如将 Gemini 风格的 `input` 转换为 OpenAI 风格的 `messages`。
-- 模型列表缓存：将各提供商的模型列表缓存到 Redis，聚合并返回统一的 OpenAI 风格模型列表。
-- 会话上下文管理：通过 `X-Session-Id` 请求头，将请求和响应片段保存到 Redis，支持简单的会话历史查询。
-- 流式与非流式：自动感知 `stream` 字段和 `Accept: text/event-stream` 头，支持 SSE 流式和普通 JSON 响应。
-- 灵活配置：上游地址、API 密钥、Redis 地址、多提供商和故障转移策略等均通过环境变量配置。
-- Docker 一键部署：提供 `docker-compose.yml`，可一键启动 APIProxy 与 Redis。
+- **兼容 OpenAI 的 API**  
+  提供 `/v1/chat/completions`、`/v1/responses` 和 `/models` 端点，以便您可以重用现有的 OpenAI SDK 和工具。
+
+- **动态多提供商路由**  
+  - **逻辑模型**: 将多个物理提供商模型映射到单个逻辑模型（例如，“fast-model” -> OpenAI 的 `gpt-3.5-turbo`、Gemini 的 `gemini-pro`）。
+  - **零配置模型路由**: 如果请求的模型未被显式映射，网关会自动发现支持该模型的提供商，并动态创建路由组。
+  - **基于权重和指标的调度**: 根据配置的权重和运行时性能指标分配流量。
+
+- **跨提供商故障转移**  
+  在流式和非流式请求中，当遇到可重试的错误（例如 429、5xx）时，自动在另一家提供商上重试请求。
+
+- **请求格式适配器**  
+  - 自动将不同的请求格式转换为统一的 OpenAI 风格的 `messages` 结构。
+  - 支持 Gemini 风格的 `input`、Claude 风格的请求以及 OpenAI Responses API (`/v1/responses`)。
+  - 处理带前缀的模型名称（例如 `my-provider/some-model`），以简化路由逻辑。
+
+- **会话粘性**  
+  通过 `X-Session-Id` 头将对话绑定到首次选择的提供商，以在多消息对话中保持上下文。
+
+- **模型列表聚合与缓存**  
+  从所有已配置的提供商处获取模型列表，将其规范化为 OpenAI 风格的 `/models` 响应，并缓存在 Redis 中。
+
+- **支持流式与非流式响应**  
+  通过 `stream: true` 或 `Accept: text/event-stream` 头自动检测客户端对流式响应的需求。
+
+- **会话上下文存储**  
+  使用 `X-Session-Id` 头将请求/响应片段持久化到 Redis，以便通过 HTTP 端点检查简单的对话历史。
+
+- **灵活配置**  
+  上游地址、API 密钥、Redis URL、提供商权重和故障转移行为都通过环境变量进行控制。
+
+- **Docker 友好**  
+  包含一个 `docker-compose.yml` 文件，可通过单个命令启动 API 网关和 Redis。
 
 ---
 
