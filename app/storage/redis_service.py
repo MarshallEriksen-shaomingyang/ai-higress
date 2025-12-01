@@ -80,6 +80,15 @@ async def set_logical_model(
     await redis_set_json(redis, key, logical_model.model_dump(), ttl_seconds=None)
 
 
+async def delete_logical_model(redis: Redis, logical_model_id: str) -> int:
+    """
+    删除指定的逻辑模型键，返回删除的键数量（0/1）。
+    """
+
+    key = LOGICAL_MODEL_KEY_TEMPLATE.format(logical_model=logical_model_id)
+    return int(await redis.delete(key))  # type: ignore[attr-defined]
+
+
 async def list_logical_models(redis: Redis) -> list[LogicalModel]:
     """
     List all logical models stored under llm:logical:*.
@@ -160,6 +169,8 @@ __all__ = [
     "get_routing_metrics",
     "get_session",
     "set_logical_model",
+    "delete_logical_model",
+    "list_logical_models",
     "set_provider_models",
     "set_routing_metrics",
     "set_session",

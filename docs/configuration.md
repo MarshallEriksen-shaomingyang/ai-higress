@@ -142,8 +142,15 @@ PY
 
 逻辑模型数据仍存放在 Redis（键名 `llm:logical:{logical_model}`），结构参考 `app/models/logical_model.py`。配置方式与之前一致：
 
-1. 在管理脚本中构造 `LogicalModel`，调用 `app/storage/redis_service.set_logical_model()` 写入；
+1. 在管理脚本或服务逻辑中构造 `LogicalModel`，调用 `app/storage/redis_service.set_logical_model()` 写入；
 2. 或在开发环境中直接用 `redis-cli SET llm:logical:gpt-4 '<json>'` 进行调试。
+3. 如果已经在 PostgreSQL 中维护了 `providers`/`provider_models` 元数据，可在应用内直接调用 `app.services.logical_model_sync.sync_logical_models(redis, provider_ids=[...])` 按 `model_id` 聚合上游并写入 Redis，而不再需要单独的同步脚本。
+
+实时写入与后续定时刷新建议：
+
+- 在后台创建提供商或模型后，直接复用当前的 Redis 连接调用 `app.services.logical_model_sync.sync_logical_models(redis, provider_ids=[<provider_id>])`，立即把新增上游落入 `llm:logical:{logical_model}`，无需等待定时任务。
+- 未来若引入 Celery，可在定时任务里复用同一函数做全量/增量刷新，保证 Redis 与数据库元数据保持一致。
+- 当删除提供商或模型时，再次调用同步函数即可自动剔除关联的上游；若某个逻辑模型不再有任何上游，相关 `llm:logical:{logical_model}` 键会被删除，避免路由到已下线的提供商。
 
 验证逻辑模型：
 
@@ -161,7 +168,11 @@ curl -X GET "http://localhost:8000/logical-models/gpt-4/upstreams" \
   -H "Authorization: Bearer <base64(API_KEY)>"
 ```
 
-当逻辑模型缺失时，网关会尝试动态构建：根据 `/models` 缓存查找所有包含请求模型 ID 的提供商，自动拼接成临时的逻辑模型，实现跨厂商回退。
+在应用中，`llm:logical:{logical_model}` 键承载了网关的“逻辑模型路由表”：
+
+- Chat/Completions 请求进入时会优先查这个键，如果存在同名逻辑模型，路由器按其中的 `upstreams`、`base_weight`、地域和 QPS 等元数据做多提供商加权调度与熔断；
+- `/logical-models*` 接口也直接读取该键，便于运维侧审计当前生效的逻辑模型与上游绑定关系；
+- 当键缺失时，网关会根据 `/models` 缓存动态拼接临时逻辑模型，实现跨厂商回退，但不具备预配置权重与能力元数据。
 
 
 5. 常见问题
