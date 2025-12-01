@@ -990,6 +990,8 @@ def test_chat_failover_non_stream(monkeypatch):
     monkeypatch.setattr(
         "app.provider.config.get_provider_config", _get_provider_config
     )
+    monkeypatch.setattr("app.routes.load_provider_configs", _load_provider_configs)
+    monkeypatch.setattr("app.routes.get_provider_config", _get_provider_config)
     monkeypatch.setattr("app.routes.choose_upstream", _choose_upstream)
 
     # Seed logical model with two upstreams into fake Redis.
@@ -1071,6 +1073,8 @@ def test_chat_failover_streaming(monkeypatch):
     monkeypatch.setattr(
         "app.provider.config.get_provider_config", _get_provider_config
     )
+    monkeypatch.setattr("app.routes.load_provider_configs", _load_provider_configs)
+    monkeypatch.setattr("app.routes.get_provider_config", _get_provider_config)
     monkeypatch.setattr("app.routes.choose_upstream", _choose_upstream)
 
     fake_redis._data.clear()

@@ -18,7 +18,7 @@ from tests.utils import InMemoryRedis, auth_headers, seed_user_and_key
 
 
 @pytest.fixture()
-def client_with_keys():
+def client_with_keys(monkeypatch):
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         future=True,
@@ -38,10 +38,16 @@ def client_with_keys():
     app = create_app()
     fake_redis = InMemoryRedis()
     app.dependency_overrides[get_db] = override_get_db
+
     async def override_get_redis():
         return fake_redis
 
     app.dependency_overrides[get_redis] = override_get_redis
+    monkeypatch.setattr(
+        "app.api.api_key_routes.get_redis_client",
+        lambda: fake_redis,
+        raising=False,
+    )
 
     with SessionLocal() as session:
         seed_user_and_key(session, token_plain="timeline")
