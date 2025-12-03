@@ -19,6 +19,14 @@
 - Keep configuration in `app/settings.py`, dependency wiring in `app/deps.py`, logging in `app/logging_config.py`.
 - When adding new routes, reuse existing patterns for auth, context, and upstream calls.
 
+## 前端 UI 框架使用规范
+- 当前前端技术栈：**Next.js + Tailwind CSS + shadcn/ui 风格组件库**，组件统一放在 `ai_higress_front/components/ui` 下（例如 `button.tsx`, `input.tsx`, `card.tsx`, `dialog.tsx`, `table.tsx` 等）。
+- 新增或修改前端页面时，**优先复用 UI 组件库**，不要直接使用原生标签写样式（如直接写 `<button>`, `<input>`, `<select>` 并手动堆 Tailwind class）。
+- 若现有 `@/components/ui` 中没有合适组件：
+  - AI Agent 可以通过 **shadcn MCP** 查询/检索对应组件用法；
+  - 在 `ai_higress_front` 目录下使用 **bun 命令** 安装，例如：`bunx shadcn@latest add button card dialog`（根据需要替换组件名），让组件落到 `components/ui` 后再使用。
+- 如确实需要原生元素（极少数场景），也应先在 `@/components/ui` 中封装成组件，再在页面中引用，保持交互和样式的一致性。
+
 ## Testing Guidelines
 - Use `pytest` and `pytest-asyncio` for async tests (`@pytest.mark.asyncio`).
 - Place tests under `tests/` with names like `test_<feature>.py` and `test_<case>()`.

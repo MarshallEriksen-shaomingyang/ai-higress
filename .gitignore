@@ -1,19 +1,77 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# ============================================
+# Python (Backend)
+# ============================================
+backend/__pycache__/
+backend/*.py[oc]
+backend/build/
+backend/dist/
+backend/wheels/
+backend/*.egg-info
 
 # Virtual environments
-.venv
-.uv-*
-.pytest_*
-logs/
-.env
-ai_higress/
+backend/.venv
+backend/.uv-*
+backend/.pytest_*
+
+# Backend logs
+backend/logs/
+*.log
+
+# Backend environment
+backend/.env
+
+# ============================================
+# Node.js (Frontend)
+# ============================================
+
+# Dependencies
+frontend/node_modules/
+frontend/.pnp/
+frontend/.pnp.*
+frontend/.yarn/
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
+
+# Build outputs
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Frontend environment
+frontend/.env.local
+frontend/.env.*.local
+
+# Misc
+frontend/.DS_Store
+frontend/*.pem
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# Debug logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# ============================================
+# IDE & Tools
+# ============================================
+.vscode/
+.idea/
+.serena/
 .codebuddy/
+
+# ============================================
+# Project-specific
+# ============================================
+CODEBUDDY.md
 specs/
 .specs/
-CODEBUDDY.md
+
+# ============================================
+# Old directories (can be removed after migration)
+# ============================================
+ai_higress/
+ai_higress_front/

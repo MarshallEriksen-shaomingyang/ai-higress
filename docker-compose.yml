@@ -47,15 +47,18 @@ services:
 
   api:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     image: apiproxy-api:latest
     container_name: apiproxy-api
     restart: unless-stopped
     env_file:
-      - .env
+      - backend/.env
     volumes:
-      - ./logs:/app/logs
+      - ./backend/logs:/app/logs
+      # 开发模式:挂载源代码实现热重载
+      - ./backend/app:/app/app:ro
+      - ./backend/main.py:/app/main.py:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,10 +71,34 @@ services:
         ipv4_address: 172.20.0.11
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 1h
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 10s
+    # 开发模式:启用热重载
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # 前端服务(开发环境,可选)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    image: apiproxy-frontend:dev
+    container_name: apiproxy-frontend
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app:cached
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    networks:
+      apiproxy-net:
+        ipv4_address: 172.20.0.13
+    depends_on:
+      - api
 
 volumes:
   postgres-data:

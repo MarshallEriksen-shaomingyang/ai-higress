@@ -1,0 +1,59 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create .env file
+        run: |
+          cp backend/.env.example backend/.env
+          echo "POSTGRES_USER=postgres" >> backend/.env
+          echo "POSTGRES_PASSWORD=test123" >> backend/.env
+          echo "POSTGRES_DB=apiproxy" >> backend/.env
+          echo "REDIS_PASSWORD=test123" >> backend/.env
+          echo "SECRET_KEY=test-secret-key-for-integration" >> backend/.env
+      
+      - name: Start services
+        run: docker-compose up -d
+      
+      - name: Wait for services
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+      
+      - name: Run integration tests
+        run: |
+          # 测试后端 API 健康检查
+          curl -f http://localhost:8000/health
+          
+          # 测试模型列表端点(需要认证,这里只测试是否返回401)
+          curl -i http://localhost:8000/models | grep -q "401\|403"
+          
+          echo "Integration tests passed!"
+      
+      - name: Collect logs
+        if: failure()
+        run: |
+          docker-compose logs api > api-logs.txt
+          docker-compose logs postgres > postgres-logs.txt
+          docker-compose logs redis > redis-logs.txt
+      
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs-${{ github.sha }}
+          path: '*-logs.txt'
+          retention-days: 7
+      
+      - name: Cleanup
+        if: always()
+        run: docker-compose down -v

@@ -1,6 +1,40 @@
 repos:
--   repo: https://github.com/Yelp/detect-secrets
+  # Python 代码检查 (后端)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/.*\.py$
+      - id: ruff-format
+        files: ^backend/.*\.py$
+
+  # 密钥检测
+  - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
-    -   id: detect-secrets
+      - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
+
+  # 前端代码检查
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: Frontend ESLint
+        entry: bash -c 'cd frontend && bun run lint'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
+  # 通用检查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        exclude: ^\.github/workflows/
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
