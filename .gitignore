@@ -1,6 +1,7 @@
 # ============================================
 # Python (Backend)
 # ============================================
+__pycache__/
 backend/__pycache__
 backend/*.py[oc]
 backend/build/
