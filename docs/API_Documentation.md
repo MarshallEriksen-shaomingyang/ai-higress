@@ -907,6 +907,94 @@
 
 ---
 
+### 5.3 按用户汇总路由指标
+
+**接口**: `GET /metrics/users/summary`
+
+**描述**: 按 `user_id` 聚合指定时间范围内的路由指标，跨 Provider 与 Logical Model，用于查看某个用户在系统中的整体使用情况。
+
+**认证**: API 密钥
+
+**查询参数**:
+- `user_id` (必填): 用户 ID（UUID）
+- `time_range` (可选): 时间范围，支持：
+  - `today`: 今天 0 点以来
+  - `7d`: 过去 7 天（默认）
+  - `30d`: 过去 30 天
+  - `all`: 全部历史数据
+- `transport` (可选): 传输模式过滤：
+  - `http`: 仅统计 HTTP 调用
+  - `sdk`: 仅统计 SDK 调用
+  - `all` (默认): 统计所有模式
+- `is_stream` (可选): 流式过滤：
+  - `true`: 仅统计流式调用
+  - `false`: 仅统计非流式调用
+  - `all` (默认): 统计所有调用
+
+**响应**:
+```json
+{
+  "user_id": "uuid",
+  "time_range": "7d",
+  "transport": "all",
+  "is_stream": "all",
+  "total_requests": 1234,
+  "success_requests": 1200,
+  "error_requests": 34,
+  "error_rate": 0.0275,
+  "latency_avg_ms": 110.3
+}
+```
+
+**错误响应**:
+- 500: 查询指标失败
+
+---
+
+### 5.4 按 API Key 汇总路由指标
+
+**接口**: `GET /metrics/api-keys/summary`
+
+**描述**: 按 `api_key_id` 聚合指定时间范围内的路由指标，跨 Provider 与 Logical Model，用于查看某个 API Key 的整体使用情况（例如单个调用方的额度统计）。
+
+**认证**: API 密钥
+
+**查询参数**:
+- `api_key_id` (必填): API Key ID（UUID）
+- `time_range` (可选): 时间范围，支持：
+  - `today`: 今天 0 点以来
+  - `7d`: 过去 7 天（默认）
+  - `30d`: 过去 30 天
+  - `all`: 全部历史数据
+- `transport` (可选): 传输模式过滤：
+  - `http`: 仅统计 HTTP 调用
+  - `sdk`: 仅统计 SDK 调用
+  - `all` (默认): 统计所有模式
+- `is_stream` (可选): 流式过滤：
+  - `true`: 仅统计流式调用
+  - `false`: 仅统计非流式调用
+  - `all` (默认): 统计所有调用
+
+**响应**:
+```json
+{
+  "api_key_id": "uuid",
+  "time_range": "7d",
+  "transport": "all",
+  "is_stream": "all",
+  "total_requests": 1234,
+  "success_requests": 1200,
+  "error_requests": 34,
+  "error_rate": 0.0275,
+  "latency_avg_ms": 110.3
+}
+```
+
+**错误响应**:
+- 500: 查询指标失败
+
+---
+
 > 提示：当客户端使用带有 `allowed_provider_ids` 限制的 API 密钥访问 `/models` 或聊天接口时，
 > 实际可用的模型和路由候选 Provider 会根据该密钥允许的 `provider_id` 自动过滤。
 

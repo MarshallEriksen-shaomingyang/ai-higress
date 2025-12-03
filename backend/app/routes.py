@@ -69,6 +69,8 @@ from .models import Provider, ProviderModel
 from .services.bootstrap_admin import ensure_initial_admin
 from .services.metrics_service import (
     call_upstream_http_with_metrics,
+    call_sdk_generate_with_metrics,
+    stream_sdk_with_metrics,
     stream_upstream_with_metrics,
 )
 from .settings import settings
@@ -495,11 +497,15 @@ async def _send_claude_fallback_non_stream(
     headers: dict[str, str],
     provider_id: str,
     model_id: str,
+    logical_model_id: str,
     payload: dict[str, Any],
     fallback_url: str | None,
     redis,
     x_session_id: str | None,
     bind_session,
+    db: Session,
+    user_id: UUID | None,
+    api_key_id: UUID | None,
 ) -> ClaudeFallbackOutcome:
     if not fallback_url:
         return ClaudeFallbackOutcome(
@@ -518,7 +524,17 @@ async def _send_claude_fallback_non_stream(
         payload, upstream_model_id=model_id
     )
     try:
-        response = await client.post(fallback_url, headers=headers, json=fallback_payload)
+        response = await call_upstream_http_with_metrics(
+            client=client,
+            url=fallback_url,
+            headers=headers,
+            json_body=fallback_payload,
+            db=db,
+            provider_id=provider_id,
+            logical_model=logical_model_id,
+            user_id=user_id,
+            api_key_id=api_key_id,
+        )
     except httpx.HTTPError as exc:
         return ClaudeFallbackOutcome(
             response=None, retryable=True, status_code=None, error_text=str(exc)
@@ -562,11 +578,15 @@ async def _claude_streaming_fallback_iterator(
     headers: dict[str, str],
     provider_id: str,
     model_id: str,
+    logical_model_id: str,
     fallback_url: str | None,
     payload: dict[str, Any],
     redis,
     session_id: str | None,
     bind_session_cb,
+    db: Session,
+    user_id: UUID | None,
+    api_key_id: UUID | None,
 ) -> AsyncIterator[bytes]:
     if not fallback_url:
         raise ClaudeMessagesFallbackStreamError(
@@ -584,7 +604,7 @@ async def _claude_streaming_fallback_iterator(
     adapter = OpenAIToClaudeStreamAdapter(payload.get("model") or model_id)
     first_chunk = True
     try:
-        async for chunk in stream_upstream(
+        async for chunk in stream_upstream_with_metrics(
             client=client,
             method="POST",
             url=fallback_url,
@@ -592,6 +612,11 @@ async def _claude_streaming_fallback_iterator(
             json_body=fallback_payload,
             redis=redis,
             session_id=session_id,
+            db=db,
+            provider_id=provider_id,
+            logical_model=logical_model_id,
+            user_id=user_id,
+            api_key_id=api_key_id,
         ):
             if first_chunk:
                 first_chunk = False
@@ -1937,13 +1962,19 @@ def create_app() -> FastAPI:
                             continue
 
                         try:
-                            sdk_payload = await driver.generate_content(
+                            sdk_payload = await call_sdk_generate_with_metrics(
+                                driver=driver,
                                 api_key=key_selection.key,
                                 model_id=model_id,
                                 payload=payload,
                                 base_url=normalize_base_url(provider_cfg.base_url),
+                                db=db,
+                                provider_id=provider_id,
+                                logical_model=logical_model.logical_id,
+                                user_id=current_key.user_id,
+                                api_key_id=current_key.id,
                             )
-                        except driver.error_types as exc:
+                        except Exception as exc:
                             last_status = None
                             last_error_text = str(exc)
                             record_key_failure(
@@ -2011,11 +2042,15 @@ def create_app() -> FastAPI:
                                 headers=headers,
                                 provider_id=provider_id,
                                 model_id=model_id,
+                                logical_model_id=logical_model.logical_id,
                                 payload=payload,
                                 fallback_url=fallback_url or base_endpoint,
                                 redis=redis,
                                 x_session_id=x_session_id,
                                 bind_session=_bind_session_for_upstream,
+                                db=db,
+                                user_id=current_key.user_id,
+                                api_key_id=current_key.id,
                             )
                             if outcome.response is not None:
                                 if key_selection:
@@ -2080,6 +2115,8 @@ def create_app() -> FastAPI:
                             db=db,
                             provider_id=provider_id,
                             logical_model=logical_model.logical_id,
+                            user_id=current_key.user_id,
+                            api_key_id=current_key.id,
                         )
                     except httpx.HTTPError as exc:
                         if key_selection:
@@ -2125,11 +2162,15 @@ def create_app() -> FastAPI:
                             headers=headers,
                             provider_id=provider_id,
                             model_id=model_id,
+                            logical_model_id=logical_model.logical_id,
                             payload=payload,
                             fallback_url=fallback_url or base_endpoint,
                             redis=redis,
                             x_session_id=x_session_id,
                             bind_session=_bind_session_for_upstream,
+                            db=db,
+                            user_id=current_key.user_id,
+                            api_key_id=current_key.id,
                         )
                         if outcome.response is not None:
                             if key_selection:
@@ -2319,11 +2360,17 @@ def create_app() -> FastAPI:
 
                         first_chunk_seen = False
                         try:
-                            async for chunk_dict in driver.stream_content(
+                            async for chunk_dict in stream_sdk_with_metrics(
+                                driver=driver,
                                 api_key=key_selection.key,
                                 model_id=model_id,
                                 payload=payload,
                                 base_url=normalize_base_url(provider_cfg.base_url),
+                                db=db,
+                                provider_id=provider_id,
+                                logical_model=logical_model.logical_id,
+                                user_id=current_key.user_id,
+                                api_key_id=current_key.id,
                             ):
                                 sse_chunk = _encode_sse_payload(chunk_dict)
                                 if adapter:
@@ -2350,7 +2397,7 @@ def create_app() -> FastAPI:
                             record_key_success(key_selection, redis=redis)
                             _mark_provider_success(provider_id)
                             return
-                        except driver.error_types as exc:
+                        except Exception as exc:
                             last_status = None
                             last_error_text = str(exc)
                             record_key_failure(
@@ -2392,11 +2439,13 @@ def create_app() -> FastAPI:
                                 headers=headers,
                                 provider_id=provider_id,
                                 model_id=model_id,
+                                logical_model_id=logical_model.logical_id,
                                 fallback_url=fallback_url or base_endpoint,
                                 payload=payload,
                                 redis=redis,
                                 session_id=x_session_id,
                                 bind_session_cb=_bind_session_for_upstream,
+                                db=db,
                             ):
                                 yield chunk
                             if key_selection:
@@ -2437,6 +2486,8 @@ def create_app() -> FastAPI:
                             db=db,
                             provider_id=provider_id,
                             logical_model=logical_model.logical_id,
+                            user_id=current_key.user_id,
+                            api_key_id=current_key.id,
                         ):
                             if first_chunk:
                                 first_chunk = False
@@ -2489,11 +2540,13 @@ def create_app() -> FastAPI:
                                     headers=headers,
                                     provider_id=provider_id,
                                     model_id=model_id,
+                                    logical_model_id=logical_model.logical_id,
                                     fallback_url=fallback_url or base_endpoint,
                                     payload=payload,
                                     redis=redis,
                                     session_id=x_session_id,
                                     bind_session_cb=_bind_session_for_upstream,
+                                    db=db,
                                 ):
                                     yield chunk
                                 if key_selection:

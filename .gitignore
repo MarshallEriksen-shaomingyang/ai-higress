@@ -1,6 +1,8 @@
 # ============================================
 # Python (Backend)
 # ============================================
+.pytest_cache/
+.ruff_cache/
 __pycache__/
 backend/__pycache__
 backend/*.py[oc]
