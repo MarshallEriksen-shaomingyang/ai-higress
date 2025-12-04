@@ -264,7 +264,7 @@ def record_key_failure(
     selection.state.fail_count += 1
     base = 1.0 if retryable else 5.0
     backoff_seconds = base * (2 ** min(selection.state.fail_count, 5))
-    delta = _PREFERENCE_RETRYABLE_FAILURE_DELTA if retryable else _PREFERENCE_FATAL_DELTA
+    delta = _PREFERENCE_RETRYABLE_FAILURE_DELTA if retryable else _PREFERENCE_FATAL_FAILURE_DELTA
     if status_code in (401, 403):
         backoff_seconds = max(backoff_seconds, 30.0)
         delta = min(delta, _PREFERENCE_AUTH_FAILURE_DELTA)
