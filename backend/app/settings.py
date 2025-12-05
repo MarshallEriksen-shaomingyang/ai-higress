@@ -28,11 +28,18 @@ class Settings(BaseSettings):
     # Read from OS env and optional .env file in project root.
     # Calculate the project root directory (two levels up from this file)
     _project_root = Path(__file__).parent.parent.parent
-    
+
     model_config = SettingsConfigDict(
         env_file=str(_project_root / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+    )
+
+    # Environment / mode
+    environment: str = Field(
+        "development",
+        alias="APP_ENV",
+        description="当前运行环境，例如 development / production；默认 development",
     )
 
     # Redis connection string
@@ -264,6 +271,14 @@ class Settings(BaseSettings):
         description="流式请求在无法获取 usage 时用于预估扣费的最小 token 数",
         ge=0,
     )
+
+    @property
+    def enable_security_middleware(self) -> bool:
+        """
+        是否启用安全相关中间件栈。
+        默认仅在 APP_ENV=production 时开启。
+        """
+        return self.environment.lower() == "production"
 
 settings = Settings()  # Reads from environment if available
 

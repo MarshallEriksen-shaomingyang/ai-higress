@@ -255,9 +255,9 @@ export function ProvidersPageClient({
       {/* 页面标题、筛选器和操作按钮 */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold">{t("providers.management_title")}</h1>
+          <h1 className="text-3xl font-bold">{t("providers.directory_title")}</h1>
           <p className="text-muted-foreground text-sm">
-            {t("providers.management_subtitle")}
+            {t("providers.directory_subtitle")}
           </p>
         </div>
         <div className="flex flex-col gap-2 md:flex-row md:items-center">

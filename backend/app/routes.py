@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
 
+    from .settings import settings
     from app.middleware import (
         RateLimitMiddleware,
         RequestValidatorMiddleware,
@@ -67,36 +68,47 @@ def create_app() -> FastAPI:
     # 使用 lifespan 替代 on_event("startup")
     app = FastAPI(title="AI Gateway", version="0.1.0", lifespan=lifespan)
 
-    # 安全相关中间件
-    app.add_middleware(
-        SecurityHeadersMiddleware,
-        enable_hsts=False,  # 开发环境关闭 HSTS，生产环境建议开启
-    )
+    # 安全相关中间件：仅在生产环境启用
+    if settings.enable_security_middleware:
+        logger.info(
+            "Enabling security middleware stack (environment=%s)",
+            settings.environment,
+        )
+        app.add_middleware(
+            SecurityHeadersMiddleware,
+            enable_hsts=False,  # 开发环境关闭 HSTS，生产环境建议开启
+        )
 
-    app.add_middleware(
-        RateLimitMiddleware,
-        redis_client=None,  # 使用内存存储，生产环境建议传入 Redis 客户端
-        default_max_requests=100,  # 默认每分钟 100 次请求
-        default_window_seconds=60,
-        path_limits={
-            "/auth/login": (5, 60),  # 登录接口：每分钟 5 次
-            "/auth/register": (3, 300),  # 注册接口：每 5 分钟 3 次
-            "/v1/chat/completions": (60, 60),  # Chat 接口：每分钟 60 次
-        },
-    )
+        app.add_middleware(
+            RateLimitMiddleware,
+            redis_client=None,  # 使用内存存储，生产环境建议传入 Redis 客户端
+            default_max_requests=100,  # 默认每分钟 100 次请求
+            default_window_seconds=60,
+            path_limits={
+                "/auth/login": (5, 60),  # 登录接口：每分钟 5 次
+                "/auth/register": (3, 300),  # 注册接口：每 5 分钟 3 次
+                "/v1/chat/completions": (60, 60),  # Chat 接口：每分钟 60 次
+            },
+        )
 
-    app.add_middleware(
-        RequestValidatorMiddleware,
-        enable_sql_injection_check=True,
-        enable_xss_check=True,
-        enable_path_traversal_check=True,
-        enable_command_injection_check=True,
-        enable_user_agent_check=True,
-        log_suspicious_requests=True,
-        inspect_body=True,
-        ban_ip_on_detection=True,
-        ban_ttl_seconds=900,
-    )
+        app.add_middleware(
+            RequestValidatorMiddleware,
+            enable_sql_injection_check=True,
+            enable_xss_check=True,
+            enable_path_traversal_check=True,
+            enable_command_injection_check=True,
+            enable_user_agent_check=True,
+            log_suspicious_requests=True,
+            inspect_body=True,
+            ban_ip_on_detection=True,
+            ban_ttl_seconds=900,
+        )
+    else:
+        logger.warning(
+            "Security middleware stack is disabled (environment=%s); "
+            "set APP_ENV=production to enable in production.",
+            settings.environment,
+        )
 
     # CORS
     app.add_middleware(

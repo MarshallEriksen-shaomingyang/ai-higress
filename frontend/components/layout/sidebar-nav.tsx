@@ -10,13 +10,15 @@ import {
     Server,
     Cpu,
     Key,
+    Coins,
     Network,
     Activity,
     Settings,
     Users,
     UserCircle,
     Shield,
-    Package
+    Package,
+    Lock
 } from "lucide-react";
 
 const navItems = [
@@ -31,6 +33,11 @@ const navItems = [
         icon: Server,
     },
     {
+        titleKey: "nav.my_providers",
+        href: "/dashboard/my-providers",
+        icon: Lock,
+    },
+    {
         titleKey: "nav.logical_models",
         href: "/dashboard/logical-models",
         icon: Cpu,
@@ -39,6 +46,11 @@ const navItems = [
         titleKey: "nav.api_keys",
         href: "/dashboard/api-keys",
         icon: Key,
+    },
+    {
+        titleKey: "nav.credits",
+        href: "/dashboard/credits",
+        icon: Coins,
     },
     {
         titleKey: "nav.metrics",

@@ -20,9 +20,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Edit, Trash2, Settings, Lock, Globe, Eye, Database } from "lucide-react";
+import { Edit, Trash2, Settings, Lock, Globe, Eye, Database, Key } from "lucide-react";
 import { formatRelativeTime } from "@/lib/date-utils";
 import { useI18n } from "@/lib/i18n-context";
+import { useRouter } from "next/navigation";
 
 interface ProvidersTableEnhancedProps {
   privateProviders: Provider[];
@@ -46,6 +47,7 @@ export function ProvidersTableEnhanced({
   currentUserId,
 }: ProvidersTableEnhancedProps) {
   const { t } = useI18n();
+  const router = useRouter();
   const allProviders = [...privateProviders, ...publicProviders];
 
   // 判断是否可以编辑/删除
@@ -54,8 +56,14 @@ export function ProvidersTableEnhanced({
     if (provider.visibility === 'private') {
       return provider.owner_id === currentUserId;
     }
-    // 公共提供商：需要管理员权限（这里简化处理，实际应该检查用户角色）
+    // 公共提供商：普通用户不允许修改
     return false;
+  };
+
+  // 判断是否可以管理密钥
+  const canManageKeys = (provider: Provider) => {
+    // 仅私有提供商的所有者可以管理密钥
+    return provider.visibility === 'private' && provider.owner_id === currentUserId;
   };
 
   const renderProviderRow = (provider: Provider) => (
@@ -139,6 +147,18 @@ export function ProvidersTableEnhanced({
               title={t("providers.action_view_models")}
             >
               <Database className="w-4 h-4" />
+            </Button>
+          )}
+          {/* 管理密钥按钮 - 仅私有提供商的所有者可见 */}
+          {canManageKeys(provider) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/dashboard/providers/${provider.id}/keys`)}
+              className="h-8 w-8 p-0"
+              title={t("providers.action_manage_keys")}
+            >
+              <Key className="w-4 h-4" />
             </Button>
           )}
           {canModify(provider) && (

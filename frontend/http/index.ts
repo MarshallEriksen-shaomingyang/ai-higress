@@ -6,10 +6,6 @@ export { apiKeyService, type CreateApiKeyRequest, type UpdateApiKeyRequest, type
 export {
   providerService,
   type Provider,
-  type ProviderKey,
-  type CreateProviderKeyRequest,
-  type UpdateProviderKeyRequest,
-  type ProviderKeyDetail,
   type Model,
   type HealthStatus,
   type ProviderMetrics,
@@ -47,3 +43,16 @@ export {
   type RolePermissionsResponse,
   type SetRolePermissionsRequest
 } from './admin';
+export {
+  creditService,
+  type CreditAccount,
+  type CreditTransaction,
+  type TopupRequest,
+  type TransactionQueryParams
+} from './credit';
+export {
+  providerKeyService,
+  type ProviderKey,
+  type CreateProviderKeyRequest,
+  type UpdateProviderKeyRequest
+} from './provider-keys';

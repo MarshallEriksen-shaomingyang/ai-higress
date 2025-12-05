@@ -1,0 +1,46 @@
+import type { Language } from "../i18n-context";
+
+export const authTranslations: Record<Language, Record<string, string>> = {
+  en: {
+    // Auth / Login
+    "auth.login.subtitle": "Sign in to your account",
+    "auth.email_label": "Email",
+    "auth.email_placeholder": "name@example.com",
+    "auth.password_label": "Password",
+    "auth.password_placeholder": "Enter your password",
+    "auth.remember_me": "Remember me",
+    "auth.forgot_password": "Forgot password?",
+    "auth.login_button": "Sign In",
+    "auth.no_account": "Don't have an account?",
+    "auth.signup_link": "Sign up",
+    "auth.register.subtitle": "Create a new account",
+    "auth.register_button": "Sign Up",
+    "auth.name_label": "Name",
+    "auth.name_placeholder": "Your name",
+    "auth.confirm_password_label": "Confirm Password",
+    "auth.confirm_password_placeholder": "Confirm your password",
+    "auth.have_account": "Already have an account?",
+    "auth.signin_link": "Sign in",
+  },
+  zh: {
+    // Auth / Login
+    "auth.login.subtitle": "登录到你的账户",
+    "auth.email_label": "邮箱",
+    "auth.email_placeholder": "name@example.com",
+    "auth.password_label": "密码",
+    "auth.password_placeholder": "请输入密码",
+    "auth.remember_me": "记住我",
+    "auth.forgot_password": "忘记密码？",
+    "auth.login_button": "登录",
+    "auth.no_account": "还没有账号？",
+    "auth.signup_link": "立即注册",
+    "auth.register.subtitle": "创建一个新账户",
+    "auth.register_button": "注册",
+    "auth.name_label": "姓名",
+    "auth.name_placeholder": "请输入姓名",
+    "auth.confirm_password_label": "确认密码",
+    "auth.confirm_password_placeholder": "请再次输入密码",
+    "auth.have_account": "已经有账号？",
+    "auth.signin_link": "去登录",
+  },
+};

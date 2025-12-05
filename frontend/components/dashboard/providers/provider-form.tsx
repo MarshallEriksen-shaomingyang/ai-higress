@@ -256,6 +256,14 @@ export function ProviderFormEnhanced({
         try {
             setIsSubmitting(true);
 
+            // 从 auth store 获取当前用户 ID
+            const { useAuthStore } = await import("@/lib/stores/auth-store");
+            const userId = useAuthStore.getState().user?.id;
+            
+            if (!userId) {
+                throw new Error("用户未登录");
+            }
+
             const payload: CreatePrivateProviderRequest = {
                 preset_id: values.presetId || undefined,
                 name: values.name.trim(),
@@ -301,7 +309,9 @@ export function ProviderFormEnhanced({
                 payload.supported_api_styles = values.supportedApiStyles as ApiStyle[];
             }
 
-            await privateProviderService.createPrivateProvider(payload);
+            // 使用用户级别的 API
+            const { providerService } = await import("@/http/provider");
+            await providerService.createPrivateProvider(userId, payload);
             
             toast.success("Provider 创建成功");
             form.reset(providerFormDefaults);
