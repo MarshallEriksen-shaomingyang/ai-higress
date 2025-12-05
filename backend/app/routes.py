@@ -27,6 +27,7 @@ from .api.v1.provider_key_routes import router as provider_key_router
 from .api.v1.provider_submission_routes import (
     router as provider_submission_router,
 )
+from .api.v1.user_provider_routes import router as user_provider_router
 from .api.v1.session_routes import router as user_session_router
 from .api.v1.user_routes import router as user_router
 from .db import SessionLocal
@@ -132,6 +133,7 @@ def create_app() -> FastAPI:
 
     # 用户私有 Provider 与投稿
     app.include_router(private_provider_router)
+    app.include_router(user_provider_router)
     app.include_router(provider_submission_router)
 
     # 管理端路由

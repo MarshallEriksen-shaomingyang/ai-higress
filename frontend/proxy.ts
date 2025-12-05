@@ -25,7 +25,7 @@ function isPublicRoute(pathname: string): boolean {
   return publicRoutes.some(route => pathname === route || pathname.startsWith(route));
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
   // 从 cookie 获取 token

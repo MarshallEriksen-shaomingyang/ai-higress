@@ -953,6 +953,28 @@
 }
 ```
 
+### 计费规则
+
+网关在记录一次 LLM 调用的 usage 时，会根据 token 用量和配置计算本次应扣的积分：
+
+- 基础单价：`CREDITS_BASE_PER_1K_TOKENS`（环境变量），表示“1x 模型每 1000 tokens 消耗多少积分”；  
+- 模型倍率：`ModelBillingConfig.multiplier`，按模型或逻辑模型 ID 设置，例如：
+  - `gpt-4o-mini` = 0.5  
+  - `gpt-4o` = 2.0  
+- Provider 结算系数：`Provider.billing_factor`，按具体 Provider 细化成本：
+  - 默认 `1.0`，代表基准成本；
+  - >1.0 表示该 Provider 更贵（同模型下会多扣积分）；
+  - <1.0 表示该 Provider 更便宜或只收少量服务费（例如用户自建 Provider）。
+
+综合起来，单次调用的积分消耗近似为：
+
+```text
+effective_multiplier = model_multiplier * billing_factor
+cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective_multiplier)
+```
+
+因此，同一个模型在不同 Provider 下，实际扣除的积分可以不同，用于反映不同厂商或不同渠道的成本差异。
+
 ### 1. 查询当前用户积分
 
 **接口**: `GET /v1/credits/me`  
@@ -1189,6 +1211,7 @@
     "region": "string | null",
     "cost_input": 0.0,
     "cost_output": 0.0,
+    "billing_factor": 1.0,
     "max_qps": 1000,
     "custom_headers": {},
     "retryable_status_codes": [429, 500, 502, 503, 504],
@@ -1240,6 +1263,7 @@
   "region": "string | null",
   "cost_input": 0.0,
   "cost_output": 0.0,
+  "billing_factor": 1.0,
   "max_qps": 1000,
   "custom_headers": {},
   "retryable_status_codes": [429, 500, 502, 503, 504],
@@ -1525,7 +1549,65 @@
 > 提示：当客户端使用带有 `allowed_provider_ids` 限制的 API 密钥访问 `/models` 或聊天接口时，
 > 实际可用的模型和路由候选 Provider 会根据该密钥允许的 `provider_id` 自动过滤。
 
-### 6. 获取用户私有提供商列表
+### 6. 获取用户可用的提供商列表（私有 + 公共）
+
+**接口**: `GET /users/{user_id}/providers`
+
+**描述**: 获取用户可用的所有提供商列表，包括用户的私有提供商和系统的公共提供商。
+
+**认证**: JWT 令牌
+
+**查询参数**:
+- `visibility` (可选): 过滤可见性
+  - `all`: 全部可用（默认）
+  - `private`: 仅私有提供商
+  - `public`: 仅公共提供商
+
+**响应**:
+```json
+{
+  "private_providers": [
+    {
+      "id": "uuid",
+      "provider_id": "my-openai-proxy",
+      "name": "我的 OpenAI 代理",
+      "base_url": "https://my-proxy.com",
+      "provider_type": "native",
+      "transport": "http",
+      "sdk_vendor": null,
+      "visibility": "private",
+      "owner_id": "uuid",
+      "status": "healthy",
+      "created_at": "datetime",
+      "updated_at": "datetime"
+    }
+  ],
+  "public_providers": [
+    {
+      "id": "uuid",
+      "provider_id": "openai",
+      "name": "OpenAI",
+      "base_url": "https://api.openai.com",
+      "provider_type": "native",
+      "transport": "http",
+      "sdk_vendor": null,
+      "visibility": "public",
+      "owner_id": null,
+      "status": "healthy",
+      "created_at": "datetime",
+      "updated_at": "datetime"
+    }
+  ],
+  "total": 2
+}
+```
+
+**错误响应**:
+- 403: 无权查看其他用户的提供商列表
+
+---
+
+### 7. 获取用户私有提供商列表
 
 **接口**: `GET /users/{user_id}/private-providers`
 
@@ -1556,7 +1638,7 @@
 
 ---
 
-### 7. 创建用户私有提供商
+### 8. 创建用户私有提供商
 
 **接口**: `POST /users/{user_id}/private-providers`
 
@@ -1611,7 +1693,7 @@
 
 ---
 
-### 8. 更新用户私有提供商
+### 9. 更新用户私有提供商
 
 **接口**: `PUT /users/{user_id}/private-providers/{provider_id}`
 
@@ -1651,7 +1733,23 @@
 
 ---
 
-### 9. 用户提交共享提供商
+### 10. 删除用户私有提供商
+
+**接口**: `DELETE /users/{user_id}/private-providers/{provider_id}`
+
+**描述**: 删除用户的私有提供商。
+
+**认证**: JWT 令牌
+
+**成功响应**: 204 No Content
+
+**错误响应**:
+- 403: 无权删除其他用户的私有提供商
+- 404: 私有提供商不存在
+
+---
+
+### 11. 用户提交共享提供商
 
 **接口**: `POST /providers/submissions`
 
@@ -1700,7 +1798,7 @@
 
 ---
 
-### 10. 管理员查看共享提供商提交
+### 12. 管理员查看共享提供商提交
 
 **接口**: `GET /providers/submissions?status=pending|approved|rejected`
 
@@ -1731,7 +1829,7 @@
 
 ---
 
-### 11. 管理员审核共享提供商提交
+### 13. 管理员审核共享提供商提交
 
 **接口**: `PUT /providers/submissions/{submission_id}/review`
 
@@ -1772,7 +1870,7 @@
 
 ---
 
-### 12. 管理员查看 Provider 列表（含可见性/所有者）
+### 14. 管理员查看 Provider 列表（含可见性/所有者）
 
 **接口**: `GET /admin/providers`
 
@@ -1808,7 +1906,7 @@
 
 ---
 
-### 13. 管理员更新 Provider 可见性
+### 15. 管理员更新 Provider 可见性
 
 **接口**: `PUT /admin/providers/{provider_id}/visibility`
 

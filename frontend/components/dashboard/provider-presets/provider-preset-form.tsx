@@ -338,7 +338,9 @@ export function ProviderPresetForm({
 
               {/* 提供商类型 */}
               <div className="space-y-2">
-                <Label htmlFor="providerType">提供商类型</Label>
+                <Label htmlFor="providerType">
+                  提供商类型 <span className="text-destructive">*</span>
+                </Label>
                 <Select value={providerType} onValueChange={(v: any) => setProviderType(v)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -352,7 +354,9 @@ export function ProviderPresetForm({
 
             {/* 传输方式 */}
             <div className="space-y-2">
-              <Label htmlFor="transport">传输方式</Label>
+              <Label htmlFor="transport">
+                传输方式 <span className="text-destructive">*</span>
+              </Label>
               <Select value={transport} onValueChange={(v: any) => setTransport(v)}>
                 <SelectTrigger>
                   <SelectValue />

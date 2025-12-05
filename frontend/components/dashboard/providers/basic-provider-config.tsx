@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { FormField } from "@/components/ui/form";
+import { FormField, FormLabel } from "@/components/ui/form";
 
 // 类型安全的FormField包装器
 const SafeFormField = FormField as any;
@@ -33,7 +33,7 @@ export function BasicProviderConfig({
                 render={({ field }: { field: any }) => (
                     <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium">Provider 名称</label>
+                            <FormLabel required>Provider 名称</FormLabel>
                             {isFieldOverridden("name") && (
                                 <Badge variant="outline" className="text-xs">
                                     已覆盖
@@ -58,7 +58,7 @@ export function BasicProviderConfig({
                     name="providerType"
                     render={({ field }: { field: any }) => (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Provider 类型</label>
+                            <FormLabel required>Provider 类型</FormLabel>
                             <Tabs
                                 value={field.value}
                                 onValueChange={(value) => {
@@ -83,7 +83,7 @@ export function BasicProviderConfig({
                     name="transport"
                     render={({ field }: { field: any }) => (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">传输方式</label>
+                            <FormLabel required>传输方式</FormLabel>
                             <Tabs
                                 value={field.value}
                                 onValueChange={(value) => {
@@ -111,7 +111,7 @@ export function BasicProviderConfig({
                     name="sdkVendor"
                     render={({ field }: { field: any }) => (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">SDK 类型</label>
+                            <FormLabel required>SDK 类型</FormLabel>
                             <div className="flex gap-2">
                                 <Button
                                     type="button"
@@ -161,7 +161,7 @@ export function BasicProviderConfig({
                 render={({ field }: { field: any }) => (
                     <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium">Base URL</label>
+                            <FormLabel required>Base URL</FormLabel>
                             {isFieldOverridden("baseUrl") && (
                                 <Badge variant="outline" className="text-xs">
                                     已覆盖
@@ -185,7 +185,7 @@ export function BasicProviderConfig({
                 name="apiKey"
                 render={({ field }: { field: any }) => (
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">API Key（可选）</label>
+                        <FormLabel>API Key（可选）</FormLabel>
                         <Input
                             {...field}
                             type="password"
