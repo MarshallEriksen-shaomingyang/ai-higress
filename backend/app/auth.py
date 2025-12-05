@@ -24,6 +24,8 @@ class AuthenticatedAPIKey:
     user_username: str
     is_superuser: bool
     name: str
+    is_active: bool
+    disabled_reason: str | None
     has_provider_restrictions: bool
     allowed_provider_ids: list[str]
 
@@ -85,6 +87,12 @@ async def require_api_key(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="API token expired",
             )
+        if not cached.is_active:
+            await invalidate_cached_api_key(redis, key_hash)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=cached.disabled_reason or "API token disabled",
+            )
         if not cached.user_is_active:
             await invalidate_cached_api_key(redis, key_hash)
             raise HTTPException(
@@ -106,6 +114,12 @@ async def require_api_key(
             detail="API token expired",
         )
 
+    if not api_key.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=api_key.disabled_reason or "API token disabled",
+        )
+
     if not api_key.user or not api_key.user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -124,6 +138,8 @@ def _cached_to_authenticated(entry: CachedAPIKey) -> AuthenticatedAPIKey:
         user_username=entry.user_username,
         is_superuser=entry.user_is_superuser,
         name=entry.name,
+        is_active=entry.is_active,
+        disabled_reason=entry.disabled_reason,
         has_provider_restrictions=entry.has_provider_restrictions,
         allowed_provider_ids=list(entry.allowed_provider_ids),
     )

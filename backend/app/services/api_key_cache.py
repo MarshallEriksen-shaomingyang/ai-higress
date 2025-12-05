@@ -23,6 +23,8 @@ class CachedAPIKey(BaseModel):
     user_is_superuser: bool
     name: str
     expires_at: datetime | None = None
+    is_active: bool = True
+    disabled_reason: str | None = None
     has_provider_restrictions: bool = False
     allowed_provider_ids: list[str] = Field(default_factory=list)
 
@@ -40,6 +42,8 @@ def build_cache_entry(api_key: APIKey) -> CachedAPIKey:
         user_is_superuser=is_superuser,
         name=api_key.name,
         expires_at=api_key.expires_at,
+        is_active=api_key.is_active,
+        disabled_reason=api_key.disabled_reason,
         has_provider_restrictions=api_key.has_provider_restrictions,
         allowed_provider_ids=list(api_key.allowed_provider_ids),
     )
@@ -68,6 +72,9 @@ def _compute_ttl_seconds(entry: CachedAPIKey) -> int | None:
 
 
 async def cache_api_key(redis, key_hash: str, entry: CachedAPIKey) -> None:
+    if not entry.is_active:
+        await invalidate_cached_api_key(redis, key_hash)
+        return
     ttl_seconds = _compute_ttl_seconds(entry)
     if ttl_seconds == 0:
         return

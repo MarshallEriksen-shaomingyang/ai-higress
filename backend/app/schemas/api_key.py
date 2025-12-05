@@ -53,6 +53,8 @@ class APIKeyResponse(BaseModel):
     key_prefix: str
     expiry_type: APIKeyExpiry
     expires_at: datetime | None = None
+    is_active: bool
+    disabled_reason: str | None = None
     created_at: datetime
     updated_at: datetime
     has_provider_restrictions: bool

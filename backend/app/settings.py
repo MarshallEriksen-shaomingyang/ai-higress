@@ -83,6 +83,39 @@ class Settings(BaseSettings):
         ge=30,
     )
 
+    # API Key 健康巡检与异常禁用
+    api_key_health_check_interval_seconds: int = Field(
+        300,
+        alias="API_KEY_HEALTH_CHECK_INTERVAL_SECONDS",
+        description="定期扫描过期 API Key 的时间间隔（秒）",
+        ge=60,
+    )
+    api_key_error_scan_interval_seconds: int = Field(
+        600,
+        alias="API_KEY_ERROR_SCAN_INTERVAL_SECONDS",
+        description="定期扫描高错误率 API Key 的时间间隔（秒）",
+        ge=60,
+    )
+    api_key_error_window_minutes: int = Field(
+        15,
+        alias="API_KEY_ERROR_WINDOW_MINUTES",
+        description="计算错误率时向前回溯的时间窗口（分钟）",
+        ge=1,
+    )
+    api_key_error_rate_threshold: float = Field(
+        0.6,
+        alias="API_KEY_ERROR_RATE_THRESHOLD",
+        description="超过该错误率的 API Key 将被自动禁用",
+        ge=0.0,
+        le=1.0,
+    )
+    api_key_error_min_requests: int = Field(
+        20,
+        alias="API_KEY_ERROR_MIN_REQUESTS",
+        description="仅当时间窗内请求量达到该阈值时才触发禁用逻辑",
+        ge=1,
+    )
+
     # Metrics buffer & sampling
     metrics_buffer_enabled: bool = Field(
         True,

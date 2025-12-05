@@ -88,6 +88,8 @@ def seed_user_and_key(
         key_prefix=build_api_key_prefix(token_plain),
         expiry_type=APIKeyExpiry.NEVER.value,
         expires_at=None,
+        is_active=True,
+        disabled_reason=None,
     )
     session.add(api_key)
     session.commit()

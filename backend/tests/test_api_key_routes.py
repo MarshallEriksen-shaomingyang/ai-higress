@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import uuid
+import asyncio
+import json
 
 import pytest
 from fastapi import HTTPException
@@ -79,6 +80,8 @@ def test_api_key_crud_flow(session_factory):
         assert created.token
         key_id = created.id
         assert created.expiry_type == APIKeyExpiry.WEEK
+        assert created.is_active is True
+        assert created.disabled_reason is None
         assert created.has_provider_restrictions is False
         assert created.allowed_provider_ids == []
 
@@ -88,6 +91,8 @@ def test_api_key_crud_flow(session_factory):
         cached_entry = json.loads(cached_entry_raw)
         assert cached_entry["has_provider_restrictions"] is False
         assert cached_entry["allowed_provider_ids"] == []
+        assert cached_entry["is_active"] is True
+        assert cached_entry["disabled_reason"] is None
 
         listed = api_key_routes.list_api_keys_endpoint(
             admin_user.id,
@@ -106,6 +111,8 @@ def test_api_key_crud_flow(session_factory):
         updated_data = updated.model_dump()
         assert updated_data["name"] == "cli-renamed"
         assert updated_data["expiry_type"] == APIKeyExpiry.MONTH
+        assert updated_data["is_active"] is True
+        assert updated_data["disabled_reason"] is None
         assert updated_data["has_provider_restrictions"] is False
 
         api_key_routes.delete_api_key_endpoint(

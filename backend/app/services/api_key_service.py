@@ -127,6 +127,8 @@ def create_api_key(
         key_prefix=build_api_key_prefix(token),
         expiry_type=payload.expiry.value,
         expires_at=_expires_at_for(payload.expiry),
+        is_active=True,
+        disabled_reason=None,
     )
 
     session.add(api_key)
@@ -165,6 +167,13 @@ def update_api_key(
     if payload.expiry is not None:
         api_key.expiry_type = payload.expiry.value
         api_key.expires_at = _expires_at_for(payload.expiry)
+        if api_key.expires_at is None or api_key.expires_at > datetime.now(UTC):
+            if api_key.disabled_reason == "expired":
+                api_key.is_active = True
+                api_key.disabled_reason = None
+        elif api_key.expires_at <= datetime.now(UTC):
+            api_key.is_active = False
+            api_key.disabled_reason = "expired"
 
     restrictions = APIKeyProviderRestrictionService(session)
     try:

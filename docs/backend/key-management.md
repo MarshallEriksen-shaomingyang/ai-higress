@@ -80,6 +80,9 @@ curl -X GET "http://localhost:8000/auth/me" \
 - 通过JWT认证的API创建和管理
 - 存储在数据库中，使用系统主密钥哈希
 - 可设置过期时间和权限限制
+- 具备 `is_active` / `disabled_reason` 状态字段，后台 Celery 任务会：
+  - 定期扫描已过期密钥并标记为不可用；
+  - 按时间窗口统计调用错误率，超过阈值会自动禁用（并同步清理 Redis 缓存）。
 
 **示例**：
 ```bash

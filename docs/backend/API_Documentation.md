@@ -804,6 +804,8 @@
 
 ## API密钥管理
 
+> 说明：后台 Celery 定时任务会自动扫描已过期或高错误率的 API Key 并标记 `is_active=false`，同时在响应体中返回 `disabled_reason`，客户端应在 UI 中提示并允许重新生成/启用新密钥。
+
 ### 1. 获取API密钥列表
 
 **接口**: `GET /users/{user_id}/api-keys`
@@ -822,6 +824,8 @@
     "key_prefix": "string",
     "expiry_type": "week/month/year/never",
     "expires_at": "datetime | null",
+    "is_active": true,
+    "disabled_reason": "string | null",
     "created_at": "datetime",
     "updated_at": "datetime",
     "has_provider_restrictions": true/false,
@@ -856,11 +860,13 @@
   "user_id": "uuid",
   "name": "string",
   "key_prefix": "string",
-  "expiry_type": "week/month/year/never",
-  "expires_at": "datetime | null",
-  "created_at": "datetime",
-  "updated_at": "datetime",
-  "has_provider_restrictions": true/false,
+    "expiry_type": "week/month/year/never",
+    "expires_at": "datetime | null",
+    "is_active": true,
+    "disabled_reason": "string | null",
+    "created_at": "datetime",
+    "updated_at": "datetime",
+    "has_provider_restrictions": true/false,
   "allowed_provider_ids": ["string"],
   "token": "string" // 完整密钥，仅在创建时返回
 }
@@ -895,11 +901,13 @@
   "user_id": "uuid",
   "name": "string",
   "key_prefix": "string",
-  "expiry_type": "week/month/year/never",
-  "expires_at": "datetime | null",
-  "created_at": "datetime",
-  "updated_at": "datetime",
-  "has_provider_restrictions": true/false,
+    "expiry_type": "week/month/year/never",
+    "expires_at": "datetime | null",
+    "is_active": true,
+    "disabled_reason": "string | null",
+    "created_at": "datetime",
+    "updated_at": "datetime",
+    "has_provider_restrictions": true/false,
   "allowed_provider_ids": ["string"]
 }
 ```

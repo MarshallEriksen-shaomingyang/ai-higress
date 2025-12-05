@@ -27,6 +27,13 @@ class APIKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     key_prefix: Mapped[str] = Column(String(32), nullable=False)
     expiry_type: Mapped[str] = Column(String(16), nullable=False, default="never")
     expires_at = Column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = Column(
+        Boolean,
+        nullable=False,
+        server_default=text("TRUE"),
+        default=True,
+    )
+    disabled_reason: Mapped[str | None] = Column(String(64), nullable=True)
     has_provider_restrictions: Mapped[bool] = Column(
         Boolean,
         nullable=False,

@@ -102,12 +102,15 @@ def check_selected_providers_health(provider_ids: Sequence[str]) -> int:
         session.close()
 
 
-celery_app.conf.beat_schedule = {
-    "provider-health-check": {
-        "task": "tasks.provider_health.check_all",
-        "schedule": settings.provider_health_check_interval_seconds,
+celery_app.conf.beat_schedule = getattr(celery_app.conf, "beat_schedule", {}) or {}
+celery_app.conf.beat_schedule.update(
+    {
+        "provider-health-check": {
+            "task": "tasks.provider_health.check_all",
+            "schedule": settings.provider_health_check_interval_seconds,
+        }
     }
-}
+)
 
 
 __all__ = ["check_all_providers_health", "check_selected_providers_health"]
