@@ -67,6 +67,7 @@ def create_user(
     payload: UserCreateRequest,
     *,
     is_superuser: bool = False,
+    is_active: bool = True,
 ) -> User:
     """Create a new user after checking for unique username/email."""
 
@@ -100,6 +101,7 @@ def create_user(
         avatar=payload.avatar,
         hashed_password=hash_password(payload.password),
         is_superuser=is_superuser,
+        is_active=is_active,
     )
 
     session.add(user)

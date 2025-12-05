@@ -12,6 +12,7 @@ from .provider_api_key import ProviderAPIKey
 from .provider_model import ProviderModel
 from .provider_submission import ProviderSubmission
 from .provider_metrics_history import ProviderRoutingMetricsHistory
+from .registration_window import RegistrationWindow, RegistrationWindowStatus
 from .user_permission import UserPermission
 from .user_role import UserRole
 from .user import User
@@ -33,6 +34,8 @@ __all__ = [
     "ProviderModel",
     "ProviderSubmission",
     "ProviderRoutingMetricsHistory",
+    "RegistrationWindow",
+    "RegistrationWindowStatus",
     "TimestampMixin",
     "UUIDPrimaryKeyMixin",
     "UserPermission",

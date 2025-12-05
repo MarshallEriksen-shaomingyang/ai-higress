@@ -18,6 +18,7 @@ from .api.v1.admin_role_routes import router as admin_role_router
 from .api.v1.admin_user_permission_routes import (
     router as admin_user_permission_router,
 )
+from .api.v1.admin_registration_routes import router as admin_registration_router
 from .api.v1.api_key_routes import router as api_key_router
 from .api.v1.chat_routes import router as chat_router
 from .api.v1.credit_routes import router as credit_router
@@ -144,6 +145,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_user_permission_router)
     app.include_router(admin_provider_router)
     app.include_router(admin_provider_preset_router)
+    app.include_router(admin_registration_router)
 
     # 基础网关路由（health/models/context 等）
     app.include_router(gateway_router)

@@ -78,6 +78,11 @@ from .provider_routes import (
 )
 from .routing import CandidateInfo, RoutingDecision, RoutingRequest
 from .routing_metrics import MetricsHistory, RoutingMetrics
+from .registration import (
+    RegistrationWindowCreateRequest,
+    RegistrationWindowResponse,
+    RegistrationWindowStatus,
+)
 from .scheduling import SchedulingStrategy
 from .system import (
     KeyValidationRequest,
@@ -157,6 +162,9 @@ __all__ = [
     "ProviderAPIKeyResponse",
     "RefreshTokenRequest",
     "RegisterRequest",
+    "RegistrationWindowCreateRequest",
+    "RegistrationWindowResponse",
+    "RegistrationWindowStatus",
     "RoutingDecision",
     "RoutingMetrics",
     "RoutingRequest",

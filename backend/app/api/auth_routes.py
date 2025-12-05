@@ -46,6 +46,13 @@ from app.services.user_service import (
     get_user_by_id,
     update_user,
 )
+from app.services.registration_window_service import (
+    RegistrationQuotaExceededError,
+    RegistrationWindowClosedError,
+    RegistrationWindowNotFoundError,
+    claim_registration_slot,
+    rollback_registration_slot,
+)
 
 router = APIRouter(tags=["authentication"], prefix="/auth")
 
@@ -139,6 +146,13 @@ async def register(
         HTTPException: 如果用户名或邮箱已存在
     """
     try:
+        window = claim_registration_slot(db)
+    except RegistrationWindowNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except (RegistrationWindowClosedError, RegistrationQuotaExceededError) as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+    try:
         # 将 RegisterRequest 映射到 UserCreateRequest 所需字段
         from app.schemas.user import UserCreateRequest
 
@@ -148,7 +162,7 @@ async def register(
         from app.models import User
         from sqlalchemy import select
         existing_user = db.execute(select(User).where(User.username == username_prefix)).scalar_one_or_none()
-        
+
         # 如果存在，添加数字后缀
         counter = 1
         username = username_prefix
@@ -156,28 +170,33 @@ async def register(
             username = f"{username_prefix}{counter}"
             existing_user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
             counter += 1
-        
+
         payload = UserCreateRequest(
             username=username,
             email=request.email,
             password=request.password,
             display_name=request.display_name,
         )
-        user = create_user(db, payload)
+        user = create_user(db, payload, is_active=window.auto_activate)
         # 为新注册用户创建默认积分账户（若未开启积分系统则仅做初始化，不影响行为）
         get_or_create_account_for_user(db, user.id)
         _assign_default_role(db, user.id)
         return _build_user_response(db, user.id)
     except UsernameAlreadyExistsError:
+        rollback_registration_slot(db, window.id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="邮箱已被使用",
         )
     except EmailAlreadyExistsError:
+        rollback_registration_slot(db, window.id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="邮箱已被使用",
         )
+    except Exception:
+        rollback_registration_slot(db, window.id)
+        raise
 
 
 @router.post("/login", response_model=TokenResponse)

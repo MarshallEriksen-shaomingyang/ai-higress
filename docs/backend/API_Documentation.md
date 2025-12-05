@@ -25,15 +25,22 @@
 
 **描述**: 创建新用户账户。
 
+该接口仅在管理员配置的“注册开放窗口”内可用：
+
+- 管理员可以预设注册开放的开始/结束时间以及本轮允许的注册人数。
+- `auto` 窗口会让新用户自动激活（`is_active=true`）；`manual` 窗口会保留注册信息但默认未激活，需要管理员后续审核。
+- 超过结束时间或名额耗尽后，接口会返回 403 禁止访问。
+
 **请求体**:
 ```json
 {
-  "username": "string (3-50字符)",
   "email": "string (有效邮箱)",
   "password": "string (最少6字符)",
   "display_name": "string (可选)"
 }
 ```
+
+> 用户名会由后端基于邮箱前缀自动生成并保证唯一性。
 
 **响应**:
 ```json
@@ -64,6 +71,45 @@
 **错误响应**:
 - 400: 用户名已存在
 - 400: 邮箱已被使用
+- 403: 当前未开放注册、注册时间已结束或名额耗尽
+
+---
+
+### 1.1 定时开放注册管理（管理员）
+
+**接口**:
+
+- `POST /admin/registration-windows/auto`：创建一个自动激活的注册窗口。
+- `POST /admin/registration-windows/manual`：创建一个需要手动激活的注册窗口。
+- `GET /admin/registration-windows/active`：查看当前正在生效的注册窗口（没有时返回 `null`）。
+
+**请求体（创建窗口）**:
+```json
+{
+  "start_time": "2024-06-01T10:00:00+08:00", // 必须包含时区
+  "end_time": "2024-06-01T12:00:00+08:00",
+  "max_registrations": 100
+}
+```
+
+**响应示例（创建/查询）**:
+```json
+{
+  "id": "uuid",
+  "start_time": "2024-06-01T10:00:00+08:00",
+  "end_time": "2024-06-01T12:00:00+08:00",
+  "max_registrations": 100,
+  "registered_count": 3,
+  "auto_activate": true,
+  "status": "active",
+  "created_at": "datetime",
+  "updated_at": "datetime"
+}
+```
+
+**说明**:
+- `auto_activate=true` 表示注册完成即自动激活；`false` 表示需要管理员后续审核/激活。
+- 创建时会自动安排 Celery 任务在开始/结束时间切换状态，服务端也会在请求时兜底检查时间窗口与名额。
 
 ---
 
