@@ -1,36 +1,21 @@
-import { httpClient } from './client';
+import { httpClient } from "./client";
+import type {
+  LogicalModel as LogicalModelApi,
+  LogicalModelUpstream,
+  LogicalModelsResponse,
+  LogicalModelUpstreamsResponse,
+} from "@/lib/api-types";
 
-// 逻辑模型相关接口
-export interface LogicalModel {
-  logical_id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  capabilities: string[];
-  default_strategy: string;
-  upstreams: UpstreamModel[];
-  metadata: Record<string, any>;
-}
-
-export interface UpstreamModel {
-  provider_id: string;
-  model_id: string;
-  region: string | null;
-  cost_input: number;
-  cost_output: number;
-  enabled: boolean;
-  weight: number;
-}
-
-export interface UpstreamsResponse {
-  upstreams: UpstreamModel[];
-}
+// 兼容旧命名，保持其他模块的导入不变
+export type LogicalModel = LogicalModelApi;
+export type UpstreamModel = LogicalModelUpstream;
+export type UpstreamsResponse = LogicalModelUpstreamsResponse;
 
 // 逻辑模型服务
 export const logicalModelService = {
   // 获取逻辑模型列表
-  getLogicalModels: async (): Promise<{ models: LogicalModel[]; total: number }> => {
-    const response = await httpClient.get('/logical-models');
+  getLogicalModels: async (): Promise<LogicalModelsResponse> => {
+    const response = await httpClient.get("/logical-models");
     return response.data;
   },
 
@@ -44,7 +29,9 @@ export const logicalModelService = {
   getLogicalModelUpstreams: async (
     logicalModelId: string
   ): Promise<UpstreamsResponse> => {
-    const response = await httpClient.get(`/logical-models/${logicalModelId}/upstreams`);
+    const response = await httpClient.get(
+      `/logical-models/${logicalModelId}/upstreams`
+    );
     return response.data;
   },
 };

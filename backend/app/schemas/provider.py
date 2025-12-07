@@ -230,7 +230,9 @@ class ProviderResponse(BaseModel):
     """
     提供商的API响应模型，用于返回提供商信息
     """
-    id: str = Field(..., description="提供商的UUID")
+    # 直接使用 UUID / datetime 类型，方便与 ORM 模型对齐；
+    # 经由 FastAPI/Pydantic 序列化后，前端仍然会收到字符串形式。
+    id: UUID = Field(..., description="提供商的UUID")
     provider_id: str = Field(..., description="提供商的唯一标识符")
     name: str = Field(..., description="提供商名称")
     base_url: str = Field(..., description="API基础URL")
@@ -249,10 +251,10 @@ class ProviderResponse(BaseModel):
     responses_path: str | None = Field(default=None, description="响应API路径")
     status: str = Field(default="healthy", description="提供商状态")
     visibility: str = Field(default="public", description="可见性：public或private")
-    owner_id: str | None = Field(default=None, description="所有者用户ID（私有提供商）")
+    owner_id: UUID | None = Field(default=None, description="所有者用户ID（私有提供商）")
     preset_id: str | None = Field(default=None, description="关联的预设ID")
-    created_at: str = Field(..., description="创建时间")
-    updated_at: str | None = Field(default=None, description="更新时间")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
 
     model_config = ConfigDict(from_attributes=True)
 

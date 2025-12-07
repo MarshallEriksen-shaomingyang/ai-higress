@@ -10,11 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.logging_config import logger
 from app.models import Provider, ProviderAPIKey, ProviderSubmission
+from app.schemas.notification import NotificationCreateRequest
 from app.schemas.provider_control import (
     ProviderReviewRequest,
     ProviderSubmissionRequest,
 )
 from app.services.encryption import encrypt_secret
+from app.services.notification_service import create_notification
 
 
 class ProviderSubmissionServiceError(RuntimeError):
@@ -67,6 +69,24 @@ def create_submission(
         logger.error("Failed to create provider submission: %s", exc)
         raise ProviderSubmissionServiceError("无法创建提供商提交记录") from exc
     session.refresh(submission)
+
+    # 通知提交者已进入审核
+    try:
+        create_notification(
+            session,
+            NotificationCreateRequest(
+                title="共享提供商提交已创建",
+                content=f"提交 {submission.name} 已进入审核流程。",
+                level="info",
+                target_type="users",
+                target_user_ids=[user_id],
+            ),
+            creator_id=user_id,
+        )
+    except Exception:  # pragma: no cover - 通知失败不影响主流程
+        logger.exception(
+            "Failed to send notification for submission %s creation", submission.id
+        )
     return submission
 
 
@@ -155,6 +175,27 @@ def approve_submission(
         raise ProviderSubmissionServiceError("无法通过提供商提交") from exc
 
     session.refresh(provider)
+
+    # 通知提交者审核通过
+    try:
+        create_notification(
+            session,
+            NotificationCreateRequest(
+                title="共享提供商审核通过",
+                content=(
+                    f"提交 {submission.name} 已通过审核。"
+                    f"{' 审核备注: ' + review_notes if review_notes else ''}"
+                ),
+                level="success",
+                target_type="users",
+                target_user_ids=[submission.user_id],
+            ),
+            creator_id=reviewer_id,
+        )
+    except Exception:  # pragma: no cover
+        logger.exception(
+            "Failed to send approval notification for submission %s", submission_id
+        )
     return provider
 
 
@@ -177,6 +218,27 @@ def reject_submission(
     session.add(submission)
     session.commit()
     session.refresh(submission)
+
+    # 通知提交者审核拒绝
+    try:
+        create_notification(
+            session,
+            NotificationCreateRequest(
+                title="共享提供商审核未通过",
+                content=(
+                    f"提交 {submission.name} 被拒绝。"
+                    f"{' 原因: ' + review_notes if review_notes else ''}"
+                ),
+                level="warning",
+                target_type="users",
+                target_user_ids=[submission.user_id],
+            ),
+            creator_id=reviewer_id,
+        )
+    except Exception:  # pragma: no cover
+        logger.exception(
+            "Failed to send rejection notification for submission %s", submission_id
+        )
     return submission
 
 

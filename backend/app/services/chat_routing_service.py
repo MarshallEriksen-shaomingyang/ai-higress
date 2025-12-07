@@ -61,7 +61,11 @@ from app.auth import AuthenticatedAPIKey
 from app.logging_config import logger
 from app.model_cache import get_models_from_cache, set_models_cache
 from app.models import Provider, ProviderModel
-from app.provider.config import get_provider_config, load_provider_configs
+from app.provider.config import (
+    get_provider_config,
+    load_provider_configs,
+    load_providers_with_configs,
+)
 from app.provider.discovery import ensure_provider_models_cached
 from app.provider.key_pool import (
     NoAvailableProviderKey,
@@ -1320,6 +1324,52 @@ def _strip_model_group_prefix(model_value: Any) -> str | None:
     return model_value.split("/", 1)[1]
 
 
+def _build_model_alias_map(
+    providers_with_configs: list[tuple[Provider, ProviderConfig]],
+) -> dict[str, dict[str, str]]:
+    """
+    构建 provider 级别的模型别名映射表：
+    {
+        provider_slug: {
+            "alias-model": "real-upstream-model-id",
+            ...
+        }
+    }
+
+    - 仅使用 ProviderModel.alias 非空的行；
+    - 若同一 Provider 下出现重复别名，优先保留第一条并记录告警日志。
+    """
+    mapping: dict[str, dict[str, str]] = {}
+    for provider_row, cfg in providers_with_configs:
+        alias_map: dict[str, str] = {}
+        for model in getattr(provider_row, "models", []) or []:
+            alias_value = getattr(model, "alias", None)
+            if not isinstance(alias_value, str):
+                continue
+
+            alias_str = alias_value.strip()
+            if not alias_str:
+                continue
+
+            if alias_str in alias_map:
+                # 尽量避免 hard fail，仅记录日志并保留第一条。
+                logger.warning(
+                    "Duplicate model alias '%s' for provider %s (models %s vs %s); "
+                    "keeping the first mapping.",
+                    alias_str,
+                    provider_row.provider_id,
+                    alias_map[alias_str],
+                    model.model_id,
+                )
+                continue
+
+            alias_map[alias_str] = model.model_id
+
+        if alias_map:
+            mapping[cfg.id] = alias_map
+    return mapping
+
+
 async def _build_dynamic_logical_model_for_group(
     *,
     client: httpx.AsyncClient,
@@ -1327,6 +1377,7 @@ async def _build_dynamic_logical_model_for_group(
     requested_model: Any,
     lookup_model_id: str | None,
     api_style: str,
+    db: Session | None = None,
 ) -> LogicalModel | None:
     """
     Build a transient LogicalModel for cases where no static logical
@@ -1345,7 +1396,17 @@ async def _build_dynamic_logical_model_for_group(
     if not isinstance(lookup_model_id, str):
         return None
 
-    providers = load_provider_configs()
+    # When a DB session is available, we prefer to load providers together
+    # with their ORM objects so that we can honour per-model alias mappings
+    # stored in provider_models.alias.
+    alias_map: dict[str, dict[str, str]] = {}
+    if db is not None:
+        providers_with_configs = load_providers_with_configs(session=db)
+        providers = [cfg for (_provider, cfg) in providers_with_configs]
+        alias_map = _build_model_alias_map(providers_with_configs)
+    else:
+        providers = load_provider_configs()
+
     if not providers:
         return None
 
@@ -1357,6 +1418,7 @@ async def _build_dynamic_logical_model_for_group(
     now = time.time()
 
     for cfg in providers:
+        provider_alias_map = alias_map.get(cfg.id) or {}
         try:
             items = await ensure_provider_models_cached(client, redis, cfg)
         except httpx.HTTPError as exc:
@@ -1396,6 +1458,38 @@ async def _build_dynamic_logical_model_for_group(
             ):
                 matched_full_id = mid
                 break
+
+        # Fallback: try to resolve via per-provider alias mapping when the
+        # requested model id itself does not appear in the upstream catalogue.
+        if matched_full_id is None and provider_alias_map and target_model_str:
+            alias_target: str | None = None
+            if target_model_str in provider_alias_map:
+                alias_target = provider_alias_map[target_model_str]
+            elif target_base is not None and target_base in provider_alias_map:
+                alias_target = provider_alias_map[target_base]
+
+            if alias_target:
+                # Only honour aliases that point to a model actually advertised
+                # by this provider, to avoid routing to non-existent ids.
+                advertised_ids = set()
+                for item in items:
+                    if isinstance(item, dict):
+                        mid_val = item.get("id") or item.get("model_id")
+                        if isinstance(mid_val, str):
+                            advertised_ids.add(mid_val)
+                    elif isinstance(item, str):
+                        advertised_ids.add(item)
+
+                if alias_target in advertised_ids:
+                    matched_full_id = alias_target
+                else:
+                    logger.warning(
+                        "Alias '%s' for provider %s maps to '%s' which is not present "
+                        "in /models cache; alias ignored.",
+                        target_model_str,
+                        cfg.id,
+                        alias_target,
+                    )
 
         if matched_full_id is None:
             continue

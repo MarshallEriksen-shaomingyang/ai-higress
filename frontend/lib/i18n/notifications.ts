@@ -1,0 +1,110 @@
+import type { Language } from "../i18n-context";
+
+export const notificationsTranslations: Record<Language, Record<string, string>> = {
+  zh: {
+    // 通用
+    'notifications.title': '通知',
+    'notifications.description': '查看和管理系统通知',
+    'notifications.all': '全部',
+    'notifications.unread': '未读',
+    'notifications.noNotifications': '暂无通知',
+    'notifications.noUnreadNotifications': '暂无未读通知',
+    'notifications.noNotificationsDescription': '当有新通知时会显示在这里',
+    'notifications.markAllRead': '全部标为已读',
+    'notifications.viewAll': '查看全部',
+    
+    // 等级
+    'notifications.level.info': '信息',
+    'notifications.level.success': '成功',
+    'notifications.level.warning': '警告',
+    'notifications.level.error': '错误',
+    
+    // 受众类型
+    'notifications.targetType.all': '全部用户',
+    'notifications.targetType.users': '指定用户',
+    'notifications.targetType.roles': '指定角色',
+    
+    // 创建表单
+    'notifications.form.createTitle': '创建通知',
+    'notifications.form.createDescription': '向用户发送系统通知或公告',
+    'notifications.form.title': '标题',
+    'notifications.form.titlePlaceholder': '输入通知标题',
+    'notifications.form.titleRequired': '请输入标题',
+    'notifications.form.titleTooLong': '标题不能超过100个字符',
+    'notifications.form.content': '内容',
+    'notifications.form.contentPlaceholder': '输入通知内容',
+    'notifications.form.contentRequired': '请输入内容',
+    'notifications.form.contentTooLong': '内容不能超过500个字符',
+    'notifications.form.level': '通知等级',
+    'notifications.form.targetType': '目标受众',
+    'notifications.form.targetUserIds': '用户ID列表',
+    'notifications.form.targetUserIdsPlaceholder': '输入用户ID，多个ID用逗号分隔',
+    'notifications.form.targetUserIdsHint': '输入用户UUID，多个ID用逗号分隔',
+    'notifications.form.userIdsRequired': '请输入至少一个用户ID',
+    'notifications.form.invalidUserIds': '用户ID格式不正确',
+    'notifications.form.linkUrl': '跳转链接（可选）',
+    'notifications.form.linkUrlPlaceholder': 'https://example.com',
+    'notifications.form.invalidUrl': 'URL格式不正确',
+    'notifications.form.create': '创建',
+    'notifications.form.creating': '创建中...',
+    'notifications.form.createSuccess': '通知创建成功',
+    'notifications.form.createError': '通知创建失败',
+    
+    // 管理员
+    'notifications.admin.title': '通知管理',
+    'notifications.admin.description': '管理系统通知和公告',
+  },
+  en: {
+    // Common
+    'notifications.title': 'Notifications',
+    'notifications.description': 'View and manage system notifications',
+    'notifications.all': 'All',
+    'notifications.unread': 'Unread',
+    'notifications.noNotifications': 'No notifications',
+    'notifications.noUnreadNotifications': 'No unread notifications',
+    'notifications.noNotificationsDescription': 'New notifications will appear here',
+    'notifications.markAllRead': 'Mark all as read',
+    'notifications.viewAll': 'View all',
+    
+    // Levels
+    'notifications.level.info': 'Info',
+    'notifications.level.success': 'Success',
+    'notifications.level.warning': 'Warning',
+    'notifications.level.error': 'Error',
+    
+    // Target Types
+    'notifications.targetType.all': 'All Users',
+    'notifications.targetType.users': 'Specific Users',
+    'notifications.targetType.roles': 'Specific Roles',
+    
+    // Create Form
+    'notifications.form.createTitle': 'Create Notification',
+    'notifications.form.createDescription': 'Send system notifications or announcements to users',
+    'notifications.form.title': 'Title',
+    'notifications.form.titlePlaceholder': 'Enter notification title',
+    'notifications.form.titleRequired': 'Title is required',
+    'notifications.form.titleTooLong': 'Title cannot exceed 100 characters',
+    'notifications.form.content': 'Content',
+    'notifications.form.contentPlaceholder': 'Enter notification content',
+    'notifications.form.contentRequired': 'Content is required',
+    'notifications.form.contentTooLong': 'Content cannot exceed 500 characters',
+    'notifications.form.level': 'Level',
+    'notifications.form.targetType': 'Target Audience',
+    'notifications.form.targetUserIds': 'User IDs',
+    'notifications.form.targetUserIdsPlaceholder': 'Enter user IDs, separated by commas',
+    'notifications.form.targetUserIdsHint': 'Enter user UUIDs, separated by commas',
+    'notifications.form.userIdsRequired': 'At least one user ID is required',
+    'notifications.form.invalidUserIds': 'Invalid user ID format',
+    'notifications.form.linkUrl': 'Link URL (Optional)',
+    'notifications.form.linkUrlPlaceholder': 'https://example.com',
+    'notifications.form.invalidUrl': 'Invalid URL format',
+    'notifications.form.create': 'Create',
+    'notifications.form.creating': 'Creating...',
+    'notifications.form.createSuccess': 'Notification created successfully',
+    'notifications.form.createError': 'Failed to create notification',
+    
+    // Admin
+    'notifications.admin.title': 'Notification Management',
+    'notifications.admin.description': 'Manage system notifications and announcements',
+  },
+};

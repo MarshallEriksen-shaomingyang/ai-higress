@@ -68,6 +68,8 @@ export interface Model {
   // 后端返回的是 Enum 的字符串值，例如 "chat" / "embedding" 等
   capabilities: string[];
   pricing: Record<string, number> | null;
+   // 可选的模型别名，用于将长版本 ID 映射为更易记的短名称
+  alias?: string | null;
   metadata?: ModelMetadata | null;
   meta_hash?: string | null;
 }
@@ -77,6 +79,13 @@ export interface ProviderModelPricing {
   provider_id: string;
   model_id: string;
   pricing: Record<string, number> | null;
+}
+
+// provider+model 维度的别名映射配置
+export interface ProviderModelAlias {
+  provider_id: string;
+  model_id: string;
+  alias: string | null;
 }
 
 // 模型列表响应
@@ -262,6 +271,34 @@ export const providerService = {
   ): Promise<MetricsResponse> => {
     const params = logicalModel ? { logical_model: logicalModel } : {};
     const response = await httpClient.get(`/providers/${providerId}/metrics`, { params });
+    return response.data;
+  },
+
+  /**
+   * 获取指定 provider+model 的别名映射配置
+   */
+  getProviderModelAlias: async (
+    providerId: string,
+    modelId: string
+  ): Promise<ProviderModelAlias> => {
+    const response = await httpClient.get(
+      `/providers/${providerId}/models/${encodeURIComponent(modelId)}/mapping`
+    );
+    return response.data;
+  },
+
+  /**
+   * 更新指定 provider+model 的别名映射配置
+   */
+  updateProviderModelAlias: async (
+    providerId: string,
+    modelId: string,
+    data: { alias?: string | null }
+  ): Promise<ProviderModelAlias> => {
+    const response = await httpClient.put(
+      `/providers/${providerId}/models/${encodeURIComponent(modelId)}/mapping`,
+      data
+    );
     return response.data;
   },
 

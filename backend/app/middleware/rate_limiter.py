@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from app.settings import settings
+
 try:
     from redis.asyncio import Redis
 except ModuleNotFoundError:
@@ -218,7 +220,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # 确定限流参数
         path = request.url.path
-        max_requests = self.default_max_requests
+        # 默认限流阈值：优先从 settings.gateway_max_concurrent_requests 读取，
+        # 以便通过 /system/gateway-config 在运行时动态调整。
+        max_requests = (
+            getattr(settings, "gateway_max_concurrent_requests", None)
+            or self.default_max_requests
+        )
         window_seconds = self.default_window_seconds
 
         # 检查是否有特定路径的限流配置

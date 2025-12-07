@@ -24,8 +24,10 @@ from app.models import (  # noqa: E402
 from app.services.credit_service import (  # noqa: E402
     InsufficientCreditsError,
     ensure_account_usable,
+    get_auto_topup_rule_for_user,
     get_or_create_account_for_user,
     record_chat_completion_usage,
+    run_daily_auto_topups,
 )
 from tests.utils import (  # noqa: E402
     install_inmemory_db,
@@ -159,9 +161,10 @@ def test_provider_billing_factor_affects_cost(monkeypatch):
             session,
             user_id=user_id,
             api_key_id=None,
-            model_name="test-model",
+            logical_model_name="test-model",
             provider_id="p1",
-            payload=payload,
+            provider_model_id="test-model",
+            response_payload=payload,
             is_stream=False,
         )
         session.refresh(account)
@@ -177,9 +180,10 @@ def test_provider_billing_factor_affects_cost(monkeypatch):
             session,
             user_id=user_id,
             api_key_id=None,
-            model_name="test-model",
+            logical_model_name="test-model",
             provider_id="p1",
-            payload=payload,
+            provider_model_id="test-model",
+            response_payload=payload,
             is_stream=False,
         )
         session.refresh(account)
@@ -251,9 +255,10 @@ def test_provider_model_pricing_overrides_legacy_pricing(monkeypatch):
             session,
             user_id=user_id,
             api_key_id=None,
-            model_name="pricing-model",
+            logical_model_name="pricing-model",
             provider_id="p-pricing",
-            payload=payload,
+            provider_model_id="pricing-model",
+            response_payload=payload,
             is_stream=False,
         )
         session.refresh(account)
@@ -264,3 +269,80 @@ def test_provider_model_pricing_overrides_legacy_pricing(monkeypatch):
         # - 输出：1k tokens × 10 credits/1k = 10
         # - 总计：15 credits（multiplier=1.0，billing_factor 默认为 1.0）
         assert cost == 15
+
+
+def test_auto_topup_rule_and_daily_task(monkeypatch):
+    """
+    验证自动充值规则与定时任务执行逻辑：
+    - 管理员通过 /v1/credits/admin/users/{id}/auto-topup 配置规则；
+    - 当余额低于阈值时，run_daily_auto_topups 会自动补足余额；
+    - 关闭规则或余额高于阈值时不会重复充值。
+    """
+    app = create_app()
+    SessionLocal = install_inmemory_db(app)
+
+    with SessionLocal() as session:
+        user = _get_single_user(session)
+        user_id = user.id
+
+    headers = jwt_auth_headers(str(user_id))
+
+    with TestClient(app=app, base_url="http://testserver") as client:
+        # 1) 确保账户存在，并设置一个较低的初始余额
+        with SessionLocal() as session:
+            account = get_or_create_account_for_user(session, user_id)
+            account.balance = 50
+            session.commit()
+
+        # 2) 管理员为该用户配置自动充值规则：
+        #    当余额 < 100 时自动补到 200
+        resp = client.put(
+            f"/v1/credits/admin/users/{user_id}/auto-topup",
+            headers=headers,
+            json={
+                "min_balance_threshold": 100,
+                "target_balance": 200,
+                "is_active": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["user_id"] == str(user_id)
+        assert data["min_balance_threshold"] == 100
+        assert data["target_balance"] == 200
+        assert data["is_active"] is True
+
+        # 3) 调用服务层的 run_daily_auto_topups，模拟一次定时任务执行
+        with SessionLocal() as session:
+            processed = run_daily_auto_topups(session)
+            assert processed == 1
+
+            account = session.query(CreditAccount).filter_by(user_id=user_id).one()
+            assert account.balance == 200
+
+            # 应该能找到一条自动充值流水
+            tx = (
+                session.query(CreditTransaction)
+                .filter_by(user_id=user_id, reason="auto_daily_topup")
+                .order_by(CreditTransaction.created_at.desc())
+                .first()
+            )
+            assert tx is not None
+            assert tx.amount == 150
+
+            # 再次执行任务，因为余额已达到目标值，不应重复充值
+            processed_again = run_daily_auto_topups(session)
+            assert processed_again == 0
+
+        # 4) 管理员关闭自动充值规则
+        resp = client.delete(
+            f"/v1/credits/admin/users/{user_id}/auto-topup",
+            headers=headers,
+        )
+        assert resp.status_code == 204
+
+        # 规则应已被标记为 inactive
+        with SessionLocal() as session:
+            rule = get_auto_topup_rule_for_user(session, user_id)
+            assert rule is not None
+            assert rule.is_active is False

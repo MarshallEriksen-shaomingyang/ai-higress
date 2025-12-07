@@ -17,6 +17,9 @@ import { providerSubmissionService } from "@/http/provider-submission";
 import { toast } from "sonner";
 import { useErrorDisplay } from "@/lib/errors";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { ModelCard } from "./model-card";
+import { ModelPricingDialog } from "./model-pricing-dialog";
+import { ModelAliasDialog } from "./model-alias-dialog";
 
 interface ProviderDetailClientProps {
   providerId: string;
@@ -168,6 +171,9 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
     output: "",
   });
   const [pricingLoading, setPricingLoading] = useState(false);
+  const [editingAliasModelId, setEditingAliasModelId] = useState<string | null>(null);
+  const [aliasDraft, setAliasDraft] = useState("");
+  const [aliasLoading, setAliasLoading] = useState(false);
   const { provider, models, health, metrics, loading, error, refresh } = useProviderDetail({
     providerId,
   });
@@ -227,27 +233,6 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
     };
   }, [metrics]);
 
-  // 将模型的计费配置格式化为简短文案，供模型卡片展示。
-  const renderPricingLabel = (model: Model): string => {
-    const rawPricing = (model.pricing || {}) as Record<string, number>;
-    const input = typeof rawPricing["input"] === "number" ? rawPricing["input"] : undefined;
-    const output = typeof rawPricing["output"] === "number" ? rawPricing["output"] : undefined;
-
-    if (input != null && output != null) {
-      return t("providers.pricing_summary_both")
-        .replace("{input}", String(input))
-        .replace("{output}", String(output));
-    }
-    if (input != null) {
-      return t("providers.pricing_summary_input").replace("{input}", String(input));
-    }
-    if (output != null) {
-      return t("providers.pricing_summary_output").replace("{output}", String(output));
-    }
-    // 未配置时仍显示原先的提示文案。
-    return t("providers.pricing_label");
-  };
-
   // 加载状态
   if (loading && !provider) {
     return <LoadingSkeleton loadingText={translations.loading} />;
@@ -297,6 +282,10 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
         provider.owner_id === effectiveUserId));
 
   const canManageKeys =
+    isSuperuser || (!!effectiveUserId && isUserOwnedPrivate);
+
+  // 仅超级管理员或 Provider 拥有者可以编辑模型别名映射。
+  const canEditModelMapping =
     isSuperuser || (!!effectiveUserId && isUserOwnedPrivate);
 
   const handleShareToPool = async () => {
@@ -379,6 +368,33 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
       });
     } finally {
       setPricingLoading(false);
+    }
+  };
+
+  const openAliasEditor = (modelId: string) => {
+    const model = models?.models.find((m) => m.model_id === modelId);
+    setEditingAliasModelId(modelId);
+    setAliasDraft(model?.alias ?? "");
+  };
+
+  const saveAlias = async () => {
+    if (!providerId || !editingAliasModelId) return;
+    setAliasLoading(true);
+    try {
+      const payload: { alias?: string | null } = {};
+      const trimmed = aliasDraft.trim();
+      payload.alias = trimmed === "" ? null : trimmed;
+
+      await providerService.updateProviderModelAlias(providerId, editingAliasModelId, payload);
+      toast.success(t("providers.alias_save_success") ?? "模型映射已保存");
+      await refresh();
+      setEditingAliasModelId(null);
+    } catch (err: any) {
+      showError(err, {
+        context: t("providers.alias_save_error") ?? "保存模型映射失败",
+      });
+    } finally {
+      setAliasLoading(false);
     }
   };
 
@@ -559,42 +575,15 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
               {!models?.models || models.models.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">{translations.models.noModels}</div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {models.models.map((model) => (
-                    <div
+                    <ModelCard
                       key={model.model_id}
-                      className="p-4 border rounded-lg hover:bg-muted/50 transition-colors flex flex-col justify-between gap-3"
-                    >
-                      <div>
-                        <div className="font-medium break-all">
-                          {model.display_name || model.model_id}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {translations.models.ownedBy}:{" "}
-                          {model.metadata?.owned_by || "-"}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {translations.models.created}:{" "}
-                          {typeof model.metadata?.created === "number"
-                            ? new Date(
-                                model.metadata.created * 1000,
-                              ).toLocaleDateString()
-                            : "-"}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t mt-2">
-                        <div className="text-xs text-muted-foreground">
-                          {renderPricingLabel(model)}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          onClick={() => openPricingEditor(model.model_id)}
-                        >
-                          {t("providers.pricing_edit_button") ?? "编辑计费"}
-                        </Button>
-                      </div>
-                    </div>
+                      model={model}
+                      canEdit={!!canEditModelMapping}
+                      onEditPricing={() => openPricingEditor(model.model_id)}
+                      onEditAlias={() => openAliasEditor(model.model_id)}
+                    />
                   ))}
                 </div>
               )}
@@ -701,73 +690,35 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
         </TabsContent>
       </Tabs>
 
-      {/* 计费编辑对话框（简单版：使用原生布局，不引入额外 Dialog 组件以减少改动） */}
-      {editingModelId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6 space-y-4">
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold">
-                {t("providers.pricing_edit_title") ?? "编辑模型计费"}
-              </h2>
-              <p className="text-xs text-muted-foreground break-all">
-                {provider?.provider_id} · {editingModelId}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t("providers.pricing_edit_desc") ??
-                  "单位为每 1000 tokens 扣减的积分数，留空表示不配置 / 清空对应方向的价格。"}
-              </p>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <div className="text-xs font-medium text-muted-foreground">
-                  {t("providers.pricing_input_label") ?? "输入价格（每 1k tokens）"}
-                </div>
-                <input
-                  className="w-full rounded-md border px-2 py-1 text-sm bg-background"
-                  value={pricingDraft.input}
-                  onChange={(e) =>
-                    setPricingDraft((prev) => ({ ...prev, input: e.target.value }))
-                  }
-                  placeholder={t("providers.pricing_input_placeholder") ?? "例如 5"}
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs font-medium text-muted-foreground">
-                  {t("providers.pricing_output_label") ?? "输出价格（每 1k tokens）"}
-                </div>
-                <input
-                  className="w-full rounded-md border px-2 py-1 text-sm bg-background"
-                  value={pricingDraft.output}
-                  onChange={(e) =>
-                    setPricingDraft((prev) => ({ ...prev, output: e.target.value }))
-                  }
-                  placeholder={t("providers.pricing_output_placeholder") ?? "例如 15"}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditingModelId(null)}
-                disabled={pricingLoading}
-              >
-                {t("common.cancel") ?? "取消"}
-              </Button>
-              <Button size="sm" onClick={savePricing} disabled={pricingLoading}>
-                {pricingLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    {t("common.saving") ?? "保存中"}
-                  </>
-                ) : (
-                  t("common.save") ?? "保存"
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 计费编辑对话框 */}
+      <ModelPricingDialog
+        open={editingModelId !== null}
+        onOpenChange={(open) => !open && setEditingModelId(null)}
+        providerId={provider?.provider_id ?? ""}
+        modelId={editingModelId ?? ""}
+        inputPrice={pricingDraft.input}
+        outputPrice={pricingDraft.output}
+        onInputPriceChange={(value) =>
+          setPricingDraft((prev) => ({ ...prev, input: value }))
+        }
+        onOutputPriceChange={(value) =>
+          setPricingDraft((prev) => ({ ...prev, output: value }))
+        }
+        onSave={savePricing}
+        loading={pricingLoading}
+      />
+
+      {/* 别名编辑对话框 */}
+      <ModelAliasDialog
+        open={editingAliasModelId !== null}
+        onOpenChange={(open) => !open && setEditingAliasModelId(null)}
+        providerId={provider?.provider_id ?? ""}
+        modelId={editingAliasModelId ?? ""}
+        alias={aliasDraft}
+        onAliasChange={setAliasDraft}
+        onSave={saveAlias}
+        loading={aliasLoading}
+      />
     </div>
   );
 }

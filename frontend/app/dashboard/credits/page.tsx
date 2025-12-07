@@ -3,19 +3,14 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { CreditBalanceCard } from "@/components/dashboard/credits/credit-balance-card";
 import { CreditTransactionsTable } from "@/components/dashboard/credits/credit-transactions-table";
-import { AdminTopupDialog } from "@/components/dashboard/credits/admin-topup-dialog";
 import { DateRangeFilter, getDateRangeFromPreset, type DateRangePreset } from "@/components/dashboard/credits/date-range-filter";
 import { useCreditBalance, useCreditTransactions } from "@/lib/swr/use-credits";
-import { useAuthStore } from "@/lib/stores/auth-store";
 import { useI18n } from "@/lib/i18n-context";
 
 export default function CreditsPage() {
   const { t } = useI18n();
-  const user = useAuthStore(state => state.user);
-  const isSuperUser = user?.is_superuser === true;
 
   // 状态管理
-  const [topupDialogOpen, setTopupDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [dateRange, setDateRange] = useState<DateRangePreset>('30days');
   const pageSize = 50;
@@ -43,12 +38,6 @@ export default function CreditsPage() {
     loading: transactionsLoading, 
     refresh: refreshTransactions 
   } = useCreditTransactions(transactionParams);
-
-  // 处理充值成功
-  const handleTopupSuccess = useCallback(() => {
-    refreshBalance();
-    refreshTransactions();
-  }, [refreshBalance, refreshTransactions]);
 
   // 处理页码变化
   const handlePageChange = useCallback((page: number) => {
@@ -101,8 +90,6 @@ export default function CreditsPage() {
         balance={balance}
         loading={balanceLoading}
         onRefresh={handleRefresh}
-        onTopup={() => setTopupDialogOpen(true)}
-        showTopupButton={isSuperUser}
       />
 
       {/* 积分流水表格 */}
@@ -115,16 +102,6 @@ export default function CreditsPage() {
         onPageChange={handlePageChange}
         filterComponent={filterComponent}
       />
-
-      {/* 管理员充值对话框 */}
-      {isSuperUser && user && (
-        <AdminTopupDialog
-          open={topupDialogOpen}
-          onOpenChange={setTopupDialogOpen}
-          userId={user.id}
-          onSuccess={handleTopupSuccess}
-        />
-      )}
     </div>
   );
 }

@@ -25,6 +25,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0", # For JWT handling
     "passlib[bcrypt]>=1.7.4", # For password hashing
     "celery[redis]>=5.4.0", # Async task queue
+    "python-multipart>=0.0.20",
 ]
 
 [project.scripts]

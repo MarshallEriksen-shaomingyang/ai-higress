@@ -11,11 +11,17 @@ except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is
     Redis = object  # type: ignore[misc,assignment]
 
 from app.deps import get_db, get_http_client, get_redis
-from app.errors import not_found
-from app.jwt_auth import require_jwt_token
+from app.errors import bad_request, forbidden, not_found
+from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.logging_config import logger
 from app.models import Provider, ProviderModel
-from app.schemas import ProviderAPIKey, ProviderConfig, RoutingMetrics
+from app.schemas import (
+    ProviderAPIKey,
+    ProviderConfig,
+    RoutingMetrics,
+    ModelAliasUpdateRequest,
+    ProviderModelAliasResponse,
+)
 from app.schemas.provider_routes import (
     ProviderMetricsResponse,
     ProviderModelsResponse,
@@ -73,6 +79,46 @@ def _sanitize_provider_config(cfg: ProviderConfig) -> ProviderConfig:
         ]
 
     return cfg.model_copy(update={"api_key": masked_api_key, "api_keys": masked_api_keys})
+
+
+def _ensure_can_edit_provider_models(
+    db: Session,
+    provider_id_slug: str,
+    current_user: AuthenticatedUser,
+) -> Provider:
+    """
+    确保当前用户有权限修改指定 Provider 下的模型配置（计费 / 映射等）。
+
+    - 超级管理员：可以管理所有 Provider；
+    - 普通用户：仅能管理自己私有 Provider（visibility=private 且 owner_id 匹配）。
+    """
+    # 超级管理员直接放行
+    if current_user.is_superuser:
+        provider = (
+            db.execute(select(Provider).where(Provider.provider_id == provider_id_slug))
+            .scalars()
+            .first()
+        )
+        if provider is None:
+            raise not_found(f"Provider '{provider_id_slug}' not found")
+        return provider
+
+    provider = (
+        db.execute(select(Provider).where(Provider.provider_id == provider_id_slug))
+        .scalars()
+        .first()
+    )
+    if provider is None:
+        raise not_found(f"Provider '{provider_id_slug}' not found")
+
+    if (
+        getattr(provider, "visibility", "public") == "private"
+        and provider.owner_id is not None
+        and str(provider.owner_id) == current_user.id
+    ):
+        return provider
+
+    raise forbidden("只有提供商所有者或超级管理员可以修改该提供商的模型配置")
 
 
 @router.get("/providers", response_model=ProvidersResponse)
@@ -223,11 +269,22 @@ async def get_provider_models(
                 for row in model_rows
                 if isinstance(row.pricing, dict)
             }
+            alias_by_model_id: dict[str, str] = {
+                row.model_id: row.alias  # type: ignore[assignment]
+                for row in model_rows
+                if isinstance(getattr(row, "alias", None), str)
+                and getattr(row, "alias", "").strip()
+            }
             if pricing_by_model_id:
                 for item in items:
                     model_id = item.get("model_id") or item.get("id")
                     if isinstance(model_id, str) and model_id in pricing_by_model_id:
                         item["pricing"] = pricing_by_model_id[model_id]
+            if alias_by_model_id:
+                for item in items:
+                    model_id = item.get("model_id") or item.get("id")
+                    if isinstance(model_id, str) and model_id in alias_by_model_id:
+                        item["alias"] = alias_by_model_id[model_id]
     except Exception:
         # 防御性日志：覆盖计费失败不影响主逻辑，仅记录日志以便排查。
         logger.exception(
@@ -287,5 +344,128 @@ async def get_provider_metrics(
     return ProviderMetricsResponse(metrics=metrics_list)
 
 
-__all__ = ["router"]
+@router.get(
+    "/providers/{provider_id}/models/{model_id}/mapping",
+    response_model=ProviderModelAliasResponse,
+)
+def get_provider_model_mapping(
+    provider_id: str,
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderModelAliasResponse:
+    """
+    获取指定 provider+model 的别名映射配置。
 
+    - 当 provider_models 中尚未有该模型行或未配置别名时，返回 alias=None；
+    - 仅允许超级管理员或该私有 Provider 的所有者访问。
+    """
+    provider_row = _ensure_can_edit_provider_models(db, provider_id, current_user)
+
+    model_row = (
+        db.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider_row.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if model_row is None:
+        return ProviderModelAliasResponse(
+            provider_id=provider_row.provider_id,
+            model_id=model_id,
+            alias=None,
+        )
+
+    return ProviderModelAliasResponse(
+        provider_id=provider_row.provider_id,
+        model_id=model_row.model_id,
+        alias=getattr(model_row, "alias", None),
+    )
+
+
+@router.put(
+    "/providers/{provider_id}/models/{model_id}/mapping",
+    response_model=ProviderModelAliasResponse,
+)
+def update_provider_model_mapping(
+    provider_id: str,
+    model_id: str,
+    payload: ModelAliasUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderModelAliasResponse:
+    """
+    更新指定 provider+model 的别名映射配置。
+
+    行为：
+    - 若 provider 或 model 不存在，则返回 404；
+    - alias 为空或仅包含空白字符时，清空现有别名；
+    - alias 非空时，为避免歧义，不允许同一 Provider 下多个模型使用相同别名。
+    """
+    provider_row = _ensure_can_edit_provider_models(db, provider_id, current_user)
+
+    model_row = (
+        db.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider_row.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if model_row is None:
+        # 若 provider_models 中尚无该模型行，则以保守默认值创建一行，方便后续管理。
+        model_row = ProviderModel(
+            provider_id=provider_row.id,
+            model_id=model_id,
+            family=model_id[:50],
+            display_name=model_id[:100],
+            context_length=8192,
+            capabilities=["chat"],
+            pricing=None,
+            metadata_json=None,
+            meta_hash=None,
+        )
+        db.add(model_row)
+        db.flush()
+
+    # 归一化别名：空串视为清空。
+    new_alias = (payload.alias or "").strip() if payload and payload.alias is not None else None
+    if new_alias == "":
+        new_alias = None
+
+    if new_alias is not None:
+        # 确保同一 Provider 下别名唯一，避免路由歧义。
+        conflict = (
+            db.execute(
+                select(ProviderModel).where(
+                    ProviderModel.provider_id == provider_row.id,
+                    ProviderModel.model_id != model_id,
+                    ProviderModel.alias == new_alias,
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if conflict is not None:
+            raise bad_request(
+                f"别名 '{new_alias}' 已被模型 '{conflict.model_id}' 使用，请选择其他别名。",
+            )
+
+    model_row.alias = new_alias
+    db.add(model_row)
+    db.commit()
+    db.refresh(model_row)
+
+    return ProviderModelAliasResponse(
+        provider_id=provider_row.provider_id,
+        model_id=model_row.model_id,
+        alias=model_row.alias,
+    )
+
+
+__all__ = ["router"]

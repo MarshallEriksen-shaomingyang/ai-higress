@@ -9,6 +9,7 @@ from app.errors import forbidden
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.models import User
 from app.schemas.user import UserPermissionFlag, UserResponse
+from app.services.avatar_service import build_avatar_url
 from app.services.role_service import RoleService
 from app.services.user_permission_service import UserPermissionService
 
@@ -56,7 +57,7 @@ def _build_admin_user_response(
         username=user.username,
         email=user.email,
         display_name=user.display_name,
-        avatar=user.avatar,
+        avatar=build_avatar_url(user.avatar),
         is_active=user.is_active,
         is_superuser=user.is_superuser,
         role_codes=role_codes,

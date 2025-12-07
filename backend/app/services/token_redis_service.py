@@ -433,6 +433,64 @@ class TokenRedisService:
 
         return sessions
 
+    async def cleanup_user_sessions(self, user_id: str) -> int:
+        """
+        巡检并清理指定用户的会话列表，移除无效/损坏的会话记录。
+
+        - 会话结构解析失败视为损坏记录，直接丢弃；
+        - 对于结构正常的会话，通过 refresh token 的 JTI 进一步校验：
+          * 若对应 refresh token 已过期 / 被撤销 / 记录缺失，则认定为无效会话并移除；
+          * 否则保留该会话。
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            实际移除的会话数量
+        """
+        sessions_key = USER_SESSIONS_KEY.format(user_id=user_id)
+        sessions_data = await redis_get_json(self.redis, sessions_key)
+
+        if not sessions_data:
+            return 0
+
+        raw_sessions = sessions_data.get("sessions", [])
+        if not isinstance(raw_sessions, list):
+            # 结构异常，直接删除整个索引键
+            await redis_delete(self.redis, sessions_key)
+            return 0
+
+        cleaned_sessions: list[dict] = []
+        removed = 0
+
+        for raw in raw_sessions:
+            try:
+                session = UserSession.model_validate(raw)
+            except Exception:
+                # 解析失败，视为损坏记录
+                removed += 1
+                continue
+
+            # 校验对应 refresh token 是否仍然有效
+            token_record = await self.verify_refresh_token(session.refresh_token_jti)
+            if token_record is None:
+                removed += 1
+                continue
+
+            cleaned_sessions.append(session.model_dump(mode="json"))
+
+        if not cleaned_sessions:
+            await redis_delete(self.redis, sessions_key)
+        else:
+            new_data = {
+                "user_id": sessions_data.get("user_id", user_id),
+                "sessions": cleaned_sessions,
+            }
+            # 不再为索引键设置 TTL，由定期清理任务负责移除已过期会话
+            await redis_set_json(self.redis, sessions_key, new_data, ttl_seconds=None)
+
+        return removed
+
     async def is_token_blacklisted(self, jti: str) -> bool:
         """
         检查 token 是否在黑名单中
@@ -488,6 +546,47 @@ class TokenRedisService:
 
         sessions_data["sessions"] = sessions
         await redis_set_json(self.redis, sessions_key, sessions_data, ttl_seconds=None)
+
+    async def enforce_session_limit(self, user_id: str, max_sessions: int) -> int:
+        """
+        根据给定上限限制用户活跃会话数量，超出部分按最旧优先的策略自动淘汰。
+
+        策略说明：
+        - 先读取用户当前所有会话（包括最近刷新时更新过 last_used_at 的会话）；
+        - 按 last_used_at（若为空则退回 created_at）升序排序；
+        - 当会话数超过上限时，从最旧的会话开始依次撤销 refresh token，
+          revoke_token() 会负责写入黑名单并从会话索引中移除。
+
+        Args:
+            user_id: 用户 ID
+            max_sessions: 允许的最大活跃会话数
+
+        Returns:
+            实际被淘汰（撤销）的会话数量
+        """
+        if max_sessions <= 0:
+            return 0
+
+        sessions = await self.get_user_sessions(user_id)
+        if len(sessions) <= max_sessions:
+            return 0
+
+        # 按“最近使用时间”排序，未被更新过的会话退回到创建时间
+        def _session_sort_key(sess: UserSession):
+            return sess.last_used_at or sess.created_at
+
+        sessions.sort(key=_session_sort_key)
+        to_revoke_count = len(sessions) - max_sessions
+        revoked = 0
+
+        for sess in sessions[:to_revoke_count]:
+            if await self.revoke_token(
+                sess.refresh_token_jti,
+                reason="max_sessions_exceeded",
+            ):
+                revoked += 1
+
+        return revoked
 
 
 __all__ = ["TokenRedisService"]

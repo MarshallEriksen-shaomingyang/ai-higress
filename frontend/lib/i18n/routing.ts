@@ -6,6 +6,9 @@ export const routingTranslations: Record<Language, Record<string, string>> = {
     "routing.title": "Routing Management",
     "routing.subtitle": "Configure intelligent request routing strategies",
     "routing.description": "Configure intelligent request routing strategies",
+    "routing.tooltip.label": "What does this page do?",
+    "routing.tooltip.description":
+      "Use this page to test routing decisions for logical models and manage sticky routing sessions bound to conversation IDs.",
     "routing.tabs.decision": "Routing Decision",
     "routing.tabs.session": "Session Management",
     // Routing Decision
@@ -89,6 +92,9 @@ export const routingTranslations: Record<Language, Record<string, string>> = {
     "routing.title": "路由管理",
     "routing.subtitle": "配置智能请求路由策略",
     "routing.description": "配置智能请求路由策略",
+    "routing.tooltip.label": "路由管理页面说明",
+    "routing.tooltip.description":
+      "用于配置和调试智能请求路由：在「路由决策」中测试当前会选择哪个上游，在「会话管理」中查看和删除会话的粘性路由。",
     "routing.tabs.decision": "路由决策",
     "routing.tabs.session": "会话管理",
     // Routing Decision

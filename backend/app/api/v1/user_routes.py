@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_redis
@@ -21,6 +21,7 @@ from app.schemas import (
 from app.services.api_key_cache import invalidate_cached_api_key
 from app.services.role_service import RoleCodeAlreadyExistsError, RoleService
 from app.services.user_permission_service import UserPermissionService
+from app.services.avatar_service import build_avatar_url, get_avatar_file_path
 from app.services.user_service import (
     EmailAlreadyExistsError,
     UsernameAlreadyExistsError,
@@ -98,7 +99,7 @@ def _build_user_response(db: Session, user_id: UUID) -> UserResponse:
         username=user.username,
         email=user.email,
         display_name=user.display_name,
-        avatar=user.avatar,
+        avatar=build_avatar_url(user.avatar),
         is_active=user.is_active,
         is_superuser=user.is_superuser,
         role_codes=role_codes,
@@ -138,6 +139,78 @@ def get_current_user_endpoint(
 ) -> UserResponse:
     """获取当前认证用户的信息。"""
     return _build_user_response(db, UUID(current_user.id))
+
+
+@router.post("/users/me/avatar", response_model=UserResponse)
+async def upload_my_avatar_endpoint(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> UserResponse:
+    """
+    上传并更新当前用户的头像。
+
+    实现约定：
+    - 当前阶段文件实际保存到本地目录 AVATAR_LOCAL_DIR（默认 backend/media/avatars）；
+    - 数据库 users.avatar 字段仅保存相对 key，例如 "<user_id>/<uuid>.png"；
+    - 对外返回的 UserResponse.avatar 始终是可直接访问的 URL：
+      - 若配置了 AVATAR_OSS_BASE_URL，则为 "<AVATAR_OSS_BASE_URL>/<key>"；
+      - 否则为 "<AVATAR_LOCAL_BASE_URL>/<key>"（默认 /media/avatars/<key>）。
+    """
+
+    # 只允许常见图片格式，避免用户误上传其他文件
+    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+    if file.content_type not in allowed_types:
+        raise bad_request("不支持的头像图片类型，请上传 PNG/JPEG/WebP 格式")
+
+    # 从文件名推断后缀
+    filename = file.filename or ""
+    ext = ""
+    if "." in filename:
+        ext = filename.rsplit(".", 1)[-1].lower()
+        if ext not in {"png", "jpg", "jpeg", "webp"}:
+            # 统一转为 .png 以避免奇怪后缀
+            ext = "png"
+    else:
+        ext = "png"
+
+    user = get_user_by_id(db, UUID(current_user.id))
+    if user is None:
+        raise not_found(f"User {current_user.id} not found")
+
+    # 为当前用户生成新的头像 key，形如 "<user_id>/<random>.png"
+    avatar_key = f"{user.id}/{uuid4().hex}.{ext}"
+    avatar_path = get_avatar_file_path(avatar_key)
+    avatar_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 简单限制单个头像文件大小：2MB
+    max_bytes = 2 * 1024 * 1024
+    written = 0
+
+    try:
+        with avatar_path.open("wb") as out:
+            while True:
+                chunk = await file.read(8192)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    # 删除已写入的临时文件，避免残留无效大文件
+                    out.close()
+                    avatar_path.unlink(missing_ok=True)
+                    raise bad_request("头像文件过大，最大支持 2MB")
+                out.write(chunk)
+    finally:
+        # 无论如何都关闭上传文件，避免后续误用
+        await file.close()
+
+    # 更新用户记录，仅保存 key，URL 在响应构造时再拼接
+    user.avatar = avatar_key
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return _build_user_response(db, user.id)
 
 
 @router.put("/users/{user_id}", response_model=UserResponse)

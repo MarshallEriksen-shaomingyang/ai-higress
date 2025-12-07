@@ -11,10 +11,13 @@ from app.logging_config import logger
 from app.models import (
     CreditAccount,
     CreditTransaction,
+    CreditAutoTopupRule,
     ModelBillingConfig,
     Provider,
     ProviderModel,
 )
+from app.schemas.notification import NotificationCreateRequest
+from app.services.notification_service import create_notification
 from app.settings import settings
 
 
@@ -269,39 +272,210 @@ def apply_manual_delta(
     return account
 
 
+def get_auto_topup_rule_for_user(
+    db: Session,
+    user_id: UUID,
+) -> CreditAutoTopupRule | None:
+    """
+    获取指定用户的自动充值规则（若未配置则返回 None）。
+    """
+    return (
+        db.execute(
+            select(CreditAutoTopupRule).where(
+                CreditAutoTopupRule.user_id == user_id
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+def upsert_auto_topup_rule(
+    db: Session,
+    *,
+    user_id: UUID,
+    min_balance_threshold: int,
+    target_balance: int,
+    is_active: bool = True,
+) -> CreditAutoTopupRule:
+    """
+    为用户创建或更新自动充值规则。
+
+    - 当积分余额低于 min_balance_threshold 时，将自动补至 target_balance；
+    - is_active 控制规则是否生效。
+    """
+    if min_balance_threshold <= 0 or target_balance <= 0:
+        raise ValueError("min_balance_threshold 与 target_balance 必须为正整数")
+
+    rule = get_auto_topup_rule_for_user(db, user_id)
+    if rule is None:
+        rule = CreditAutoTopupRule(
+            user_id=user_id,
+            min_balance_threshold=min_balance_threshold,
+            target_balance=target_balance,
+            is_active=is_active,
+        )
+        db.add(rule)
+    else:
+        rule.min_balance_threshold = min_balance_threshold
+        rule.target_balance = target_balance
+        rule.is_active = is_active
+
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+def disable_auto_topup_for_user(db: Session, *, user_id: UUID) -> None:
+    """
+    关闭指定用户的自动充值规则（若不存在则忽略）。
+    """
+    rule = get_auto_topup_rule_for_user(db, user_id)
+    if rule is None:
+        return
+
+    rule.is_active = False
+    db.commit()
+
+
+def run_daily_auto_topups(db: Session) -> int:
+    """
+    扫描所有启用的自动充值规则，对余额不足的账户进行充值。
+
+    规则：
+    - 仅处理 is_active=True 的规则；
+    - 当当前余额 < min_balance_threshold 且 < target_balance 时，
+      通过 apply_manual_delta 将余额调整为 target_balance；
+    - 充值记录的 reason 固定为 \"auto_daily_topup\"。
+
+    返回本次实际执行充值的账户数量。
+    """
+    rules = (
+        db.execute(
+            select(CreditAutoTopupRule).where(
+                CreditAutoTopupRule.is_active.is_(True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    processed = 0
+    for rule in rules:
+        account = get_or_create_account_for_user(db, rule.user_id)
+        current_balance = int(account.balance)
+
+        if current_balance >= rule.min_balance_threshold:
+            continue
+        if current_balance >= rule.target_balance:
+            # 若目标值不高于当前余额，则无需调整。
+            continue
+
+        delta = int(rule.target_balance) - current_balance
+        try:
+            apply_manual_delta(
+                db,
+                user_id=rule.user_id,
+                amount=delta,
+                reason="auto_daily_topup",
+                description="自动每日积分充值",
+            )
+            processed += 1
+            # 推送通知提醒用户
+            try:
+                create_notification(
+                    db,
+                    NotificationCreateRequest(
+                        title="积分已自动充值",
+                        content=(
+                            f"系统检测到您的积分不足，已自动为账户充值 {delta} 积分，"
+                            f"当前目标余额：{rule.target_balance}。"
+                        ),
+                        level="info",
+                        target_type="users",
+                        target_user_ids=[rule.user_id],
+                    ),
+                    creator_id=None,
+                )
+            except Exception:  # pragma: no cover - 通知失败不影响扣费流程
+                logger.exception(
+                    "Failed to send auto-topup notification for user %s", rule.user_id
+                )
+        except Exception:  # pragma: no cover - 防御性日志
+            logger.exception(
+                "Failed to apply auto topup for user=%s rule_id=%s",
+                rule.user_id,
+                rule.id,
+            )
+
+    return processed
+
+
 def record_chat_completion_usage(
     db: Session,
     *,
     user_id: UUID,
     api_key_id: UUID | None,
-    model_name: str | None,
+    logical_model_name: str | None,
     provider_id: str | None,
-    payload: dict[str, Any] | None,
+    provider_model_id: str | None,
+    response_payload: dict[str, Any] | None,
+    request_payload: dict[str, Any] | None = None,
     is_stream: bool = False,
     reason: str | None = None,
 ) -> int:
     """
     根据响应 payload 中的 usage 字段记录一次调用消耗，并扣减积分。
 
+    优先使用 Provider+Model 维度的定价（provider_models.pricing），并在此基础上叠加：
+    - 逻辑模型倍率：ModelBillingConfig.multiplier（按 logical_model_name 查找）；
+    - Provider 结算系数：Provider.billing_factor。
+
+    当上游未返回 usage 时，若提供了 request_payload，则尝试从
+    max_tokens / max_tokens_to_sample / max_output_tokens 粗略估算一次总 token 数；
+    若仍无法估算，则不做扣费（返回 0）。
+
     返回本次扣减的积分数（可能为 0）。
     """
-    if payload is None or not isinstance(payload, dict):
-        return 0
+    if response_payload is None or not isinstance(response_payload, dict):
+        # 无结构化响应时，仅能依赖请求侧的粗略估算；此处交由后续逻辑处理。
+        usage: dict[str, Any] | None = None
+    else:
+        usage = response_payload.get("usage")
 
-    usage = payload.get("usage")
     if not isinstance(usage, dict):
         # 某些厂商在流式模式下仅在最终 chunk 给 usage，或没有 usage 字段。
-        return 0
+        usage = None
 
-    input_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
-    output_tokens = usage.get("completion_tokens") or usage.get("output_tokens")
-    total_tokens = usage.get("total_tokens")
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
 
-    if total_tokens is None and input_tokens is not None and output_tokens is not None:
-        try:
-            total_tokens = int(input_tokens) + int(output_tokens)
-        except Exception:
-            total_tokens = None
+    if isinstance(usage, dict):
+        input_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
+        output_tokens = usage.get("completion_tokens") or usage.get("output_tokens")
+        total_tokens = usage.get("total_tokens")
+
+        if total_tokens is None and input_tokens is not None and output_tokens is not None:
+            try:
+                total_tokens = int(input_tokens) + int(output_tokens)
+            except Exception:
+                total_tokens = None
+
+    # usage 中无法获得 total_tokens 时，尝试基于请求参数做一次保守预估。
+    if total_tokens is None and isinstance(request_payload, dict):
+        approx_tokens: int | None = None
+        for key in ("max_tokens", "max_tokens_to_sample", "max_output_tokens"):
+            value = request_payload.get(key)
+            if isinstance(value, int) and value > 0:
+                approx_tokens = value
+                break
+
+        if approx_tokens is not None and approx_tokens > 0:
+            total_tokens = approx_tokens
+            # 在只有预估总量时，输入 / 输出无法拆分，这里保持为 None，后续按总量计费。
+            input_tokens = None
+            output_tokens = None
 
     if total_tokens is None:
         return 0
@@ -314,22 +488,28 @@ def record_chat_completion_usage(
     # - 若任一价格存在并且 usage 中有对应 token 统计，则使用明细价计算；
     # - 仍然会叠加 ModelBillingConfig.multiplier 与 Provider.billing_factor，方便做全局调整。
     input_price, output_price = _load_provider_model_pricing(
-        db, provider_id=provider_id, model_name=model_name
+        db, provider_id=provider_id, model_name=provider_model_id
     )
 
     cost: int
-    if (input_price is not None or output_price is not None) and (
-        input_tokens is not None or output_tokens is not None
-    ):
+    if input_price is not None or output_price is not None:
         try:
-            model_multiplier = _load_multiplier_for_model(db, model_name)
+            # 逻辑模型倍率始终按 logical_model_name 维度配置，避免与 Provider 模型 ID 混淆。
+            model_multiplier = _load_multiplier_for_model(db, logical_model_name)
             provider_factor = _load_provider_factor(db, provider_id)
 
             raw_cost = 0.0
-            if input_tokens is not None and input_price is not None:
-                raw_cost += (int(input_tokens) / 1000.0) * input_price
-            if output_tokens is not None and output_price is not None:
-                raw_cost += (int(output_tokens) / 1000.0) * output_price
+            if input_tokens is not None or output_tokens is not None:
+                # 具备输入 / 输出拆分的 usage 时，分别按 input/output 单价计费。
+                if input_tokens is not None and input_price is not None:
+                    raw_cost += (int(input_tokens) / 1000.0) * input_price
+                if output_tokens is not None and output_price is not None:
+                    raw_cost += (int(output_tokens) / 1000.0) * output_price
+            else:
+                # 仅有总 token 数（例如基于请求 max_tokens 估算）时，
+                # 为简单且偏保守，整体按 output 单价计费；若只配置了 input 单价则退回 input。
+                per_1k = output_price if output_price is not None else input_price
+                raw_cost = (int(total_tokens) / 1000.0) * per_1k
 
             raw_cost *= model_multiplier * provider_factor
             cost = int(math.ceil(raw_cost))
@@ -338,11 +518,11 @@ def record_chat_completion_usage(
                 "Failed to compute credit cost with ProviderModel.pricing "
                 "for provider=%r model=%r; falling back to legacy pricing",
                 provider_id,
-                model_name,
+                provider_model_id,
             )
             cost = _compute_cost_credits(
                 db=db,
-                model_name=model_name,
+                model_name=logical_model_name,
                 total_tokens=int(total_tokens),
                 provider_id=provider_id,
             )
@@ -350,7 +530,7 @@ def record_chat_completion_usage(
         # 2) 未配置单独价格时，退回到以逻辑模型维度为主的旧计费规则。
         cost = _compute_cost_credits(
             db=db,
-            model_name=model_name,
+            model_name=logical_model_name,
             total_tokens=int(total_tokens),
             provider_id=provider_id,
         )
@@ -368,7 +548,7 @@ def record_chat_completion_usage(
         amount=-cost,
         reason=tx_reason,
         description=None,
-        model_name=model_name,
+        model_name=logical_model_name,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=total_tokens,
@@ -378,7 +558,7 @@ def record_chat_completion_usage(
     logger.info(
         "Recorded credit usage for user=%s model=%r total_tokens=%s cost=%s balance_after=%s",
         user_id,
-        model_name,
+        logical_model_name,
         total_tokens,
         cost,
         account.balance,
@@ -391,8 +571,9 @@ def record_streaming_request(
     *,
     user_id: UUID,
     api_key_id: UUID | None,
-    model_name: str | None,
+    logical_model_name: str | None,
     provider_id: str | None,
+    provider_model_id: str | None,
     payload: dict[str, Any],
 ) -> int:
     """
@@ -417,13 +598,14 @@ def record_streaming_request(
 
     # 优先尝试使用 provider+model 维度的定价。
     input_price, output_price = _load_provider_model_pricing(
-        db, provider_id=provider_id, model_name=model_name
+        db, provider_id=provider_id, model_name=provider_model_id
     )
 
     cost: int
     if input_price is not None or output_price is not None:
         try:
-            model_multiplier = _load_multiplier_for_model(db, model_name)
+            # 流式场景下倍率同样按逻辑模型维度配置。
+            model_multiplier = _load_multiplier_for_model(db, logical_model_name)
             provider_factor = _load_provider_factor(db, provider_id)
             # 流式场景只有一个预估 token 数，缺少输入/输出拆分；
             # 为了简单且偏保守，这里全部按 output 单价计费，若只配置了 input 单价则退回 input。
@@ -435,18 +617,18 @@ def record_streaming_request(
                 "Failed to compute streaming credit cost with ProviderModel.pricing "
                 "for provider=%r model=%r; falling back to legacy pricing",
                 provider_id,
-                model_name,
+                provider_model_id,
             )
             cost = _compute_cost_credits(
                 db=db,
-                model_name=model_name,
+                model_name=logical_model_name,
                 total_tokens=approx_tokens,
                 provider_id=provider_id,
             )
     else:
         cost = _compute_cost_credits(
             db=db,
-            model_name=model_name,
+            model_name=logical_model_name,
             total_tokens=approx_tokens,
             provider_id=provider_id,
         )
@@ -462,7 +644,7 @@ def record_streaming_request(
         amount=-cost,
         reason="stream_estimate",
         description="流式请求预估扣费",
-        model_name=model_name,
+        model_name=logical_model_name,
         input_tokens=None,
         output_tokens=None,
         total_tokens=approx_tokens,
@@ -472,7 +654,7 @@ def record_streaming_request(
     logger.info(
         "Recorded streaming credit usage for user=%s model=%r approx_tokens=%s cost=%s balance_after=%s",
         user_id,
-        model_name,
+        logical_model_name,
         approx_tokens,
         cost,
         account.balance,
@@ -483,8 +665,12 @@ def record_streaming_request(
 __all__ = [
     "InsufficientCreditsError",
     "apply_manual_delta",
+    "disable_auto_topup_for_user",
     "ensure_account_usable",
+    "get_auto_topup_rule_for_user",
     "get_or_create_account_for_user",
     "record_chat_completion_usage",
     "record_streaming_request",
+    "run_daily_auto_topups",
+    "upsert_auto_topup_rule",
 ]

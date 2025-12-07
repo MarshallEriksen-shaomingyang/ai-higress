@@ -12,21 +12,28 @@ from __future__ import annotations
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.deps import get_db
-from app.errors import forbidden
+from app.errors import bad_request, forbidden
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.models import CreditAccount, CreditTransaction
 from app.schemas import (
     CreditAccountResponse,
+    CreditAutoTopupConfig,
+    CreditAutoTopupConfigResponse,
+    CreditAutoTopupBatchRequest,
+    CreditAutoTopupBatchResponse,
     CreditTopupRequest,
     CreditTransactionResponse,
 )
 from app.services.credit_service import (
     apply_manual_delta,
+    disable_auto_topup_for_user,
+    get_auto_topup_rule_for_user,
     get_or_create_account_for_user,
+    upsert_auto_topup_rule,
 )
 
 router = APIRouter(
@@ -102,5 +109,133 @@ def admin_topup_user_credits(
     return CreditAccountResponse.model_validate(account)
 
 
-__all__ = ["router"]
+@router.get(
+    "/admin/users/{user_id}/auto-topup",
+    response_model=CreditAutoTopupConfigResponse | None,
+)
+def get_user_auto_topup_config(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> CreditAutoTopupConfigResponse | None:
+    """
+    获取指定用户的自动充值配置。
 
+    若未配置则返回 null。
+    """
+    if not current_user.is_superuser:
+        raise forbidden("只有超级管理员可以查看或修改自动充值配置")
+
+    rule = get_auto_topup_rule_for_user(db, user_id)
+    if rule is None:
+        return None
+    return CreditAutoTopupConfigResponse.model_validate(rule)
+
+
+@router.put(
+    "/admin/users/{user_id}/auto-topup",
+    response_model=CreditAutoTopupConfigResponse,
+)
+def upsert_user_auto_topup_config(
+    user_id: UUID,
+    payload: CreditAutoTopupConfig,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> CreditAutoTopupConfigResponse:
+    """
+    创建或更新指定用户的自动充值规则。
+
+    仅当 current_user.is_superuser 为 True 时允许调用。
+    """
+    if not current_user.is_superuser:
+        raise forbidden("只有超级管理员可以查看或修改自动充值配置")
+
+    if payload.target_balance <= payload.min_balance_threshold:
+        raise bad_request(
+            "target_balance 必须大于 min_balance_threshold",
+            details={
+                "min_balance_threshold": payload.min_balance_threshold,
+                "target_balance": payload.target_balance,
+            },
+        )
+
+    rule = upsert_auto_topup_rule(
+        db,
+        user_id=user_id,
+        min_balance_threshold=payload.min_balance_threshold,
+        target_balance=payload.target_balance,
+        is_active=payload.is_active,
+    )
+    return CreditAutoTopupConfigResponse.model_validate(rule)
+
+
+@router.delete(
+    "/admin/users/{user_id}/auto-topup",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def disable_user_auto_topup_config(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> Response:
+    """
+    禁用指定用户的自动充值规则。
+
+    若规则不存在，则视为幂等成功。
+    """
+    if not current_user.is_superuser:
+        raise forbidden("只有超级管理员可以查看或修改自动充值配置")
+
+    disable_auto_topup_for_user(db, user_id=user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/admin/auto-topup/batch",
+    response_model=CreditAutoTopupBatchResponse,
+    status_code=status.HTTP_200_OK,
+)
+def batch_upsert_auto_topup_config(
+    payload: CreditAutoTopupBatchRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> CreditAutoTopupBatchResponse:
+    """
+    批量为多个用户配置自动充值规则。
+
+    - 管理员在前端多选一批用户后，调用本接口；
+    - 对每个 user_id 复用单用户的 upsert 逻辑。
+    """
+    if not current_user.is_superuser:
+        raise forbidden("只有超级管理员可以查看或修改自动充值配置")
+
+    if not payload.user_ids:
+        raise bad_request("user_ids 不能为空")
+
+    if payload.target_balance <= payload.min_balance_threshold:
+        raise bad_request(
+            "target_balance 必须大于 min_balance_threshold",
+            details={
+                "min_balance_threshold": payload.min_balance_threshold,
+                "target_balance": payload.target_balance,
+            },
+        )
+
+    configs: list[CreditAutoTopupConfigResponse] = []
+    for user_id in payload.user_ids:
+        rule = upsert_auto_topup_rule(
+            db,
+            user_id=user_id,
+            min_balance_threshold=payload.min_balance_threshold,
+            target_balance=payload.target_balance,
+            is_active=payload.is_active,
+        )
+        configs.append(CreditAutoTopupConfigResponse.model_validate(rule))
+
+    return CreditAutoTopupBatchResponse(
+        updated_count=len(configs),
+        configs=configs,
+    )
+
+
+__all__ = ["router"]

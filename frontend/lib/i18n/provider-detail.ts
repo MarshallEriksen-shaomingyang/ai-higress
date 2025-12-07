@@ -40,6 +40,10 @@ export const providerDetailTranslations = {
       noModels: "未找到模型",
       ownedBy: "所有者",
       created: "创建时间",
+      alias: "别名",
+      pricingNotConfigured: "未配置",
+      editPricing: "编辑计费",
+      editAlias: "编辑别名",
     },
     keys: {
       title: "API 密钥",
@@ -105,6 +109,10 @@ export const providerDetailTranslations = {
       noModels: "No models found",
       ownedBy: "Owned by",
       created: "Created",
+      alias: "Alias",
+      pricingNotConfigured: "Not configured",
+      editPricing: "Edit Pricing",
+      editAlias: "Edit Alias",
     },
     keys: {
       title: "API Keys",

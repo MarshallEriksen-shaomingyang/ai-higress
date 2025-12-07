@@ -190,6 +190,7 @@ async def chat_completions(
             requested_model=requested_model,
             lookup_model_id=lookup_model_id,
             api_style=api_style,
+            db=db,
         )
 
         if logical_model is not None:
@@ -419,11 +420,15 @@ async def chat_completions(
                             db,
                             user_id=current_key.user_id,
                             api_key_id=current_key.id,
-                            model_name=logical_model.logical_id,
+                            logical_model_name=logical_model.logical_id,
                             provider_id=provider_id,
-                            payload=converted_payload
-                            if isinstance(converted_payload, dict)
-                            else None,
+                            provider_model_id=model_id,
+                            response_payload=(
+                                converted_payload
+                                if isinstance(converted_payload, dict)
+                                else None
+                            ),
+                            request_payload=payload if isinstance(payload, dict) else None,
                             is_stream=False,
                         )
                     except Exception:  # pragma: no cover - 防御性日志
@@ -502,10 +507,16 @@ async def chat_completions(
                                     db,
                                     user_id=current_key.user_id,
                                     api_key_id=current_key.id,
-                                    model_name=logical_model.logical_id,
+                                    logical_model_name=logical_model.logical_id,
                                     provider_id=provider_id,
-                                    payload=billing_payload
-                                    if isinstance(billing_payload, dict)
+                                    provider_model_id=model_id,
+                                    response_payload=(
+                                        billing_payload
+                                        if isinstance(billing_payload, dict)
+                                        else None
+                                    ),
+                                    request_payload=payload
+                                    if isinstance(payload, dict)
                                     else None,
                                     is_stream=False,
                                 )
@@ -586,10 +597,16 @@ async def chat_completions(
                                 db,
                                 user_id=current_key.user_id,
                                 api_key_id=current_key.id,
-                                model_name=logical_model.logical_id,
+                                logical_model_name=logical_model.logical_id,
                                 provider_id=provider_id,
-                                payload=billing_payload
-                                if isinstance(billing_payload, dict)
+                                provider_model_id=model_id,
+                                response_payload=(
+                                    billing_payload
+                                    if isinstance(billing_payload, dict)
+                                    else None
+                                ),
+                                request_payload=payload
+                                if isinstance(payload, dict)
                                 else None,
                                 is_stream=False,
                             )
@@ -836,11 +853,15 @@ async def chat_completions(
                             db,
                             user_id=current_key.user_id,
                             api_key_id=current_key.id,
-                            model_name=logical_model.logical_id,
+                            logical_model_name=logical_model.logical_id,
                             provider_id=provider_id,
-                            payload=converted_payload
-                            if isinstance(converted_payload, dict)
-                            else None,
+                            provider_model_id=model_id,
+                            response_payload=(
+                                converted_payload
+                                if isinstance(converted_payload, dict)
+                                else None
+                            ),
+                            request_payload=payload if isinstance(payload, dict) else None,
                             is_stream=False,
                         )
                     except Exception:  # pragma: no cover - 防御性日志
@@ -855,15 +876,17 @@ async def chat_completions(
                         status_code=status_code,
                     )
 
-                # 响应体无法解析为结构化 JSON 时，只记录一次 0-token 的占位流水。
+                # 响应体无法解析为结构化 JSON 时，基于请求参数做一次保守估算计费。
                 try:
                     record_chat_completion_usage(
                         db,
                         user_id=current_key.user_id,
                         api_key_id=current_key.id,
-                        model_name=logical_model.logical_id,
+                        logical_model_name=logical_model.logical_id,
                         provider_id=provider_id,
-                        payload=None,
+                        provider_model_id=model_id,
+                        response_payload=None,
+                        request_payload=payload if isinstance(payload, dict) else None,
                         is_stream=False,
                     )
                 except Exception:  # pragma: no cover - 防御性日志
@@ -1238,15 +1261,19 @@ async def chat_completions(
         # 这里使用候选列表中的首选 Provider 作为计费参考。
         try:
             primary_provider_id: str | None = None
+            primary_model_id: str | None = None
             if ordered_candidates:
-                primary_provider_id = ordered_candidates[0].upstream.provider_id
+                primary = ordered_candidates[0].upstream
+                primary_provider_id = primary.provider_id
+                primary_model_id = primary.model_id
 
             record_streaming_request(
                 db,
                 user_id=current_key.user_id,
                 api_key_id=current_key.id,
-                model_name=logical_model.logical_id,
+                logical_model_name=logical_model.logical_id,
                 provider_id=primary_provider_id,
+                provider_model_id=primary_model_id,
                 payload=payload,
             )
         except Exception:  # pragma: no cover - 防御性日志

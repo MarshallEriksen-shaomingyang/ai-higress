@@ -328,3 +328,56 @@ def test_non_superuser_cannot_list_users(client_with_db):
     assert resp.status_code == 403
     body = resp.json()
     assert body["detail"]["message"] == "需要管理员权限"
+
+
+def test_upload_my_avatar_stores_key_and_exposes_url(client_with_db):
+    """
+    当前用户通过 /users/me/avatar 上传头像时：
+    - 数据库中只保存相对 key（不包含完整 URL 前缀）；
+    - 对外返回的 avatar 字段是可直接访问的 URL，默认形如 /media/avatars/<user_id>/<file>；
+    - 对应的本地文件实际写入 AVATAR_LOCAL_DIR。
+    """
+
+    from app.settings import settings
+    from app.services.avatar_service import get_avatar_file_path
+
+    client, session_factory, admin_id, _redis = client_with_db
+
+    # 先创建一个普通用户
+    create_payload = {
+        "username": "avatar-user",
+        "email": "avatar-user@example.com",
+        "password": "Secret123!",
+    }
+    resp_user = client.post("/users", json=create_payload, headers=_jwt_auth_headers(admin_id))
+    assert resp_user.status_code == 201
+    user_id = resp_user.json()["id"]
+
+    # 使用该用户身份上传头像
+    user_headers = _jwt_auth_headers(user_id)
+    files = {
+        "file": ("avatar.png", b"\x89PNG\r\n\x1a\nfake-image-data", "image/png"),
+    }
+    resp_upload = client.post("/users/me/avatar", files=files, headers=user_headers)
+    assert resp_upload.status_code == 200
+    data = resp_upload.json()
+
+    # 返回的 avatar 字段应为可访问 URL，且包含用户 ID
+    assert data["avatar"] is not None
+    local_path = settings.avatar_local_base_url.rstrip("/")
+    api_base = settings.gateway_api_base_url.rstrip("/")
+    assert data["avatar"].startswith(f"{api_base}{local_path}/")
+    assert user_id in data["avatar"]
+
+    # 数据库中仅保存 key，而非完整 URL
+    with session_factory() as session:
+        stored = session.get(User, uuid.UUID(user_id))
+        assert stored is not None
+        assert stored.avatar is not None
+        assert not stored.avatar.startswith("http")
+        # 数据库存储的是 key，不带完整 URL 前缀
+        assert not stored.avatar.startswith(local_path)
+
+        # 对应的本地文件应存在于头像存储目录
+        avatar_path = get_avatar_file_path(stored.avatar)
+        assert avatar_path.exists()

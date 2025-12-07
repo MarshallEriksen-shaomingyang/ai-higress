@@ -1,4 +1,5 @@
 import { httpClient } from './client';
+import type { GatewayConfig, UpdateGatewayConfigRequest } from '@/lib/api-types';
 
 // 系统管理相关接口
 export interface GenerateSecretKeyRequest {
@@ -36,6 +37,18 @@ export interface SystemStatusResponse {
   message: string;
 }
 
+export type CacheSegment =
+  | "models"
+  | "metrics_overview"
+  | "provider_models"
+  | "logical_models"
+  | "routing_metrics";
+
+export interface CacheClearResponse {
+  cleared_keys: number;
+  patterns: Record<string, number>;
+}
+
 // 系统管理服务
 export const systemService = {
   // 生成系统主密钥
@@ -67,6 +80,28 @@ export const systemService = {
   // 获取系统状态
   getSystemStatus: async (): Promise<SystemStatusResponse> => {
     const response = await httpClient.get('/system/status');
+    return response.data;
+  },
+
+  // 清理网关相关缓存
+  clearCache: async (segments?: CacheSegment[]): Promise<CacheClearResponse> => {
+    const response = await httpClient.post('/system/cache/clear', {
+      segments: segments ?? [],
+    });
+    return response.data;
+  },
+
+  // 获取中转网关基础配置
+  getGatewayConfig: async (): Promise<GatewayConfig> => {
+    const response = await httpClient.get('/system/gateway-config');
+    return response.data;
+  },
+
+  // 更新中转网关基础配置
+  updateGatewayConfig: async (
+    data: UpdateGatewayConfigRequest
+  ): Promise<GatewayConfig> => {
+    const response = await httpClient.put('/system/gateway-config', data);
     return response.data;
   },
 };

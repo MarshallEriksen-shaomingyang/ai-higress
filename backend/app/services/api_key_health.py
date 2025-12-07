@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
 from app.models import APIKey, ProviderRoutingMetricsHistory
+from app.schemas.notification import NotificationCreateRequest
+from app.services.notification_service import create_notification
 from app.services.api_key_cache import invalidate_api_key_cache_sync
 
 
@@ -33,6 +36,20 @@ def disable_expired_api_keys(session: Session, *, now: datetime | None = None) -
 
     for key in expired_keys:
         invalidate_api_key_cache_sync(key.key_hash)
+        try:
+            create_notification(
+                session,
+                NotificationCreateRequest(
+                    title="API Key 已过期并被禁用",
+                    content=f"API Key {key.name} 已于 {current.isoformat()} 过期并被自动禁用。",
+                    level="warning",
+                    target_type="users",
+                    target_user_ids=[UUID(str(key.user_id))],
+                ),
+                creator_id=None,
+            )
+        except Exception:  # pragma: no cover - 通知失败不影响主流程
+            logger.exception("Failed to send notification for expired API key %s", key.id)
     return len(expired_keys)
 
 
@@ -80,6 +97,25 @@ def disable_error_prone_api_keys(
     session.commit()
     for key in affected:
         invalidate_api_key_cache_sync(key.key_hash)
+        try:
+            create_notification(
+                session,
+                NotificationCreateRequest(
+                    title="API Key 因高错误率被禁用",
+                    content=(
+                        f"API Key {key.name} 在最近 {window_minutes} 分钟内错误率过高，"
+                        "已被自动禁用，请检查上游或重新启用。"
+                    ),
+                    level="warning",
+                    target_type="users",
+                    target_user_ids=[UUID(str(key.user_id))],
+                ),
+                creator_id=None,
+            )
+        except Exception:  # pragma: no cover
+            logger.exception(
+                "Failed to send notification for high-error API key %s", key.id
+            )
 
     logger.info(
         "Disabled %s API keys due to high error rate (>=%.2f) in last %s minutes",

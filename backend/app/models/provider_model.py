@@ -24,6 +24,8 @@ class ProviderModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     model_id: Mapped[str] = Column(String(100), nullable=False)
+    # 可选的「模型别名」，用于将长版本的上游模型 ID 映射为更易记的短名称。
+    alias: Mapped[str | None] = Column(String(100), nullable=True)
     family: Mapped[str] = Column(String(50), nullable=False)
     display_name: Mapped[str] = Column(String(100), nullable=False)
     context_length: Mapped[int] = Column(Integer, nullable=False)

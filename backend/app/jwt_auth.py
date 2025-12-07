@@ -18,6 +18,7 @@ from app.deps import get_db, get_redis
 from app.models import User
 from app.services.jwt_auth_service import verify_token
 from app.services.token_redis_service import TokenRedisService
+from app.services.avatar_service import build_avatar_url
 from app.services.user_service import get_user_by_id
 
 
@@ -162,7 +163,7 @@ async def require_jwt_token(
         is_superuser=user.is_superuser,
         is_active=user.is_active,
         display_name=user.display_name,
-        avatar=user.avatar,
+        avatar=build_avatar_url(user.avatar),
     )
 
 
@@ -223,7 +224,7 @@ async def require_jwt_refresh_token(
         is_superuser=user.is_superuser,
         is_active=user.is_active,
         display_name=user.display_name,
-        avatar=user.avatar,
+        avatar=build_avatar_url(user.avatar),
     )
 
 

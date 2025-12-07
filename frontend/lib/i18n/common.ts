@@ -19,6 +19,8 @@ export const commonTranslations: Record<Language, Record<string, string>> = {
     "label.type": "Type",
     "label.models": "Models",
     "label.available": "available",
+    "common.loading": "Loading...",
+    "common.refresh": "Refresh",
     "common.toggle_theme": "Toggle theme",
     "common.switch_language": "Switch language",
     "common.cancel": "Cancel",
@@ -26,6 +28,7 @@ export const commonTranslations: Record<Language, Record<string, string>> = {
     "common.saving": "Saving...",
     "common.previous": "Previous",
     "common.next": "Next",
+    "common.error_superuser_required": "Superuser permission is required to perform this operation.",
     // Top navigation
     "topnav.admin_user_name": "Admin User",
     "topnav.admin_role": "Administrator",
@@ -48,6 +51,8 @@ export const commonTranslations: Record<Language, Record<string, string>> = {
     "label.type": "类型",
     "label.models": "模型",
     "label.available": "可用",
+    "common.loading": "加载中...",
+    "common.refresh": "刷新",
     "common.toggle_theme": "切换主题",
     "common.switch_language": "切换语言",
     "common.cancel": "取消",
@@ -55,6 +60,7 @@ export const commonTranslations: Record<Language, Record<string, string>> = {
     "common.saving": "保存中...",
     "common.previous": "上一页",
     "common.next": "下一页",
+    "common.error_superuser_required": "需要超级管理员权限才能执行此操作。",
     // Top navigation
     "topnav.admin_user_name": "管理员",
     "topnav.admin_role": "系统管理员",

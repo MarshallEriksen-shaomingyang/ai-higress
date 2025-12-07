@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 from fastapi.testclient import TestClient
+import pytest
 
 # Ensure project root is on sys.path so that `import app` works
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -733,6 +734,83 @@ def test_models_v1_alias(monkeypatch):
         data = resp.json()
         assert isinstance(data.get("data"), list) and data["data"]
         assert any(item.get("id") == "test-model" for item in data["data"])
+
+
+@pytest.mark.asyncio
+async def test_dynamic_logical_model_uses_alias_mapping(monkeypatch):
+    """
+    动态 LogicalModel 构建应支持 ProviderModel.alias，将别名映射到真实上游模型 ID。
+    """
+
+    # 准备一个带别名的 Provider + Model
+    cfg = ProviderConfig(
+        id="alias-provider",
+        name="Alias Provider",
+        base_url="https://alias.example.com",
+        api_key="test-key",
+        api_keys=None,
+        models_path="/v1/models",
+    )
+
+    class _FakeProvider:
+        def __init__(self) -> None:
+            self.provider_id = "alias-provider"
+
+            class _FakeModel:
+                def __init__(self) -> None:
+                    self.model_id = "claude-sonnet-4-5-20250929"
+                    self.alias = "claude-sonnet-4-5"
+
+            self.models = [_FakeModel()]
+
+    fake_provider = _FakeProvider()
+
+    # 只返回一个 provider+config 对
+    def _load_providers_with_configs(session=None):
+        return [(fake_provider, cfg)]
+
+    def _load_provider_configs(session=None):
+        return [cfg]
+
+    async def _ensure_models_cached(client, redis, provider, *, ttl_seconds: int = 300):
+        # 返回包含真实上游模型 ID 的列表
+        return [
+            {
+                "id": "claude-sonnet-4-5-20250929",
+                "model_id": "claude-sonnet-4-5-20250929",
+            }
+        ]
+
+    monkeypatch.setattr(
+        "app.services.chat_routing_service.load_providers_with_configs",
+        _load_providers_with_configs,
+    )
+    monkeypatch.setattr(
+        "app.services.chat_routing_service.load_provider_configs",
+        _load_provider_configs,
+    )
+    monkeypatch.setattr(
+        "app.services.chat_routing_service.ensure_provider_models_cached",
+        _ensure_models_cached,
+    )
+
+    # client/redis 参数在桩中不会被真正使用
+    async with httpx.AsyncClient() as client:
+        logical = await _build_dynamic_logical_model_for_group(
+            client=client,
+            redis=fake_redis,
+            requested_model="claude-sonnet-4-5",
+            lookup_model_id="claude-sonnet-4-5",
+            api_style="openai",
+            db=object(),  # 仅用于触发 load_providers_with_configs 分支
+        )
+
+    assert logical is not None
+    assert logical.logical_id == "claude-sonnet-4-5"
+    assert logical.upstreams, "dynamic logical model should have at least one upstream"
+    upstream = logical.upstreams[0]
+    # 这里应使用真实上游模型 ID，而非别名
+    assert upstream.model_id == "claude-sonnet-4-5-20250929"
 
 
 def test_chat_greeting_returns_reply(monkeypatch):

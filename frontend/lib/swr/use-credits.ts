@@ -4,11 +4,14 @@ import { useCallback, useMemo } from 'react';
 import { useApiGet, useApiPost } from './hooks';
 import { creditService } from '@/http/credit';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useI18n } from '@/lib/i18n-context';
 import type { 
   CreditAccount, 
   CreditTransaction, 
   TopupRequest,
-  TransactionQueryParams 
+  TransactionQueryParams,
+  CreditAutoTopupBatchRequest,
+  CreditAutoTopupBatchResponse,
 } from '@/lib/api-types';
 
 /**
@@ -74,21 +77,57 @@ export const useCreditTransactions = (params: TransactionQueryParams = {}) => {
 export const useAdminTopup = () => {
   const user = useAuthStore(state => state.user);
   const isSuperUser = user?.is_superuser === true;
+   const { t } = useI18n();
 
   const topupMutation = useApiPost<CreditAccount, TopupRequest>('');
 
-  const topup = useCallback(async (userId: string, data: TopupRequest) => {
-    if (!isSuperUser) {
-      throw new Error('需要超级管理员权限');
-    }
-    
-    const url = `/v1/credits/admin/users/${userId}/topup`;
-    return await creditService.adminTopup(userId, data);
-  }, [isSuperUser]);
+  const topup = useCallback(
+    async (userId: string, data: TopupRequest) => {
+      if (!isSuperUser) {
+        throw new Error(t("common.error_superuser_required"));
+      }
+
+      const url = `/v1/credits/admin/users/${userId}/topup`;
+      return await creditService.adminTopup(userId, data);
+    },
+    [isSuperUser, t]
+  );
 
   return {
     topup,
     submitting: topupMutation.submitting,
     isSuperUser
+  };
+};
+
+/**
+ * 管理员批量配置自动充值规则
+ */
+export const useAdminAutoTopupBatch = () => {
+  const user = useAuthStore(state => state.user);
+  const isSuperUser = user?.is_superuser === true;
+  const { t } = useI18n();
+
+  const { trigger, submitting, error, data } = useApiPost<
+    CreditAutoTopupBatchResponse,
+    CreditAutoTopupBatchRequest
+  >('/v1/credits/admin/auto-topup/batch');
+
+  const applyBatch = useCallback(
+    async (payload: CreditAutoTopupBatchRequest) => {
+      if (!isSuperUser) {
+        throw new Error(t("common.error_superuser_required"));
+      }
+      return await trigger(payload);
+    },
+    [isSuperUser, trigger, t]
+  );
+
+  return {
+    applyBatch,
+    submitting,
+    error,
+    data,
+    isSuperUser,
   };
 };

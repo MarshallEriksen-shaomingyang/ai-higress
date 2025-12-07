@@ -63,7 +63,14 @@ export interface CreditTransaction {
   user_id: string;
   api_key_id: string | null;
   amount: number;
-  reason: 'usage' | 'topup' | 'refund' | 'adjustment';
+  /**
+   * 后端实际可能值示例：
+   * - usage / stream_usage / stream_estimate
+   * - admin_topup / auto_daily_topup / adjust 等
+   *
+   * 这里用 string 而不是严格枚举，避免前后端不一致导致类型错误。
+   */
+  reason: string;
   description: string | null;
   model_name: string | null;
   input_tokens: number | null;
@@ -75,6 +82,31 @@ export interface CreditTransaction {
 export interface TopupRequest {
   amount: number;
   description?: string;
+}
+
+export interface CreditAutoTopupConfig {
+  id: string;
+  user_id: string;
+  min_balance_threshold: number;
+  target_balance: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreditAutoTopupConfigInput {
+  min_balance_threshold: number;
+  target_balance: number;
+  is_active: boolean;
+}
+
+export interface CreditAutoTopupBatchRequest extends CreditAutoTopupConfigInput {
+  user_ids: string[];
+}
+
+export interface CreditAutoTopupBatchResponse {
+  updated_count: number;
+  configs: CreditAutoTopupConfig[];
 }
 
 export interface TransactionQueryParams {
@@ -216,4 +248,143 @@ export interface OverviewMetricsTimeSeries {
   transport: string;
   is_stream: string;
   points: MetricsDataPoint[];
+}
+
+// ============= 注册窗口 / Registration Windows =============
+
+export type RegistrationWindowStatus = "scheduled" | "active" | "closed";
+
+export interface RegistrationWindow {
+  id: string;
+  start_time: string;
+  end_time: string;
+  max_registrations: number;
+  registered_count: number;
+  auto_activate: boolean;
+  status: RegistrationWindowStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRegistrationWindowRequest {
+  start_time: string;
+  end_time: string;
+  max_registrations: number;
+}
+
+// ============= 系统配置 / 网关信息 =============
+
+export interface GatewayConfig {
+  api_base_url: string;
+  max_concurrent_requests: number;
+  request_timeout_ms: number;
+  cache_ttl_seconds: number;
+}
+
+// ============= 逻辑模型 / Logical Models =============
+
+export type ModelCapability =
+  | "chat"
+  | "completion"
+  | "embedding"
+  | "vision"
+  | "audio"
+  | "function_calling";
+
+export type ApiStyle = "openai" | "responses" | "claude";
+
+export interface LogicalModelUpstream {
+  provider_id: string;
+  model_id: string;
+  endpoint: string;
+  base_weight: number;
+  region: string | null;
+  max_qps: number | null;
+  meta_hash: string | null;
+  updated_at: number;
+  api_style: ApiStyle;
+}
+
+export interface LogicalModel {
+  logical_id: string;
+  display_name: string;
+  description: string;
+  capabilities: ModelCapability[];
+  upstreams: LogicalModelUpstream[];
+  enabled: boolean;
+  updated_at: number;
+}
+
+export interface LogicalModelsResponse {
+  models: LogicalModel[];
+  total: number;
+}
+
+export interface LogicalModelUpstreamsResponse {
+  upstreams: LogicalModelUpstream[];
+}
+
+export type UpdateGatewayConfigRequest = GatewayConfig;
+
+// ============= 通知相关 =============
+
+export type NotificationLevel = 'info' | 'success' | 'warning' | 'error';
+export type NotificationTargetType = 'all' | 'users' | 'roles';
+
+export interface Notification {
+  id: string;
+  title: string;
+  content: string;
+  level: NotificationLevel;
+  target_type: NotificationTargetType;
+  target_user_ids: string[];
+  target_role_codes: string[];
+  link_url: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  is_read: boolean;
+  read_at: string | null;
+}
+
+export interface NotificationAdminView {
+  id: string;
+  title: string;
+  content: string;
+  level: NotificationLevel;
+  target_type: NotificationTargetType;
+  target_user_ids: string[];
+  target_role_codes: string[];
+  link_url: string | null;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface CreateNotificationRequest {
+  title: string;
+  content: string;
+  level?: NotificationLevel;
+  target_type: NotificationTargetType;
+  target_user_ids?: string[];
+  target_role_codes?: string[];
+  link_url?: string;
+  expires_at?: string;
+}
+
+export interface MarkNotificationsReadRequest {
+  notification_ids: string[];
+}
+
+export interface UnreadCountResponse {
+  unread_count: number;
+}
+
+export interface NotificationQueryParams {
+  status?: 'all' | 'unread';
+  limit?: number;
+  offset?: number;
 }

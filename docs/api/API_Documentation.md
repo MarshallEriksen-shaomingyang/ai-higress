@@ -13,6 +13,7 @@
 - [逻辑模型管理](#逻辑模型管理)
 - [路由管理](#路由管理)
 - [会话管理](#会话管理)
+- [通知](#通知)
 - [系统管理](#系统管理)
 
 ---
@@ -82,6 +83,7 @@
 - `POST /admin/registration-windows/auto`：创建一个自动激活的注册窗口。
 - `POST /admin/registration-windows/manual`：创建一个需要手动激活的注册窗口。
 - `GET /admin/registration-windows/active`：查看当前正在生效的注册窗口（没有时返回 `null`）。
+- `POST /admin/registration-windows/{window_id}/close`：立即关闭指定的注册窗口（仅管理员）。
 
 **请求体（创建窗口）**:
 ```json
@@ -110,6 +112,7 @@
 **说明**:
 - `auto_activate=true` 表示注册完成即自动激活；`false` 表示需要管理员后续审核/激活。
 - 创建时会自动安排 Celery 任务在开始/结束时间切换状态，服务端也会在请求时兜底检查时间窗口与名额。
+- `close` 接口会将窗口状态置为 `closed`，后续注册将直接返回 403。
 
 ---
 
@@ -433,7 +436,63 @@
 
 ---
 
-### 3. 更新用户信息
+### 3. 上传当前用户头像
+
+**接口**: `POST /users/me/avatar`
+
+**描述**: 为当前登录用户上传并更新头像图片。
+
+**认证**: JWT 令牌
+
+**请求**:
+
+- Content-Type: `multipart/form-data`
+- 表单字段：
+
+| 字段名 | 类型        | 必填 | 说明                                      |
+|--------|-------------|------|-------------------------------------------|
+| file   | binary file | 是   | 头像图片文件，支持 PNG/JPEG/WebP 等常见格式 |
+
+**行为说明**:
+
+- 头像文件会暂时保存到本地磁盘目录（由环境变量 `AVATAR_LOCAL_DIR` 控制，默认 `backend/media/avatars`）；
+- 数据库中 `users.avatar` 字段只保存相对路径 / 对象 key，例如：`"<user_id>/<uuid>.png"`；
+- 对外返回的 `avatar` 字段为前端可直接访问的完整 URL：
+  - 如果配置了 `AVATAR_OSS_BASE_URL`，则为：`<AVATAR_OSS_BASE_URL>/<key>`；
+  - 否则为：`<GATEWAY_API_BASE_URL>/<AVATAR_LOCAL_BASE_URL>/<key>`，默认等价于 `http://localhost:8000/media/avatars/<key>`。
+
+**响应**:
+
+成功时返回更新后的用户信息，结构与 `GET /users/me` 相同：
+
+```json
+{
+  "id": "uuid",
+  "username": "string",
+  "email": "string",
+  "display_name": "string | null",
+  "avatar": "string | null", // 完整头像访问 URL
+  "is_active": true,
+  "is_superuser": false,
+  "role_codes": ["default_user"],
+  "permission_flags": [
+    {
+      "key": "can_create_private_provider",
+      "value": false
+    },
+    {
+      "key": "can_submit_shared_provider",
+      "value": false
+    }
+  ],
+  "created_at": "datetime",
+  "updated_at": "datetime"
+}
+```
+
+---
+
+### 4. 更新用户信息
 
 **接口**: `PUT /users/{user_id}`
 
@@ -479,7 +538,7 @@
 
 ---
 
-### 4. 更新用户状态
+### 5. 更新用户状态
 
 **接口**: `PUT /users/{user_id}/status`
 
@@ -511,7 +570,7 @@
 
 ---
 
-### 5. 管理员获取用户列表
+### 6. 管理员获取用户列表
 
 **接口**: `GET /admin/users`
 
@@ -1129,6 +1188,92 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 
 **成功响应**: 返回更新后的用户积分账户结构，字段与 `GET /v1/credits/me` 相同。
 
+### 4. 管理员配置每日自动充值
+
+**接口 1**: `GET /v1/credits/admin/users/{user_id}/auto-topup`  
+**认证**: JWT 令牌（仅限超级管理员）  
+**描述**: 查询指定用户当前的自动充值配置。若未配置则返回 `null`。
+
+**响应示例**:
+```json
+{
+  "id": "f3b1c1a0-1234-5678-9abc-def012345678",
+  "user_id": "2b5c9290-9d2e-4c9f-a9b8-0123456789ab",
+  "min_balance_threshold": 100,
+  "target_balance": 200,
+  "is_active": true,
+  "created_at": "2025-01-02T12:34:56Z",
+  "updated_at": "2025-01-02T12:34:56Z"
+}
+```
+
+**接口 2**: `PUT /v1/credits/admin/users/{user_id}/auto-topup`  
+**认证**: JWT 令牌（仅限超级管理员）  
+**描述**: 为指定用户创建或更新自动充值规则。
+
+**请求体**:
+```json
+{
+  "min_balance_threshold": 100,
+  "target_balance": 200,
+  "is_active": true
+}
+```
+
+字段说明：
+- `min_balance_threshold`：当用户余额 **低于** 该值时触发自动充值；
+- `target_balance`：自动充值后希望达到的余额（必须大于 `min_balance_threshold`）；
+- `is_active`：是否启用该规则。
+
+**成功响应**: 返回最新的自动充值配置，结构同 `GET` 接口。
+
+**接口 3**: `DELETE /v1/credits/admin/users/{user_id}/auto-topup`  
+**认证**: JWT 令牌（仅限超级管理员）  
+**描述**: 禁用指定用户的自动充值规则。若规则不存在则视为幂等成功。  
+**成功响应**: `204 No Content`
+
+### 5. 管理员批量配置自动充值
+
+**接口**: `POST /v1/credits/admin/auto-topup/batch`  
+**认证**: JWT 令牌（仅限超级管理员）  
+**描述**: 为一批用户一次性创建或更新相同的自动充值规则。常用于“将多名用户加入同一自动充值策略”。
+
+**请求体**:
+```json
+{
+  "user_ids": [
+    "2b5c9290-9d2e-4c9f-a9b8-0123456789ab",
+    "8e2fbe90-1234-5678-9abc-def012345678"
+  ],
+  "min_balance_threshold": 100,
+  "target_balance": 200,
+  "is_active": true
+}
+```
+
+**响应示例**:
+```json
+{
+  "updated_count": 2,
+  "configs": [
+    {
+      "id": "f3b1c1a0-1234-5678-9abc-def012345678",
+      "user_id": "2b5c9290-9d2e-4c9f-a9b8-0123456789ab",
+      "min_balance_threshold": 100,
+      "target_balance": 200,
+      "is_active": true,
+      "created_at": "2025-01-02T12:34:56Z",
+      "updated_at": "2025-01-02T12:34:56Z"
+    }
+  ]
+}
+```
+
+校验规则与单用户接口一致：
+- `user_ids` 必须为非空列表；
+- `target_balance` 必须大于 `min_balance_threshold`；
+- 仅超级管理员可调用。
+
 ---
 
 ## 厂商密钥管理
@@ -1388,7 +1533,8 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
       "id": "string",
       "object": "string",
       "created": 1234567890,
-      "owned_by": "string"
+      "owned_by": "string",
+      "alias": "string (optional, logical alias such as \"claude-sonnet-4-5\")"
     }
   ],
   "total": 1
@@ -1420,6 +1566,48 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 
 **错误响应**:
 - 404: 提供商不存在
+
+---
+
+### 3.1 管理单个模型的别名映射
+
+> 仅限：超级管理员或该私有 Provider 的所有者。
+
+**接口（获取）**: `GET /providers/{provider_id}/models/{model_id}/mapping`  
+**描述**: 获取指定 provider+model 的别名映射配置，用于将上游的长模型 ID 映射为更短、更稳定的逻辑名称。  
+**认证**: JWT 令牌  
+
+**响应示例**:
+```json
+{
+  "provider_id": "claude-official",
+  "model_id": "claude-sonnet-4-5-20250929",
+  "alias": "claude-sonnet-4-5"
+}
+```
+
+当尚未为该模型配置别名时，`alias` 字段为 `null`。
+
+**接口（更新）**: `PUT /providers/{provider_id}/models/{model_id}/mapping`  
+**描述**: 为指定 provider+model 设置或清除别名映射。  
+**认证**: JWT 令牌  
+
+**请求体**:
+```json
+{
+  "alias": "claude-sonnet-4-5"
+}
+```
+
+行为说明：
+- `alias` 为非空字符串时：将请求体中的值设置为该物理模型的别名；
+- `alias` 为 `null` 或空字符串时：清除当前别名映射；
+- 同一 Provider 下，别名必须唯一，否则返回 400 错误。
+
+**错误响应**:
+- 400: 别名与同一 Provider 下其它模型冲突；
+- 403: 当前用户无权修改该 Provider 的模型配置；
+- 404: Provider 不存在。
 
 ---
 
@@ -2348,6 +2536,113 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 
 ---
 
+## 通知
+
+### 1. 获取当前用户通知列表
+
+**接口**: `GET /v1/notifications`
+
+**描述**: 返回当前用户可见的通知，支持 `status=all|unread` 以及分页参数 `limit`/`offset`，按创建时间倒序。
+
+**认证**: JWT 令牌
+
+**请求参数**:
+- `status` (query，可选): `all` | `unread`，默认 `all`
+- `limit` (query，可选): 返回数量，默认 50，最大 200
+- `offset` (query，可选): 起始偏移，默认 0
+
+**响应示例**:
+```json
+[
+  {
+    "id": "uuid",
+    "title": "系统维护通知",
+    "content": "今晚 23:00 维护 15 分钟",
+    "level": "warning",
+    "target_type": "all",
+    "target_user_ids": [],
+    "target_role_codes": [],
+    "link_url": null,
+    "expires_at": null,
+    "created_at": "2024-05-01T12:00:00Z",
+    "updated_at": "2024-05-01T12:00:00Z",
+    "created_by": "uuid",
+    "is_active": true,
+    "is_read": false,
+    "read_at": null
+  }
+]
+```
+
+### 2. 获取未读数量
+
+**接口**: `GET /v1/notifications/unread-count`
+
+**描述**: 返回当前用户未读通知数量。
+
+**认证**: JWT 令牌
+
+**响应**:
+```json
+{ "unread_count": 3 }
+```
+
+### 3. 批量标记为已读
+
+**接口**: `POST /v1/notifications/read`
+
+**描述**: 将指定通知标记为已读；用户只能标记自己可见的通知。
+
+**请求体**:
+```json
+{ "notification_ids": ["uuid1", "uuid2"] }
+```
+
+**响应**:
+```json
+{ "updated_count": 2 }
+```
+
+### 4. 管理员创建通知/公告
+
+**接口**: `POST /v1/admin/notifications`
+
+**描述**: 超级管理员创建通知。`target_type` 支持 `all`（全部用户）或 `users`（指定用户列表）/`roles`（指定角色 codes）。
+
+**字段说明**:
+- `title` (必填): 通知标题，<=200 字符
+- `content` (必填): 通知正文
+- `level`: `info` | `success` | `warning` | `error`，默认 `info`
+- `target_type`: `all` | `users` | `roles`
+  - 当为 `users` 时需传 `target_user_ids`（UUID 数组）
+  - 当为 `roles` 时需传 `target_role_codes`（角色 code 数组）
+- `link_url` (可选): 点击通知的跳转链接
+- `expires_at` (可选): 过期后不再展示
+
+**请求体示例**:
+```json
+{
+  "title": "系统升级",
+  "content": "23:00 - 23:15 期间暂停服务",
+  "level": "warning",
+  "target_type": "users",
+  "target_user_ids": ["uuid-of-user-a"],
+  "expires_at": "2024-05-02T00:00:00Z"
+}
+```
+
+**响应**: 返回通知详情（同上，含 `is_active` 字段）。
+
+### 5. 管理员查询通知列表
+
+**接口**: `GET /v1/admin/notifications`
+
+**描述**: 管理员按创建时间倒序查看通知，支持 `limit`/`offset` 分页。
+
+**认证**: JWT 令牌（仅超级管理员）
+
+---
+
 ## 系统管理
 
 ### 1. 生成系统主密钥
@@ -2515,6 +2810,51 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 
 **错误响应**:
 - 403: 只有超级管理员可以查看系统状态
+
+---
+
+### 8. 获取中转网关配置
+
+**接口**: `GET /system/gateway-config`
+
+**描述**: 获取当前中转网关的基础配置信息，供前端首页或文档页面展示给最终用户查看。
+
+**认证**: JWT 令牌（任何已登录用户均可访问）
+
+**响应**:
+```json
+{
+  "api_base_url": "https://api.example.com",
+  "max_concurrent_requests": 1000,
+  "request_timeout_ms": 30000,
+  "cache_ttl_seconds": 3600
+}
+```
+
+---
+
+### 9. 更新中转网关配置
+
+**接口**: `PUT /system/gateway-config`
+
+**描述**: 更新中转网关的基础配置，并持久化到数据库中。环境变量只在首次创建配置记录时作为默认值使用。
+
+**认证**: JWT 令牌 (仅限超级用户)
+
+**请求体**:
+```json
+{
+  "api_base_url": "https://api.example.com",
+  "max_concurrent_requests": 1000,
+  "request_timeout_ms": 30000,
+  "cache_ttl_seconds": 3600
+}
+```
+
+**响应**: 同 “获取中转网关配置”。
+
+**错误响应**:
+- 403: 只有超级管理员可以更新网关配置
 
 ---
 

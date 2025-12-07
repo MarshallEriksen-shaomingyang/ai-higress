@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 
 from app.provider.config import get_provider_config, load_provider_configs
 
@@ -22,10 +23,12 @@ from .api.v1.admin_user_permission_routes import (
 )
 from .api.v1.admin_registration_routes import router as admin_registration_router
 from .api.v1.admin_user_routes import router as admin_user_router
+from .api.v1.admin_notification_routes import router as admin_notification_router
 from .api.v1.api_key_routes import router as api_key_router
 from .api.v1.chat_routes import router as chat_router
 from .api.v1.credit_routes import router as credit_router
 from .api.v1.gateway_routes import router as gateway_router
+from .api.v1.notification_routes import router as notification_router
 from .api.v1.private_provider_routes import router as private_provider_router
 from .api.v1.provider_key_routes import router as provider_key_router
 from .api.v1.provider_submission_routes import (
@@ -67,6 +70,7 @@ def create_app() -> FastAPI:
         RequestValidatorMiddleware,
         SecurityHeadersMiddleware,
     )
+    from app.services.avatar_service import ensure_avatar_storage_dir
 
     # 使用 lifespan 替代 on_event("startup")
     app = FastAPI(title="AI Gateway", version="0.1.0", lifespan=lifespan)
@@ -85,12 +89,13 @@ def create_app() -> FastAPI:
         app.add_middleware(
             RateLimitMiddleware,
             redis_client=None,  # 使用内存存储，生产环境建议传入 Redis 客户端
-            default_max_requests=100,  # 默认每分钟 100 次请求
+            # 默认使用 gateway_max_concurrent_requests 作为每分钟请求上限，
+            # 可以在 /system/gateway-config 中动态调整。
+            default_max_requests=settings.gateway_max_concurrent_requests,
             default_window_seconds=60,
             path_limits={
                 "/auth/login": (5, 60),  # 登录接口：每分钟 5 次
                 "/auth/register": (3, 300),  # 注册接口：每 5 分钟 3 次
-                "/v1/chat/completions": (60, 60),  # Chat 接口：每分钟 60 次
             },
         )
 
@@ -126,12 +131,23 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 用户头像等本地静态文件挂载
+    avatar_dir = ensure_avatar_storage_dir()
+    app.mount(
+        settings.avatar_local_base_url,
+        StaticFiles(directory=str(avatar_dir), check_dir=True),
+        name="avatars",
+    )
+
     # 业务路由挂载
     # 认证与系统管理
     app.include_router(auth_router)
     app.include_router(system_router)
 
     # Provider 管理与逻辑模型 / 路由
+    # 注意：provider_submission_router 必须在 provider_router 之前挂载，
+    # 以避免 /providers/{provider_id} 抢占 /providers/submissions 路由。
+    app.include_router(provider_submission_router)
     app.include_router(provider_router)
     app.include_router(provider_preset_router)
     app.include_router(logical_model_router)
@@ -146,15 +162,15 @@ def create_app() -> FastAPI:
 
     # 用户与 API Key 管理
     app.include_router(user_router)
+    app.include_router(notification_router)
     app.include_router(api_key_router)
     app.include_router(provider_key_router)
     app.include_router(user_session_router)
     app.include_router(credit_router)
 
-    # 用户私有 Provider 与投稿
+    # 用户私有 Provider
     app.include_router(private_provider_router)
     app.include_router(user_provider_router)
-    app.include_router(provider_submission_router)
 
     # 管理端路由
     app.include_router(admin_role_router)
@@ -163,6 +179,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_provider_router)
     app.include_router(admin_provider_preset_router)
     app.include_router(admin_registration_router)
+    app.include_router(admin_notification_router)
 
     # 基础网关路由（health/models/context 等）
     app.include_router(gateway_router)

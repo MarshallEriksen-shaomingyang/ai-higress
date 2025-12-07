@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search } from "lucide-react";
@@ -39,11 +40,13 @@ export function ProvidersPageClient({
   userId,
 }: ProvidersPageClientProps) {
   const { t } = useI18n();
+  const router = useRouter();
   const authUserId = useAuthStore((state) => state.user?.id ?? null);
   const effectiveUserId = userId ?? authUserId;
   
   // 表单和对话框状态
   const [formOpen, setFormOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [modelsDialogOpen, setModelsDialogOpen] = useState(false);
   const [modelsProviderId, setModelsProviderId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -148,20 +151,24 @@ export function ProvidersPageClient({
 
   // 打开创建表单（优化：使用 useCallback）
   const handleCreate = useCallback(() => {
+    // 新建时清空当前编辑对象
+    setEditingProvider(null);
     setFormOpen(true);
   }, []);
 
   // 表单成功回调（优化：使用 useCallback）
   const handleFormSuccess = useCallback(() => {
     refresh();
+    // 提交成功后重置编辑状态
+    setEditingProvider(null);
   }, [refresh]);
 
   // 编辑提供商（优化：使用 useCallback）
   const handleEdit = useCallback((provider: Provider) => {
-    // TODO: 打开编辑表单并填充数据
-    console.log("Edit provider", provider);
-    toast.info(t("providers.toast_edit_pending"));
-  }, [t]);
+    // 打开编辑表单并填充数据
+    setEditingProvider(provider);
+    setFormOpen(true);
+  }, []);
 
   // 打开删除确认（优化：使用 useCallback）
   const handleDeleteClick = useCallback((providerId: string) => {
@@ -191,10 +198,9 @@ export function ProvidersPageClient({
 
   // 查看详情（优化：使用 useCallback）
   const handleViewDetails = useCallback((providerId: string) => {
-    // TODO: 导航到详情页面
-    console.log("View details", providerId);
-    toast.info(t("providers.toast_details_pending"));
-  }, [t]);
+    // 使用 Next.js 原生路由跳转到 Provider 详情页
+    router.push(`/dashboard/providers/${providerId}`);
+  }, [router]);
 
   // 模型管理回调（优化：使用 useCallback）
   const handleViewModels = useCallback((providerId: string) => {
@@ -339,8 +345,14 @@ export function ProvidersPageClient({
       {/* 创建表单对话框 */}
       <ProviderFormEnhanced
         open={formOpen}
-        onOpenChange={setFormOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) {
+            setEditingProvider(null);
+          }
+        }}
         onSuccess={handleFormSuccess}
+        editingProvider={editingProvider ?? undefined}
       />
 
       {/* 模型管理对话框 */}

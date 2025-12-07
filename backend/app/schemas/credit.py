@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,9 +47,72 @@ class CreditTopupRequest(BaseModel):
     )
 
 
+class CreditAutoTopupConfig(BaseModel):
+    """
+    管理员配置的自动充值规则。
+
+    - 当用户余额低于 min_balance_threshold 时，
+      系统会自动将余额补至 target_balance。
+    """
+
+    min_balance_threshold: int = Field(
+        ...,
+        gt=0,
+        description="触发自动充值的余额阈值（当余额低于该值时触发，必须为正整数）",
+    )
+    target_balance: int = Field(
+        ...,
+        gt=0,
+        description="自动充值后希望达到的余额（必须为正整数且大于触发阈值）",
+    )
+    is_active: bool = Field(
+        True,
+        description="是否启用该自动充值规则",
+    )
+
+
+class CreditAutoTopupConfigResponse(CreditAutoTopupConfig):
+    id: UUID
+    user_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CreditAutoTopupBatchRequest(CreditAutoTopupConfig):
+    """
+    批量为多个用户配置自动充值规则。
+
+    - user_ids 为要应用该规则的用户列表；
+    - 其他字段沿用 CreditAutoTopupConfig 的含义。
+    """
+
+    user_ids: List[UUID] = Field(
+        ...,
+        min_length=1,
+        description="需要应用自动充值规则的用户 ID 列表",
+    )
+
+
+class CreditAutoTopupBatchResponse(BaseModel):
+    """
+    批量配置自动充值规则的结果。
+    """
+
+    updated_count: int = Field(..., description="实际创建或更新的规则数量")
+    configs: List[CreditAutoTopupConfigResponse] = Field(
+        default_factory=list,
+        description="被创建/更新后的规则明细列表",
+    )
+
+
 __all__ = [
     "CreditAccountResponse",
     "CreditTopupRequest",
     "CreditTransactionResponse",
+    "CreditAutoTopupConfig",
+    "CreditAutoTopupConfigResponse",
+    "CreditAutoTopupBatchRequest",
+    "CreditAutoTopupBatchResponse",
 ]
-

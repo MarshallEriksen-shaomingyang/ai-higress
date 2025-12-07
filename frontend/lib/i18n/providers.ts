@@ -140,6 +140,23 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.pricing_save_success": "Pricing configuration saved",
     "providers.pricing_save_error": "Failed to save pricing configuration",
 
+    // Per-model alias mapping
+    "providers.alias_current_label": "Current alias",
+    "providers.alias_edit_label": "Model alias mapping",
+    "providers.alias_placeholder": "e.g. claude-sonnet-4-5",
+    "providers.alias_hint":
+      "Map a long upstream model id to a shorter, user-facing alias, e.g. map claude-sonnet-4-5-20250929 to claude-sonnet-4-5. Clear the field and save to remove the alias.",
+    "providers.alias_save_success": "Model mapping saved",
+    "providers.alias_save_error": "Failed to save model mapping",
+
+    // Provider Detail - Model Cards
+    "providers.model_owned_by": "Owned by",
+    "providers.model_created": "Created",
+    "providers.model_alias": "Alias",
+    "providers.model_pricing_not_configured": "Not configured",
+    "providers.model_edit_pricing": "Edit Pricing",
+    "providers.model_edit_alias": "Edit Alias",
+
     // Provider Directory page
     "providers.directory_title": "Provider Directory",
     "providers.directory_subtitle": "View your available private and public providers",
@@ -262,6 +279,23 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.pricing_load_error": "加载计费配置失败",
     "providers.pricing_save_success": "计费配置已保存",
     "providers.pricing_save_error": "保存计费配置失败",
+
+    // 每模型别名映射
+    "providers.alias_current_label": "当前别名",
+    "providers.alias_edit_label": "模型别名映射",
+    "providers.alias_placeholder": "例如 claude-sonnet-4-5",
+    "providers.alias_hint":
+      "为长版本模型 ID 配置一个更易记的别名，例如将 claude-sonnet-4-5-20250929 映射为 claude-sonnet-4-5。留空后保存可清除别名。",
+    "providers.alias_save_success": "模型映射已保存",
+    "providers.alias_save_error": "保存模型映射失败",
+
+    // Provider Detail - Model Cards
+    "providers.model_owned_by": "所有者",
+    "providers.model_created": "创建时间",
+    "providers.model_alias": "别名",
+    "providers.model_pricing_not_configured": "未配置",
+    "providers.model_edit_pricing": "编辑计费",
+    "providers.model_edit_alias": "编辑别名",
 
     // Provider models dialog（模型路径 + 静态模型）
     "providers.models_path_label": "Models Path",

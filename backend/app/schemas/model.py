@@ -74,9 +74,38 @@ class ProviderModelPricingResponse(BaseModel):
     )
 
 
+class ModelAliasUpdateRequest(BaseModel):
+    """
+    更新单个物理模型「别名映射」的请求体。
+
+    - alias 为 None 或空字符串时，表示清除当前映射；
+    - alias 为非空字符串时，将该值作为此物理模型的对外别名。
+    """
+
+    alias: str | None = Field(
+        default=None,
+        description="要为该物理模型设置的别名，如 'claude-sonnet-4-5'",
+    )
+
+
+class ProviderModelAliasResponse(BaseModel):
+    """
+    返回 provider+model 维度的别名映射配置。
+    """
+
+    provider_id: str = Field(..., description="Provider 的短 ID（例如 moonshot-xxx）")
+    model_id: str = Field(..., description="上游模型 ID")
+    alias: str | None = Field(
+        default=None,
+        description="当前配置的模型别名（例如 'claude-sonnet-4-5'），为空表示未配置映射",
+    )
+
+
 __all__ = [
     "Model",
     "ModelCapability",
     "ModelPricingUpdateRequest",
     "ProviderModelPricingResponse",
+    "ModelAliasUpdateRequest",
+    "ProviderModelAliasResponse",
 ]

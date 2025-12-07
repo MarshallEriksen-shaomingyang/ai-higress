@@ -202,6 +202,45 @@ class Settings(BaseSettings):
         ge=0,
     )
 
+    # User session & JWT 管理
+    max_sessions_per_user: int = Field(
+        5,
+        alias="MAX_SESSIONS_PER_USER",
+        description="单个用户允许的最大活跃会话数（超过时自动淘汰最旧会话）",
+        ge=1,
+    )
+    user_session_cleanup_interval_seconds: int = Field(
+        900,
+        alias="USER_SESSION_CLEANUP_INTERVAL_SECONDS",
+        description="定期清理 Redis 中用户会话索引中无效/损坏记录的时间间隔（秒）",
+        ge=60,
+    )
+
+    # Gateway public configuration (exposed to users on the UI)
+    gateway_api_base_url: str = Field(
+        "http://localhost:8000",
+        alias="GATEWAY_API_BASE_URL",
+        description="对外暴露给最终用户使用的网关 API 基础 URL，例如 https://api.example.com",
+    )
+    gateway_max_concurrent_requests: int = Field(
+        1000,
+        alias="GATEWAY_MAX_CONCURRENT_REQUESTS",
+        description="系统推荐或配置的最大并发请求数，用于文档展示或将来的限流策略",
+        ge=1,
+    )
+    gateway_request_timeout_ms: int = Field(
+        30000,
+        alias="GATEWAY_REQUEST_TIMEOUT_MS",
+        description="推荐给调用方的请求超时时间（毫秒），例如 30000 表示 30 秒",
+        ge=1000,
+    )
+    gateway_cache_ttl_seconds: int = Field(
+        3600,
+        alias="GATEWAY_CACHE_TTL_SECONDS",
+        description="推荐的缓存 TTL（秒），用于调用方理解网关缓存行为",
+        ge=0,
+    )
+
     # HTTP timeouts
     upstream_timeout: float = 600.0
 
@@ -281,6 +320,33 @@ class Settings(BaseSettings):
         alias="STREAMING_MIN_TOKENS",
         description="流式请求在无法获取 usage 时用于预估扣费的最小 token 数",
         ge=0,
+    )
+    credits_auto_topup_interval_seconds: int = Field(
+        24 * 60 * 60,
+        alias="CREDITS_AUTO_TOPUP_INTERVAL_SECONDS",
+        description="自动积分充值任务执行间隔（单位：秒），默认每日一次",
+        ge=60,
+    )
+
+    # User avatar storage configuration
+    avatar_local_dir: str = Field(
+        default=str(_project_root / "backend" / "media" / "avatars"),
+        alias="AVATAR_LOCAL_DIR",
+        description="用户头像在本地磁盘上的存储目录（默认在项目 backend/media/avatars 下）",
+    )
+    avatar_local_base_url: str = Field(
+        default="/media/avatars",
+        alias="AVATAR_LOCAL_BASE_URL",
+        description="本地头像文件对外访问的 URL 前缀，例如 /media/avatars",
+    )
+    avatar_oss_base_url: str | None = Field(
+        default=None,
+        alias="AVATAR_OSS_BASE_URL",
+        description=(
+            "当管理员配置了 OSS 时，填写 OSS Bucket 的基础访问 URL "
+            "（例如 https://bucket.oss-cn-hangzhou.aliyuncs.com）；"
+            "此时用户头像只在数据库中保存对象 key，完整访问 URL 在读取时按该前缀拼接。"
+        ),
     )
 
     @property

@@ -178,3 +178,40 @@ def test_submit_private_provider_to_shared_pool_requires_permission(
     )
 
     assert resp.status_code == 403
+
+
+def test_admin_list_submissions_uses_submission_router(client, db_session):
+    """确保 /providers/submissions 命中投稿路由而不是 Provider 详情路由。"""
+
+    # 创建一个超级管理员用户
+    admin = _create_user(
+        db_session,
+        "admin-submissions",
+        "admin-submissions@example.com",
+        is_superuser=True,
+    )
+
+    # 为该管理员插入一条投稿记录
+    submission = ProviderSubmission(
+        user_id=admin.id,
+        name="Shared Provider From Admin",
+        provider_id="admin-provider-shared",
+        base_url="https://api.example.com",
+        provider_type="native",
+        description="Admin submission",
+        approval_status="pending",
+    )
+    db_session.add(submission)
+    db_session.commit()
+    db_session.refresh(submission)
+
+    headers = jwt_auth_headers(str(admin.id))
+
+    resp = client.get("/providers/submissions", headers=headers)
+    assert resp.status_code == 200
+
+    data = resp.json()
+    # 应返回投稿列表（数组），包含我们刚创建的那条记录
+    assert isinstance(data, list)
+    ids = {item["id"] for item in data}
+    assert str(submission.id) in ids

@@ -1,4 +1,1 @@
-- Ensure new endpoints/config changes are mirrored by matching tests in `tests/` and docs in `docs/`.
-- AI agents cannot run tests; instead, indicate which `pytest` command to run and request user confirmation.
-- Human devs run `pytest` and optionally `pre-commit run --all-files` before PRs.
-- Mention impacted endpoints, routing, or caching behavior in PR summaries with test results (`pytest`, manual curl examples).
+TODO

@@ -33,6 +33,8 @@
 | 获取提供商列表 | `/providers` | GET | 获取所有提供商信息 |
 | 获取提供商详情 | `/providers/{id}` | GET | 获取特定提供商的详细信息 |
 | 获取提供商模型 | `/providers/{id}/models` | GET | 获取提供商支持的模型列表 |
+| 获取单个模型映射 | `/providers/{id}/models/{model_id}/mapping` | GET | 获取指定物理模型的别名映射配置（仅管理员或 Provider 拥有者） |
+| 更新单个模型映射 | `/providers/{id}/models/{model_id}/mapping` | PUT | 更新/清除物理模型到别名的映射关系（仅管理员或 Provider 拥有者） |
 | 检查提供商健康状态 | `/providers/{id}/health` | GET | 检查提供商的健康状况 |
 | 获取提供商指标 | `/providers/{id}/metrics` | GET | 获取提供商的性能指标 |
 

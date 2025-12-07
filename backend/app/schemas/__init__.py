@@ -18,6 +18,10 @@ from .api_key import (
 from .auth import LoginRequest, RefreshTokenRequest, RegisterRequest, TokenResponse
 from .credit import (
     CreditAccountResponse,
+    CreditAutoTopupConfig,
+    CreditAutoTopupConfigResponse,
+    CreditAutoTopupBatchRequest,
+    CreditAutoTopupBatchResponse,
     CreditTopupRequest,
     CreditTransactionResponse,
 )
@@ -32,6 +36,8 @@ from .model import (
     ModelCapability,
     ModelPricingUpdateRequest,
     ProviderModelPricingResponse,
+    ModelAliasUpdateRequest,
+    ProviderModelAliasResponse,
 )
 from .metrics import (
     APIKeyMetricsSummary,
@@ -107,6 +113,16 @@ from .user import (
     UserStatusUpdateRequest,
     UserUpdateRequest,
 )
+from .notification import (
+    NotificationCreateRequest,
+    NotificationAdminResponse,
+    NotificationMarkReadRequest,
+    NotificationMarkReadResponse,
+    NotificationResponse,
+    NotificationLevel,
+    NotificationTargetType,
+    UnreadCountResponse,
+)
 
 __all__ = [
     "APIKeyAllowedProvidersRequest",
@@ -119,6 +135,10 @@ __all__ = [
     "APIKeyMetricsSummary",
     "CandidateInfo",
     "CreditAccountResponse",
+    "CreditAutoTopupBatchRequest",
+    "CreditAutoTopupBatchResponse",
+    "CreditAutoTopupConfig",
+    "CreditAutoTopupConfigResponse",
     "CreditTopupRequest",
     "CreditTransactionResponse",
     "LogicalModel",
@@ -131,8 +151,10 @@ __all__ = [
     "Model",
     "ModelCapability",
     "ModelPricingUpdateRequest",
+    "ModelAliasUpdateRequest",
     "PhysicalModel",
     "ProviderModelPricingResponse",
+    "ProviderModelAliasResponse",
     "Provider",
     "ProviderAPIKey",
     "ProviderConfig",
@@ -190,6 +212,14 @@ __all__ = [
     "UserResponse",
     "UserStatusUpdateRequest",
     "UserUpdateRequest",
+    "NotificationCreateRequest",
+    "NotificationAdminResponse",
+    "NotificationMarkReadRequest",
+    "NotificationMarkReadResponse",
+    "NotificationResponse",
+    "NotificationLevel",
+    "NotificationTargetType",
+    "UnreadCountResponse",
     "KeyValidationRequest",
     "KeyValidationResponse",
     "LoginRequest",

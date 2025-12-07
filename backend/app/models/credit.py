@@ -131,4 +131,37 @@ class ModelBillingConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
-__all__ = ["CreditAccount", "CreditTransaction", "ModelBillingConfig"]
+class CreditAutoTopupRule(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """
+    自动积分充值规则。
+
+    - 针对单个用户配置，当账户余额低于 min_balance_threshold 时，
+      定时任务会将余额调整为 target_balance；
+    - 仅当 is_active=True 时生效。
+    """
+
+    __tablename__ = "credit_auto_topup_rules"
+
+    user_id: Mapped[UUID] = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    min_balance_threshold: Mapped[int] = Column(Integer, nullable=False)
+    target_balance: Mapped[int] = Column(Integer, nullable=False)
+    is_active: Mapped[bool] = Column(
+        Boolean,
+        nullable=False,
+        server_default=text("TRUE"),
+        default=True,
+    )
+
+
+__all__ = [
+    "CreditAccount",
+    "CreditTransaction",
+    "ModelBillingConfig",
+    "CreditAutoTopupRule",
+]

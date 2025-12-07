@@ -4,6 +4,7 @@ import React from "react";
 import { StatsGrid } from "@/components/dashboard/overview/stats-grid";
 import { ActiveProviders } from "@/components/dashboard/overview/active-providers";
 import { RecentActivity } from "@/components/dashboard/overview/recent-activity";
+import { GatewayConfigCard } from "@/components/dashboard/overview/gateway-config-card";
 import { useI18n } from "@/lib/i18n-context";
 
 export default function OverviewPage() {
@@ -18,6 +19,9 @@ export default function OverviewPage() {
 
             {/* Stats Grid */}
             <StatsGrid />
+
+            {/* Gateway configuration (visible to all logged-in users) */}
+            <GatewayConfigCard />
 
             {/* Active Providers */}
             <ActiveProviders />

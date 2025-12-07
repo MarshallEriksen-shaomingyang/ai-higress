@@ -16,6 +16,7 @@ except ModuleNotFoundError:
 
 from app.deps import get_db, get_redis
 from app.jwt_auth import AuthenticatedUser, require_jwt_refresh_token, require_jwt_token
+from app.settings import settings
 from app.schemas.token import DeviceInfo
 from app.schemas.auth import (
     LoginRequest,
@@ -24,6 +25,7 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.schemas.user import UserResponse
+from app.services.avatar_service import build_avatar_url
 from app.services.credit_service import get_or_create_account_for_user
 from app.services.jwt_auth_service import (
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -117,7 +119,7 @@ def _build_user_response(db: Session, user_id: UUID) -> UserResponse:
         username=user.username,
         email=user.email,
         display_name=user.display_name,
-        avatar=user.avatar,
+        avatar=build_avatar_url(user.avatar),
         is_active=user.is_active,
         is_superuser=user.is_superuser,
         role_codes=role_codes,
@@ -287,6 +289,12 @@ async def login(
         expires_in=JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         device_info=device_info,
     )
+
+    # 按配置限制单用户最大活跃会话数，超出部分自动淘汰最旧会话
+    await token_service.enforce_session_limit(
+        str(user.id),
+        settings.max_sessions_per_user,
+    )
     
     return TokenResponse(
         access_token=access_token,
@@ -414,6 +422,12 @@ async def refresh_token(
         
         # 更新会话最后使用时间
         await token_service.update_session_last_used(user_id, new_refresh_jti)
+
+        # 刷新令牌成功后，同样执行会话数量限制，避免短时间内刷出过多会话
+        await token_service.enforce_session_limit(
+            str(user.id),
+            settings.max_sessions_per_user,
+        )
         
         return TokenResponse(
             access_token=access_token,

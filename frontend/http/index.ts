@@ -32,7 +32,9 @@ export {
   type InitAdminResponse,
   type ValidateKeyRequest,
   type ValidateKeyResponse,
-  type SystemStatusResponse
+  type SystemStatusResponse,
+  type CacheSegment,
+  type CacheClearResponse
 } from './system';
 export {
   adminService,

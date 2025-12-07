@@ -24,6 +24,8 @@
 - `get_user_sessions()` - 获取用户会话列表
 - `is_token_blacklisted()` - 检查黑名单
 - `update_session_last_used()` - 更新会话使用时间
+- `cleanup_user_sessions()` - 清理无效/损坏的用户会话记录
+- `enforce_session_limit()` - 按策略限制单用户最大活跃会话数
 
 ### 2. ✅ Token Schema 定义
 **文件**: [`backend/app/schemas/token.py`](../../backend/app/schemas/token.py)
@@ -156,6 +158,21 @@ auth:jti_map:{jti}                  # JTI 到 token_id 映射
 - 用户主动调用 `POST /auth/logout` 或 `POST /auth/logout-all`
 - 用户通过会话管理接口删除单个会话
 - 超级管理员通过 `PUT /users/{user_id}/status` 禁用用户时，调用 `revoke_user_tokens()` 撤销该用户所有 JWT Token（所有设备/会话）并清理会话索引
+- 系统在执行最大会话数限制时，通过 `enforce_session_limit()` 自动撤销最旧会话的 refresh token
+
+### 5. ✅ 会话数量限制与索引巡检
+
+- 在 `POST /auth/login` 与 `POST /auth/refresh` 成功签发新 token 后，会调用
+  `TokenRedisService.enforce_session_limit()`：
+  - 根据配置的 `MAX_SESSIONS_PER_USER` 限制单用户活跃会话数量；
+  - 按 `last_used_at`（若为空则退回 `created_at`）升序淘汰最旧会话；
+  - 被淘汰的会话对应 refresh token 会通过 `revoke_token()` 被撤销并加入黑名单。
+- 新增 Celery 定时任务 `tasks.sessions.cleanup_all`（见
+  `backend/app/tasks/session_maintenance.py`）：
+  - 使用 `auth:user:{user_id}:sessions` 键前缀扫描所有用户会话索引；
+  - 对每个用户调用 `cleanup_user_sessions()`，移除结构损坏或对应 refresh token
+    已过期/撤销的会话；
+  - 仅做索引层的「垃圾回收」，不会改变剩余会话的 token 生命周期。
 
 ---
 
@@ -206,7 +223,7 @@ auth:jti_map:{jti}                  # JTI 到 token_id 映射
 ## 配置说明
 
 ### 环境变量
-当前使用默认配置，未来可添加：
+当前使用默认配置，并通过环境变量支持调优：
 ```bash
 # Token 过期时间
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
@@ -217,8 +234,9 @@ ENABLE_TOKEN_REDIS_STORAGE=true
 ENABLE_TOKEN_ROTATION=true
 ENABLE_DEVICE_TRACKING=true
 
-# 会话限制
+# 会话限制与清理
 MAX_SESSIONS_PER_USER=5
+USER_SESSION_CLEANUP_INTERVAL_SECONDS=900
 ```
 
 ---
@@ -317,10 +335,9 @@ curl http://localhost:8000/auth/me \
 
 ### 低优先级
 6. **高级功能**
-   - Token 使用统计
-   - 异常设备检测
-   - 地理位置追踪
-   - 会话数量限制
+- Token 使用统计
+- 异常设备检测
+- 地理位置追踪
 
 ---
 

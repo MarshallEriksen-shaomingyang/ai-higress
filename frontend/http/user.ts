@@ -40,6 +40,19 @@ export const userService = {
     return response.data;
   },
 
+  // 上传并更新当前用户头像
+  uploadAvatar: async (file: File): Promise<UserInfo> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await httpClient.post('/users/me/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
   // 更新用户状态
   updateUserStatus: async (
     userId: string,

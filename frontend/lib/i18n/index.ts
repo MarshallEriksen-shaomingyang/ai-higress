@@ -18,6 +18,10 @@ import { errorsTranslations } from "./errors";
 import { apiKeysTranslations } from "./api-keys";
 import { providerPresetsTranslations } from "./provider-presets";
 import { metricsTranslations } from "./metrics";
+import { systemTranslations } from "./system";
+import { profileTranslations } from "./profile";
+import { logicalModelsTranslations } from "./logical-models";
+import { notificationsTranslations } from "./notifications";
 
 // Function to merge translation objects
 const mergeTranslations = (
@@ -57,7 +61,11 @@ export const allTranslations = mergeTranslations(
   permissionsTranslations,
   errorsTranslations,
   apiKeysTranslations,
-  providerPresetsTranslations
+  providerPresetsTranslations,
+  systemTranslations,
+  profileTranslations,
+  logicalModelsTranslations,
+  notificationsTranslations
 );
 
 // Export individual translation modules for dynamic loading
@@ -81,4 +89,8 @@ export {
   errorsTranslations,
   apiKeysTranslations,
   providerPresetsTranslations,
+  systemTranslations,
+  profileTranslations,
+  logicalModelsTranslations,
+  notificationsTranslations,
 };

@@ -1,7 +1,7 @@
 from .api_key import APIKey
 from .api_key_allowed_provider import APIKeyAllowedProvider
 from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from .credit import CreditAccount, CreditTransaction, ModelBillingConfig
+from .credit import CreditAccount, CreditTransaction, ModelBillingConfig, CreditAutoTopupRule
 from .identity import Identity
 from .permission import Permission
 from .role import Role
@@ -14,9 +14,11 @@ from .provider_model import ProviderModel
 from .provider_submission import ProviderSubmission
 from .provider_metrics_history import ProviderRoutingMetricsHistory
 from .registration_window import RegistrationWindow, RegistrationWindowStatus
+from .notification import Notification, NotificationReceipt
 from .user_permission import UserPermission
 from .user_role import UserRole
 from .user import User
+from .system_gateway_config import GatewayConfig
 
 __all__ = [
     "APIKey",
@@ -24,6 +26,7 @@ __all__ = [
     "Base",
     "CreditAccount",
     "CreditTransaction",
+    "CreditAutoTopupRule",
     "Identity",
     "ModelBillingConfig",
     "Permission",
@@ -34,6 +37,9 @@ __all__ = [
     "ProviderAPIKey",
     "ProviderModel",
     "ProviderSubmission",
+    "Notification",
+    "NotificationReceipt",
+    "GatewayConfig",
     "AggregateRoutingMetrics",
     "ProviderRoutingMetricsHistory",
     "RegistrationWindow",

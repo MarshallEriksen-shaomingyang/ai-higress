@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.deps import get_db
-from app.errors import bad_request, forbidden
+from app.errors import bad_request, forbidden, not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.schemas import (
     RegistrationWindowCreateRequest,
@@ -13,6 +13,7 @@ from app.schemas import (
 from app.services.registration_window_service import (
     create_registration_window,
     get_active_registration_window,
+    close_window_by_id,
 )
 
 router = APIRouter(
@@ -85,4 +86,20 @@ def get_active_registration_window_endpoint(
     window = get_active_registration_window(db)
     if window is None:
         return None
+    return RegistrationWindowResponse.model_validate(window)
+
+
+@router.post(
+    "/admin/registration-windows/{window_id}/close",
+    response_model=RegistrationWindowResponse,
+)
+def close_registration_window_endpoint(
+    window_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> RegistrationWindowResponse:
+    _ensure_admin(current_user)
+    window = close_window_by_id(db, window_id)
+    if window is None:
+        raise not_found("指定的注册窗口不存在")
     return RegistrationWindowResponse.model_validate(window)
