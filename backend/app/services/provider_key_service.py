@@ -37,6 +37,17 @@ class DuplicateProviderKeyLabelError(ProviderKeyServiceError):
     pass
 
 
+def _get_provider_by_slug(session: Session, provider_id: str) -> Provider | None:
+    """
+    根据 provider 的短 ID（Provider.provider_id）查询 Provider 记录。
+
+    路由层传入的是短 ID，例如 `openai` / `moonshot-xxx`，而数据库外键
+    使用的是 Provider.id（UUID）。该辅助函数负责完成二者的映射。
+    """
+    stmt = select(Provider).where(Provider.provider_id == provider_id)
+    return session.execute(stmt).scalars().first()
+
+
 def _hash_provider_key(provider_id: str, raw_key: str) -> str:
     """
     为厂商密钥生成唯一标识符哈希
@@ -59,24 +70,21 @@ def _hash_provider_key(provider_id: str, raw_key: str) -> str:
 
 def list_provider_keys(session: Session, provider_id: str) -> List[ProviderAPIKey]:
     """
-    列出指定厂商的所有API密钥
-    
-    Args:
-        session: 数据库会话
-        provider_id: 厂商ID
-        
-    Returns:
-        厂商API密钥列表
-        
-    Raises:
-        ProviderNotFoundError: 如果厂商不存在
+    列出指定厂商的所有 API 密钥。
+
+    路由层传入的是 provider 的短 ID（Provider.provider_id），这里需要先
+    查出对应的 Provider，再通过 provider_uuid 外键过滤 ProviderAPIKey。
     """
-    # 检查厂商是否存在
-    provider = session.get(Provider, provider_id)
-    if not provider:
+    provider = _get_provider_by_slug(session, provider_id)
+    if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
-    
-    stmt = select(ProviderAPIKey).where(ProviderAPIKey.provider_id == provider_id)
+
+    stmt = (
+        select(ProviderAPIKey)
+        .options(selectinload(ProviderAPIKey.provider))
+        .where(ProviderAPIKey.provider_uuid == provider.id)
+        .order_by(ProviderAPIKey.created_at.asc())
+    )
     return list(session.execute(stmt).scalars().all())
 
 
@@ -86,25 +94,18 @@ def get_provider_key_by_id(
     key_id: str
 ) -> Optional[ProviderAPIKey]:
     """
-    根据ID获取厂商API密钥
-    
-    Args:
-        session: 数据库会话
-        provider_id: 厂商ID
-        key_id: 密钥ID
-        
-    Returns:
-        厂商API密钥，如果不存在则返回None
-        
-    Raises:
-        ProviderNotFoundError: 如果厂商不存在
+    根据 ID 获取厂商 API 密钥。
+
+    会同时校验该密钥是否属于指定 provider；如果不匹配则返回 None。
     """
-    # 检查厂商是否存在
-    provider = session.get(Provider, provider_id)
-    if not provider:
+    provider = _get_provider_by_slug(session, provider_id)
+    if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
-    
-    return session.get(ProviderAPIKey, key_id)
+
+    api_key = session.get(ProviderAPIKey, key_id)
+    if api_key is None or api_key.provider_uuid != provider.id:
+        return None
+    return api_key
 
 
 def validate_provider_key(provider_id: str, raw_key: str) -> bool:
@@ -136,65 +137,59 @@ def create_provider_key(
     payload: ProviderAPIKeyCreateRequest,
 ) -> ProviderAPIKey:
     """
-    创建新的厂商API密钥
-    
+    创建新的厂商 API 密钥。
+
     Args:
         session: 数据库会话
-        provider_id: 厂商ID
+        provider_id: Provider 的短 ID（provider.provider_id）
         payload: 创建请求
-        
-    Returns:
-        新创建的厂商API密钥
-        
-    Raises:
-        ProviderNotFoundError: 如果厂商不存在
-        InvalidProviderKeyError: 如果密钥无效
-        DuplicateProviderKeyLabelError: 如果密钥标签已存在
-        ProviderKeyServiceError: 如果创建失败
     """
-    # 检查厂商是否存在
-    provider = session.get(Provider, provider_id)
-    if not provider:
+    provider = _get_provider_by_slug(session, provider_id)
+    if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
-    
+
     # 验证密钥
     if not validate_provider_key(provider_id, payload.key):
         raise InvalidProviderKeyError(f"Invalid API key for provider {provider_id}")
-    
-    # 检查标签是否已存在
+
+    # 检查标签是否已存在（同一 Provider 下 label 需唯一）
     existing = session.execute(
         select(ProviderAPIKey).where(
-            ProviderAPIKey.provider_id == provider_id,
+            ProviderAPIKey.provider_uuid == provider.id,
             ProviderAPIKey.label == payload.label,
         )
     ).scalars().first()
-    
     if existing:
-        raise DuplicateProviderKeyLabelError(f"Label '{payload.label}' already exists for provider {provider_id}")
-    
+        raise DuplicateProviderKeyLabelError(
+            f"Label '{payload.label}' already exists for provider {provider_id}"
+        )
+
     # 加密并创建密钥
     encrypted_key = encrypt_secret(payload.key)
-    key_hash = _hash_provider_key(provider_id, payload.key)
-    
+
     api_key = ProviderAPIKey(
-        provider_id=provider_id,
-        label=payload.label,
+        provider_uuid=provider.id,
         encrypted_key=encrypted_key,
-        key_hash=key_hash,
+        label=payload.label,
         weight=payload.weight,
         max_qps=payload.max_qps,
-        status="active",
+        status=payload.status,
     )
-    
+
     session.add(api_key)
     try:
         session.commit()
     except IntegrityError as exc:
         session.rollback()
         raise ProviderKeyServiceError(f"Failed to create provider key: {exc}") from exc
-    
+
     session.refresh(api_key)
-    logger.info(f"Created new API key for provider {provider_id} with label {payload.label}")
+    logger.info(
+        "Created new API key for provider %s (label=%s, id=%s)",
+        provider_id,
+        payload.label,
+        api_key.id,
+    )
     return api_key
 
 
@@ -203,77 +198,68 @@ def update_provider_key(
     provider_id: str,
     key_id: str,
     payload: ProviderAPIKeyUpdateRequest,
-) -> ProviderAPIKey:
+    ) -> ProviderAPIKey:
     """
-    更新厂商API密钥
-    
+    更新厂商 API 密钥。
+
     Args:
         session: 数据库会话
-        provider_id: 厂商ID
-        key_id: 密钥ID
+        provider_id: Provider 的短 ID（provider.provider_id）
+        key_id: 密钥 ID
         payload: 更新请求
-        
-    Returns:
-        更新后的厂商API密钥
-        
-    Raises:
-        ProviderNotFoundError: 如果厂商不存在
-        InvalidProviderKeyError: 如果密钥无效
-        DuplicateProviderKeyLabelError: 如果密钥标签已存在
-        ProviderKeyServiceError: 如果更新失败
     """
-    # 检查厂商是否存在
-    provider = session.get(Provider, provider_id)
-    if not provider:
+    provider = _get_provider_by_slug(session, provider_id)
+    if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
-    
-    # 获取密钥
+
     api_key = session.get(ProviderAPIKey, key_id)
-    if not api_key or api_key.provider_id != provider_id:
-        raise ProviderKeyServiceError(f"Provider key {key_id} not found for provider {provider_id}")
-    
+    if api_key is None or api_key.provider_uuid != provider.id:
+        raise ProviderKeyServiceError(
+            f"Provider key {key_id} not found for provider {provider_id}"
+        )
+
     # 如果提供了新密钥，则验证并更新
     if payload.key:
         if not validate_provider_key(provider_id, payload.key):
-            raise InvalidProviderKeyError(f"Invalid API key for provider {provider_id}")
-        
+            raise InvalidProviderKeyError(
+                f"Invalid API key for provider {provider_id}"
+            )
         api_key.encrypted_key = encrypt_secret(payload.key)
-        api_key.key_hash = _hash_provider_key(provider_id, payload.key)
-    
+
     # 检查标签是否与其他密钥冲突
     if payload.label and payload.label != api_key.label:
         existing = session.execute(
             select(ProviderAPIKey).where(
-                ProviderAPIKey.provider_id == provider_id,
+                ProviderAPIKey.provider_uuid == provider.id,
                 ProviderAPIKey.label == payload.label,
                 ProviderAPIKey.id != key_id,
             )
         ).scalars().first()
-        
         if existing:
-            raise DuplicateProviderKeyLabelError(f"Label '{payload.label}' already exists for provider {provider_id}")
-        
+            raise DuplicateProviderKeyLabelError(
+                f"Label '{payload.label}' already exists for provider {provider_id}"
+            )
         api_key.label = payload.label
-    
+
     # 更新其他字段
     if payload.weight is not None:
         api_key.weight = payload.weight
-    
+
     if payload.max_qps is not None:
         api_key.max_qps = payload.max_qps
-    
+
     if payload.status is not None:
         api_key.status = payload.status
-    
+
     session.add(api_key)
     try:
         session.commit()
     except IntegrityError as exc:
         session.rollback()
         raise ProviderKeyServiceError(f"Failed to update provider key: {exc}") from exc
-    
+
     session.refresh(api_key)
-    logger.info(f"Updated API key {key_id} for provider {provider_id}")
+    logger.info("Updated API key %s for provider %s", key_id, provider_id)
     return api_key
 
 
@@ -283,35 +269,31 @@ def delete_provider_key(
     key_id: str,
 ) -> None:
     """
-    删除厂商API密钥
-    
+    删除厂商 API 密钥。
+
     Args:
         session: 数据库会话
-        provider_id: 厂商ID
-        key_id: 密钥ID
-        
-    Raises:
-        ProviderNotFoundError: 如果厂商不存在
-        ProviderKeyServiceError: 如果密钥不存在或删除失败
+        provider_id: Provider 的短 ID（provider.provider_id）
+        key_id: 密钥 ID
     """
-    # 检查厂商是否存在
-    provider = session.get(Provider, provider_id)
-    if not provider:
+    provider = _get_provider_by_slug(session, provider_id)
+    if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
-    
-    # 获取密钥
+
     api_key = session.get(ProviderAPIKey, key_id)
-    if not api_key or api_key.provider_id != provider_id:
-        raise ProviderKeyServiceError(f"Provider key {key_id} not found for provider {provider_id}")
-    
+    if api_key is None or api_key.provider_uuid != provider.id:
+        raise ProviderKeyServiceError(
+            f"Provider key {key_id} not found for provider {provider_id}"
+        )
+
     session.delete(api_key)
     try:
         session.commit()
     except IntegrityError as exc:
         session.rollback()
         raise ProviderKeyServiceError(f"Failed to delete provider key: {exc}") from exc
-    
-    logger.info(f"Deleted API key {key_id} for provider {provider_id}")
+
+    logger.info("Deleted API key %s for provider %s", key_id, provider_id)
 
 
 def get_provider_key_by_hash(
@@ -320,21 +302,27 @@ def get_provider_key_by_hash(
     key_hash: str,
 ) -> Optional[ProviderAPIKey]:
     """
-    根据哈希值获取厂商API密钥
-    
-    Args:
-        session: 数据库会话
-        provider_id: 厂商ID
-        key_hash: 密钥哈希值
-        
-    Returns:
-        厂商API密钥，如果不存在则返回None
+    根据哈希值获取厂商 API 密钥。
+
+    由于数据库模型当前未单独存储 key_hash，这里通过解密所有该 Provider 的
+    密钥并在内存中比对哈希值。该函数目前仅在内部使用，调用频率有限。
     """
+    provider = _get_provider_by_slug(session, provider_id)
+    if provider is None:
+        return None
+
     stmt = select(ProviderAPIKey).where(
-        ProviderAPIKey.provider_id == provider_id,
-        ProviderAPIKey.key_hash == key_hash,
+        ProviderAPIKey.provider_uuid == provider.id,
     )
-    return session.execute(stmt).scalars().first()
+    for api_key in session.execute(stmt).scalars():
+        try:
+            plaintext = decrypt_secret(api_key.encrypted_key)
+        except Exception:
+            # 解密失败的 key 直接跳过，不影响其他 key 的查找。
+            continue
+        if _hash_provider_key(provider_id, plaintext) == key_hash:
+            return api_key
+    return None
 
 
 def get_plaintext_key(api_key: ProviderAPIKey) -> str:

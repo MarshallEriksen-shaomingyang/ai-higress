@@ -31,7 +31,7 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.action_delete_confirm": "Are you sure you want to delete this provider? This action cannot be undone.",
     "providers.action_view_models": "View models",
     "providers.models_dialog_title": "Models for this provider",
-    "providers.models_dialog_description": "This is a preview list of models configured for the selected provider. In the future this will be loaded from the gateway API.",
+    "providers.models_dialog_description": "Configure how this provider's model list is discovered and define optional static fallback models.",
     // Providers page - Enhanced
     "providers.management_title": "Provider Management",
     "providers.management_subtitle": "Manage your private providers and view available public providers",
@@ -102,7 +102,44 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "my_providers.empty_description": "Click 'Create Provider' to add your first private provider",
     "my_providers.refresh": "Refresh",
     "my_providers.batch_health_check": "Batch Health Check",
+
+    // Provider models dialog (models path + static models)
+    "providers.models_path_label": "Models Path",
+    "providers.models_path_tooltip":
+      "HTTP path used to fetch the upstream model list. Most vendors are compatible with /v1/models. Only change this when the upstream does not expose /models or the response format is incompatible, and use the static model list below as a fallback.",
+    "providers.models_path_placeholder": "/v1/models",
+    "providers.models_path_update_button": "Check",
+    "providers.models_path_checking": "Checking...",
+    "providers.models_path_note":
+      "The gateway will always prefer calling the upstream /models endpoint to discover models in real time. The static model list below is only used as a fallback when the upstream endpoint is unavailable.",
+    "providers.models_list_label": "Static model list for this provider",
+    "providers.models_add_aria": "Add model",
+    "providers.models_remove_aria": "Remove model",
+    "providers.models_example_tag": "Example model",
+    "providers.models_empty_hint":
+      "No static models configured yet. In most cases, the upstream /models endpoint is sufficient.",
+    "providers.models_input_placeholder":
+      "Enter a model name and click the + button above to add",
+    "providers.models_check_result_label": "Upstream /models returned the following models:",
+    "providers.models_check_error": "Failed to check upstream models",
     
+    // Per-model pricing (admin)
+    "providers.pricing_label": "Billing: configured per model",
+    "providers.pricing_summary_both": "Billing: input {input}/1k, output {output}/1k",
+    "providers.pricing_summary_input": "Billing: input {input}/1k",
+    "providers.pricing_summary_output": "Billing: output {output}/1k",
+    "providers.pricing_edit_button": "Edit pricing",
+    "providers.pricing_edit_title": "Edit model pricing",
+    "providers.pricing_edit_desc":
+      "Values are credits per 1,000 tokens. Leave a field empty to skip that direction; clear both to remove custom pricing.",
+    "providers.pricing_input_label": "Input price (per 1k tokens)",
+    "providers.pricing_input_placeholder": "e.g. 5",
+    "providers.pricing_output_label": "Output price (per 1k tokens)",
+    "providers.pricing_output_placeholder": "e.g. 15",
+    "providers.pricing_load_error": "Failed to load pricing configuration",
+    "providers.pricing_save_success": "Pricing configuration saved",
+    "providers.pricing_save_error": "Failed to save pricing configuration",
+
     // Provider Directory page
     "providers.directory_title": "Provider Directory",
     "providers.directory_subtitle": "View your available private and public providers",
@@ -209,6 +246,41 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "my_providers.refresh": "刷新",
     "my_providers.batch_health_check": "批量健康检查",
     
+    // 每模型计费配置（管理员）
+    "providers.pricing_label": "计费：按模型单独配置",
+    "providers.pricing_summary_both": "计费：输入 {input}/1k，输出 {output}/1k",
+    "providers.pricing_summary_input": "计费：输入 {input}/1k",
+    "providers.pricing_summary_output": "计费：输出 {output}/1k",
+    "providers.pricing_edit_button": "编辑计费",
+    "providers.pricing_edit_title": "编辑模型计费",
+    "providers.pricing_edit_desc":
+      "单位为每 1000 tokens 扣减的积分数，留空表示不配置对应方向；两个都留空表示清空自定义计费。",
+    "providers.pricing_input_label": "输入价格（每 1k tokens）",
+    "providers.pricing_input_placeholder": "例如 5",
+    "providers.pricing_output_label": "输出价格（每 1k tokens）",
+    "providers.pricing_output_placeholder": "例如 15",
+    "providers.pricing_load_error": "加载计费配置失败",
+    "providers.pricing_save_success": "计费配置已保存",
+    "providers.pricing_save_error": "保存计费配置失败",
+
+    // Provider models dialog（模型路径 + 静态模型）
+    "providers.models_path_label": "Models Path",
+    "providers.models_path_tooltip":
+      "用于拉取模型列表的接口路径。大多数厂商兼容 /v1/models；仅当上游没有 /models 接口或返回格式不兼容时，才在这里调整，并使用下方的静态模型列表作为兜底配置。",
+    "providers.models_path_placeholder": "/v1/models",
+    "providers.models_path_update_button": "检查",
+    "providers.models_path_checking": "检查中...",
+    "providers.models_path_note":
+      "网关会优先调用上游 /models 接口获取真实模型列表；下方手动添加的模型仅在上游不可用时作为兜底配置使用。",
+    "providers.models_list_label": "该提供商的静态模型列表",
+    "providers.models_add_aria": "添加模型",
+    "providers.models_remove_aria": "删除模型",
+    "providers.models_example_tag": "模型示例",
+    "providers.models_empty_hint": "暂无静态模型配置。通常只需依赖上游 /models 接口即可。",
+    "providers.models_input_placeholder": "输入模型名称后点击上方 + 按钮添加",
+    "providers.models_check_result_label": "上游 /models 返回的模型列表：",
+    "providers.models_check_error": "检查上游模型列表失败",
+
     // Provider Directory page
     "providers.directory_title": "Provider 目录",
     "providers.directory_subtitle": "查看您可用的私有和公共提供商",

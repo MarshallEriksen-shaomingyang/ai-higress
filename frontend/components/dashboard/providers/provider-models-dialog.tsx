@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Info, Plus, Minus } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
+import { providerService } from "@/http/provider";
+import { useErrorDisplay } from "@/lib/errors";
 
 interface ProviderModelsDialogProps {
     open: boolean;
@@ -51,11 +53,34 @@ export function ProviderModelsDialog({
     onSave,
 }: ProviderModelsDialogProps) {
     const { t } = useI18n();
+    const { showError } = useErrorDisplay();
+    const [remoteModels, setRemoteModels] = useState<string[]>([]);
+    const [checking, setChecking] = useState(false);
 
-    const handleModelsPathUpdate = () => {
+    const handleModelsPathUpdate = async () => {
         if (!providerId) return;
         const path = modelsPathByProvider[providerId] ?? "/v1/models";
         onModelsPathChange(providerId, path);
+
+        // 触发一次上游 /models 检查，并在下方展示返回的模型名称，帮助用户确认路径配置是否生效。
+        setChecking(true);
+        setRemoteModels([]);
+        try {
+            const res = await providerService.getProviderModels(providerId);
+            const ids =
+                res.models?.map((m) => (m.model_id || (m as any).id || "").toString()) ||
+                [];
+            setRemoteModels(ids.filter(Boolean));
+            if (!ids.length) {
+                // 不额外弹 toast，列表为空本身就是信号。
+            }
+        } catch (err: any) {
+            showError(err, {
+                context: t("providers.models_check_error"),
+            });
+        } finally {
+            setChecking(false);
+        }
     };
 
     return (
@@ -80,7 +105,7 @@ export function ProviderModelsDialog({
                     {providerId && (
                         <div className="space-y-2">
                             <label className="flex items-center gap-1 text-sm font-medium">
-                                <span>Models Path</span>
+                                <span>{t("providers.models_path_label")}</span>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <button
@@ -94,15 +119,14 @@ export function ProviderModelsDialog({
                                         </button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                        用于拉取模型列表的接口路径，部分不兼容
-                                        /v1/models 的厂商需要在这里调整。
+                                        {t("providers.models_path_tooltip")}
                                     </TooltipContent>
                                 </Tooltip>
                             </label>
                             <div className="flex gap-2">
                                 <Input
                                     className="flex-1"
-                                    placeholder="/v1/models"
+                                    placeholder={t("providers.models_path_placeholder")}
                                     value={
                                         modelsPathByProvider[providerId] ??
                                         "/v1/models"
@@ -115,26 +139,41 @@ export function ProviderModelsDialog({
                                     type="button"
                                     variant="outline"
                                     onClick={handleModelsPathUpdate}
+                                    disabled={checking}
                                 >
-                                    更新
+                                    {checking
+                                        ? t("providers.models_path_checking")
+                                        : t("providers.models_path_update_button")}
                                 </Button>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                目前仅用于前端展示示例，后续会接入网关接口并按照此路径拉取模型列表。
+                                {t("providers.models_path_note")}
                             </p>
+                            {remoteModels.length > 0 && (
+                                <div className="mt-2 rounded-md border bg-muted/40 p-2 max-h-36 overflow-y-auto">
+                                    <div className="text-xs font-medium text-muted-foreground mb-1">
+                                        {t("providers.models_check_result_label")}
+                                    </div>
+                                    <ul className="text-xs space-y-1 font-mono">
+                                        {remoteModels.map((name) => (
+                                            <li key={name}>{name}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                     )}
 
                     {providerId && (
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>该提供商的模型列表</span>
+                            <span>{t("providers.models_list_label")}</span>
                             <div className="flex items-center gap-2">
                                 <Button
                                     type="button"
                                     size="icon"
                                     variant="outline"
                                     onClick={onAddModel}
-                                    aria-label="添加模型"
+                                    aria-label={t("providers.models_add_aria")}
                                 >
                                     <Plus className="h-4 w-4" />
                                 </Button>
@@ -143,7 +182,7 @@ export function ProviderModelsDialog({
                                     size="icon"
                                     variant="outline"
                                     onClick={onRemoveModel}
-                                    aria-label="删除模型"
+                                    aria-label={t("providers.models_remove_aria")}
                                     disabled={
                                         !selectedModelByProvider[providerId]
                                     }
@@ -174,13 +213,13 @@ export function ProviderModelsDialog({
                                             {model}
                                         </span>
                                         <span className="text-xs text-muted-foreground">
-                                            模型示例
+                                            {t("providers.models_example_tag")}
                                         </span>
                                     </li>
                                 ))
                             ) : (
                                 <li className="text-xs text-muted-foreground">
-                                    暂无模型示例。后续会从后端接口实时拉取模型列表。
+                                    {t("providers.models_empty_hint")}
                                 </li>
                             )}
                         </ul>
@@ -188,7 +227,7 @@ export function ProviderModelsDialog({
                     {providerId && (
                         <div className="mt-3 flex gap-2">
                             <Input
-                                placeholder="输入模型名称后点击上方 + 按钮添加"
+                                placeholder={t("providers.models_input_placeholder")}
                                 value={newModelNameByProvider[providerId] ?? ""}
                                 onChange={(event) =>
                                     onModelNameChange(event.target.value)

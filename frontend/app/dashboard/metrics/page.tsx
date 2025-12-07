@@ -4,34 +4,6 @@ import React from "react";
 import { MetricsCards } from "@/components/dashboard/metrics/metrics-cards";
 import { MetricsCharts } from "@/components/dashboard/metrics/metrics-charts";
 import { ProviderPerformance } from "@/components/dashboard/metrics/provider-performance";
-import { Activity, Zap, Clock, TrendingUp } from "lucide-react";
-
-const metrics = [
-    {
-        title: "Requests/sec",
-        value: "1,247",
-        change: "+5.2%",
-        icon: Activity,
-    },
-    {
-        title: "Avg Latency",
-        value: "245ms",
-        change: "-12%",
-        icon: Clock,
-    },
-    {
-        title: "Success Rate",
-        value: "99.8%",
-        change: "+0.3%",
-        icon: TrendingUp,
-    },
-    {
-        title: "Cache Hits",
-        value: "94.2%",
-        change: "+1.5%",
-        icon: Zap,
-    },
-];
 
 export default function MetricsPage() {
     return (
@@ -42,7 +14,7 @@ export default function MetricsPage() {
             </div>
 
             {/* Key Metrics */}
-            <MetricsCards metrics={metrics} />
+            <MetricsCards />
 
             {/* Charts */}
             <MetricsCharts />

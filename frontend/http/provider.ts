@@ -46,12 +46,37 @@ export interface Provider {
   updated_at: string;
 }
 
-// 模型接口
+// Provider 模型接口（来自 `/providers/{id}/models`）
+// 注意：后端已经对不同厂商的模型做了一层标准化：
+// - 顶层字段是统一的（model_id / provider_id / family / display_name / context_length / capabilities / pricing / metadata / meta_hash）
+// - metadata 中保留了各个厂商原始的模型信息（如 OpenAI 的 id / created / owned_by 等）
+export interface ModelMetadata {
+  id?: string;
+  object?: string;
+  created?: number;
+  owned_by?: string;
+  // 其它厂商自定义字段
+  [key: string]: any;
+}
+
 export interface Model {
-  id: string;
-  object: string;
-  created: number;
-  owned_by: string;
+  model_id: string;
+  provider_id: string;
+  family: string;
+  display_name: string;
+  context_length: number;
+  // 后端返回的是 Enum 的字符串值，例如 "chat" / "embedding" 等
+  capabilities: string[];
+  pricing: Record<string, number> | null;
+  metadata?: ModelMetadata | null;
+  meta_hash?: string | null;
+}
+
+// 管理端：provider+model 维度的计费配置
+export interface ProviderModelPricing {
+  provider_id: string;
+  model_id: string;
+  pricing: Record<string, number> | null;
 }
 
 // 模型列表响应
@@ -237,6 +262,34 @@ export const providerService = {
   ): Promise<MetricsResponse> => {
     const params = logicalModel ? { logical_model: logicalModel } : {};
     const response = await httpClient.get(`/providers/${providerId}/metrics`, { params });
+    return response.data;
+  },
+
+  /**
+   * 获取指定 provider+model 的计费配置（管理员接口）
+   */
+  getProviderModelPricing: async (
+    providerId: string,
+    modelId: string
+  ): Promise<ProviderModelPricing> => {
+    const response = await httpClient.get(
+      `/admin/providers/${providerId}/models/${encodeURIComponent(modelId)}/pricing`
+    );
+    return response.data;
+  },
+
+  /**
+   * 更新指定 provider+model 的计费配置（管理员接口）
+   */
+  updateProviderModelPricing: async (
+    providerId: string,
+    modelId: string,
+    data: { input?: number; output?: number } | null
+  ): Promise<ProviderModelPricing> => {
+    const response = await httpClient.put(
+      `/admin/providers/${providerId}/models/${encodeURIComponent(modelId)}/pricing`,
+      data
+    );
     return response.data;
   },
 };

@@ -8,7 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
-from app.models import CreditAccount, CreditTransaction, ModelBillingConfig, Provider
+from app.models import (
+    CreditAccount,
+    CreditTransaction,
+    ModelBillingConfig,
+    Provider,
+    ProviderModel,
+)
 from app.settings import settings
 
 
@@ -91,6 +97,56 @@ def _load_multiplier_for_model(db: Session, model_name: str | None) -> float:
         return float(cfg.multiplier or 1.0)
     except Exception:
         return 1.0
+
+
+def _load_provider_model_pricing(
+    db: Session,
+    *,
+    provider_id: str | None,
+    model_name: str | None,
+) -> tuple[float | None, float | None]:
+    """
+    按 provider+model 维度读取定价信息。
+
+    约定：
+    - pricing 字段存放在 provider_models.pricing JSON 中；
+    - 单位为「每 1000 tokens 消耗的积分数」；
+    - key 使用 "input" / "output" 分别表示输入 / 输出 token 单价。
+    """
+    if not provider_id or not model_name:
+        return None, None
+
+    try:
+        pricing_json = (
+            db.execute(
+                select(ProviderModel.pricing)
+                .join(Provider, ProviderModel.provider_id == Provider.id)
+                .where(Provider.provider_id == provider_id)
+                .where(ProviderModel.model_id == model_name)
+            )
+            .scalars()
+            .first()
+        )
+    except Exception:  # pragma: no cover - 防御性日志
+        logger.exception(
+            "Failed to load ProviderModel.pricing for provider=%r model=%r",
+            provider_id,
+            model_name,
+        )
+        return None, None
+
+    if not isinstance(pricing_json, dict):
+        return None, None
+
+    def _to_float(value: Any) -> float | None:
+        try:
+            return float(value)
+        except Exception:
+            return None
+
+    return _to_float(pricing_json.get("input")), _to_float(
+        pricing_json.get("output")
+    )
 
 
 def _load_provider_factor(db: Session, provider_id: str | None) -> float:
@@ -251,12 +307,54 @@ def record_chat_completion_usage(
         return 0
 
     account = get_or_create_account_for_user(db, user_id)
-    cost = _compute_cost_credits(
-        db=db,
-        model_name=model_name,
-        total_tokens=int(total_tokens),
-        provider_id=provider_id,
+    # 1) 优先尝试使用 provider+model 维度的定价（如果已在 provider_models.pricing 中配置）。
+    #
+    # 约定：
+    # - pricing.input / pricing.output 表示每 1000 tokens 扣除的积分数；
+    # - 若任一价格存在并且 usage 中有对应 token 统计，则使用明细价计算；
+    # - 仍然会叠加 ModelBillingConfig.multiplier 与 Provider.billing_factor，方便做全局调整。
+    input_price, output_price = _load_provider_model_pricing(
+        db, provider_id=provider_id, model_name=model_name
     )
+
+    cost: int
+    if (input_price is not None or output_price is not None) and (
+        input_tokens is not None or output_tokens is not None
+    ):
+        try:
+            model_multiplier = _load_multiplier_for_model(db, model_name)
+            provider_factor = _load_provider_factor(db, provider_id)
+
+            raw_cost = 0.0
+            if input_tokens is not None and input_price is not None:
+                raw_cost += (int(input_tokens) / 1000.0) * input_price
+            if output_tokens is not None and output_price is not None:
+                raw_cost += (int(output_tokens) / 1000.0) * output_price
+
+            raw_cost *= model_multiplier * provider_factor
+            cost = int(math.ceil(raw_cost))
+        except Exception:  # pragma: no cover - 防御性日志
+            logger.exception(
+                "Failed to compute credit cost with ProviderModel.pricing "
+                "for provider=%r model=%r; falling back to legacy pricing",
+                provider_id,
+                model_name,
+            )
+            cost = _compute_cost_credits(
+                db=db,
+                model_name=model_name,
+                total_tokens=int(total_tokens),
+                provider_id=provider_id,
+            )
+    else:
+        # 2) 未配置单独价格时，退回到以逻辑模型维度为主的旧计费规则。
+        cost = _compute_cost_credits(
+            db=db,
+            model_name=model_name,
+            total_tokens=int(total_tokens),
+            provider_id=provider_id,
+        )
+
     if cost <= 0:
         return 0
 
@@ -294,6 +392,7 @@ def record_streaming_request(
     user_id: UUID,
     api_key_id: UUID | None,
     model_name: str | None,
+    provider_id: str | None,
     payload: dict[str, Any],
 ) -> int:
     """
@@ -315,12 +414,42 @@ def record_streaming_request(
         return 0
 
     account = get_or_create_account_for_user(db, user_id)
-    cost = _compute_cost_credits(
-        db=db,
-        model_name=model_name,
-        total_tokens=approx_tokens,
-        provider_id=None,
+
+    # 优先尝试使用 provider+model 维度的定价。
+    input_price, output_price = _load_provider_model_pricing(
+        db, provider_id=provider_id, model_name=model_name
     )
+
+    cost: int
+    if input_price is not None or output_price is not None:
+        try:
+            model_multiplier = _load_multiplier_for_model(db, model_name)
+            provider_factor = _load_provider_factor(db, provider_id)
+            # 流式场景只有一个预估 token 数，缺少输入/输出拆分；
+            # 为了简单且偏保守，这里全部按 output 单价计费，若只配置了 input 单价则退回 input。
+            per_1k = output_price if output_price is not None else input_price
+            raw_cost = (approx_tokens / 1000.0) * per_1k * model_multiplier * provider_factor
+            cost = int(math.ceil(raw_cost))
+        except Exception:  # pragma: no cover - 防御性日志
+            logger.exception(
+                "Failed to compute streaming credit cost with ProviderModel.pricing "
+                "for provider=%r model=%r; falling back to legacy pricing",
+                provider_id,
+                model_name,
+            )
+            cost = _compute_cost_credits(
+                db=db,
+                model_name=model_name,
+                total_tokens=approx_tokens,
+                provider_id=provider_id,
+            )
+    else:
+        cost = _compute_cost_credits(
+            db=db,
+            model_name=model_name,
+            total_tokens=approx_tokens,
+            provider_id=provider_id,
+        )
     if cost <= 0:
         return 0
 

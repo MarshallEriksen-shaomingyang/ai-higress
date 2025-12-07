@@ -26,5 +26,21 @@ class ProviderAPIKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     provider: Mapped["Provider"] = relationship("Provider", back_populates="api_keys")
 
+    @property
+    def provider_id(self) -> str:
+        """
+        Expose the provider's short identifier (Provider.provider_id).
+
+        This is used by Pydantic response models (e.g. ProviderAPIKeyResponse)
+        which expect a ``provider_id`` field rather than the internal UUID
+        foreign key.
+        """
+        # When the relationship is not yet loaded, SQLAlchemy will lazy-load
+        # it on first access. If for some reason provider is missing, fall
+        # back to empty string to avoid AttributeError in debug scenarios.
+        if self.provider is None:
+            return ""
+        return self.provider.provider_id
+
 
 __all__ = ["ProviderAPIKey"]

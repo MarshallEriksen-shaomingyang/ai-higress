@@ -1,5 +1,7 @@
 from enum import Enum
 from typing import Any, Literal
+from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl, ConfigDict
 
@@ -211,14 +213,15 @@ class ProviderAPIKeyResponse(BaseModel):
     """
     厂商API密钥的响应模型
     """
-    id: str
+    id: UUID
     provider_id: str
     label: str
+    key_prefix: str | None = None
     weight: float
     max_qps: int | None
     status: str
-    created_at: str
-    updated_at: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

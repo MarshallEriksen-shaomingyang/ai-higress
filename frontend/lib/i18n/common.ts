@@ -22,6 +22,8 @@ export const commonTranslations: Record<Language, Record<string, string>> = {
     "common.toggle_theme": "Toggle theme",
     "common.switch_language": "Switch language",
     "common.cancel": "Cancel",
+    "common.save": "Save",
+    "common.saving": "Saving...",
     "common.previous": "Previous",
     "common.next": "Next",
     // Top navigation
@@ -49,6 +51,8 @@ export const commonTranslations: Record<Language, Record<string, string>> = {
     "common.toggle_theme": "切换主题",
     "common.switch_language": "切换语言",
     "common.cancel": "取消",
+    "common.save": "保存",
+    "common.saving": "保存中...",
     "common.previous": "上一页",
     "common.next": "下一页",
     // Top navigation

@@ -185,14 +185,9 @@ async def fetch_models_from_provider(
             else:
                 if key_selection:
                     record_key_success(key_selection, redis=redis)
-    elif provider.static_models is not None:
-        payload = provider.static_models
-        logger.info(
-            "Using %d static models for provider %s",
-            len(provider.static_models),
-            provider.id,
-        )
     else:
+        # HTTP transport：始终优先尝试调用上游 /models，即使配置了 static_models。
+        # static_models 仅在失败时作为兜底使用。
         try:
             key_selection = await acquire_provider_key(provider, redis)
         except NoAvailableProviderKey as exc:

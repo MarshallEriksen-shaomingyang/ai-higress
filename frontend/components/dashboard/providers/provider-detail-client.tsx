@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,13 +8,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, CheckCircle, AlertCircle, XCircle, RefreshCw, Share2, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle, AlertCircle, XCircle, RefreshCw, Share2, Loader2, Key } from "lucide-react";
 import { useProviderDetail } from "@/lib/hooks/use-provider-detail";
-import type { ProviderStatus } from "@/http/provider";
+import type { ProviderStatus, ProviderModelPricing, Model } from "@/http/provider";
+import { providerService } from "@/http/provider";
 import { useI18n } from "@/lib/i18n-context";
 import { providerSubmissionService } from "@/http/provider-submission";
 import { toast } from "sonner";
 import { useErrorDisplay } from "@/lib/errors";
+import { useAuthStore } from "@/lib/stores/auth-store";
 
 interface ProviderDetailClientProps {
   providerId: string;
@@ -154,10 +156,54 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
   const router = useRouter();
   const { t } = useI18n();
   const { showError } = useErrorDisplay();
+  const authUser = useAuthStore((state) => state.user);
+  const authUserId = authUser?.id ?? null;
+  const isSuperuser = authUser?.is_superuser ?? false;
+  const effectiveUserId = currentUserId ?? authUserId;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUserOwnedPrivate, setIsUserOwnedPrivate] = useState<boolean | null>(null);
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [pricingDraft, setPricingDraft] = useState<{ input: string; output: string }>({
+    input: "",
+    output: "",
+  });
+  const [pricingLoading, setPricingLoading] = useState(false);
   const { provider, models, health, metrics, loading, error, refresh } = useProviderDetail({
     providerId,
   });
+
+  // 额外检查：当前 provider 是否为「当前用户的私有 Provider」
+  // /providers/{id} 返回的是 ProviderConfig，并不包含 visibility/owner_id，
+  // 这里通过用户私有提供商列表再做一次确认，避免按钮误判。
+  useEffect(() => {
+    if (!effectiveUserId) {
+      setIsUserOwnedPrivate(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkPrivateOwnership = async () => {
+      try {
+        const list = await providerService.getUserPrivateProviders(effectiveUserId);
+        const match = list.find((p) => p.provider_id === providerId);
+        if (!cancelled) {
+          setIsUserOwnedPrivate(!!match);
+        }
+      } catch (err) {
+        console.error("Failed to load user private providers for detail:", err);
+        if (!cancelled) {
+          setIsUserOwnedPrivate(false);
+        }
+      }
+    };
+
+    checkPrivateOwnership();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveUserId, providerId]);
 
   // 计算汇总指标
   const summaryMetrics = useMemo(() => {
@@ -180,6 +226,27 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
       errorRate: errorRate.toFixed(2),
     };
   }, [metrics]);
+
+  // 将模型的计费配置格式化为简短文案，供模型卡片展示。
+  const renderPricingLabel = (model: Model): string => {
+    const rawPricing = (model.pricing || {}) as Record<string, number>;
+    const input = typeof rawPricing["input"] === "number" ? rawPricing["input"] : undefined;
+    const output = typeof rawPricing["output"] === "number" ? rawPricing["output"] : undefined;
+
+    if (input != null && output != null) {
+      return t("providers.pricing_summary_both")
+        .replace("{input}", String(input))
+        .replace("{output}", String(output));
+    }
+    if (input != null) {
+      return t("providers.pricing_summary_input").replace("{input}", String(input));
+    }
+    if (output != null) {
+      return t("providers.pricing_summary_output").replace("{output}", String(output));
+    }
+    // 未配置时仍显示原先的提示文案。
+    return t("providers.pricing_label");
+  };
 
   // 加载状态
   if (loading && !provider) {
@@ -224,20 +291,24 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
   }
 
   const canShareToPool =
-    !!currentUserId &&
-    provider.visibility === "private" &&
-    provider.owner_id === currentUserId;
+    !!effectiveUserId &&
+    (isUserOwnedPrivate ||
+      (provider.visibility === "private" &&
+        provider.owner_id === effectiveUserId));
+
+  const canManageKeys =
+    isSuperuser || (!!effectiveUserId && isUserOwnedPrivate);
 
   const handleShareToPool = async () => {
-    if (!canShareToPool || !currentUserId) {
+    if (!canShareToPool || !effectiveUserId) {
       return;
     }
 
     setIsSubmitting(true);
     try {
       await providerSubmissionService.submitFromPrivateProvider(
-        currentUserId,
-        provider.provider_id,
+        effectiveUserId,
+        providerId,
       );
       toast.success(t("submissions.toast_submit_success"));
     } catch (error: any) {
@@ -252,6 +323,62 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const openPricingEditor = async (modelId: string) => {
+    // 这里使用路由参数传入的 providerId 作为短 ID（与后端 Provider.provider_id 对齐）
+    if (!providerId) return;
+    setEditingModelId(modelId);
+    setPricingLoading(true);
+    try {
+      let pricing: ProviderModelPricing | null = null;
+      try {
+        pricing = await providerService.getProviderModelPricing(providerId, modelId);
+      } catch (err: any) {
+        // 若后端尚未为该模型创建配置（404），视为暂无定价。
+        if (err?.response?.status !== 404) {
+          throw err;
+        }
+      }
+      setPricingDraft({
+        input: pricing?.pricing?.input != null ? String(pricing.pricing.input) : "",
+        output: pricing?.pricing?.output != null ? String(pricing.pricing.output) : "",
+      });
+    } catch (err: any) {
+      showError(err, {
+        context: t("providers.pricing_load_error") ?? "加载计费配置失败",
+      });
+      setEditingModelId(null);
+    } finally {
+      setPricingLoading(false);
+    }
+  };
+
+  const savePricing = async () => {
+    if (!providerId || !editingModelId) return;
+    setPricingLoading(true);
+    try {
+      const payload: { input?: number; output?: number } = {};
+      if (pricingDraft.input.trim() !== "") {
+        payload.input = Number(pricingDraft.input);
+      }
+      if (pricingDraft.output.trim() !== "") {
+        payload.output = Number(pricingDraft.output);
+      }
+      // 若两者都为空，则传 null 表示清空定价。
+      const body = Object.keys(payload).length > 0 ? payload : null;
+      await providerService.updateProviderModelPricing(providerId, editingModelId, body);
+      toast.success(t("providers.pricing_save_success") ?? "计费配置已保存");
+      // 保存成功后刷新 Provider 详情与模型列表，以便卡片展示最新计费配置。
+      await refresh();
+      setEditingModelId(null);
+    } catch (err: any) {
+      showError(err, {
+        context: t("providers.pricing_save_error") ?? "保存计费配置失败",
+      });
+    } finally {
+      setPricingLoading(false);
     }
   };
 
@@ -435,15 +562,37 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {models.models.map((model) => (
                     <div
-                      key={model.id}
-                      className="p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                      key={model.model_id}
+                      className="p-4 border rounded-lg hover:bg-muted/50 transition-colors flex flex-col justify-between gap-3"
                     >
-                      <div className="font-medium break-all">{model.id}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {translations.models.ownedBy}: {model.owned_by}
+                      <div>
+                        <div className="font-medium break-all">
+                          {model.display_name || model.model_id}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {translations.models.ownedBy}:{" "}
+                          {model.metadata?.owned_by || "-"}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {translations.models.created}:{" "}
+                          {typeof model.metadata?.created === "number"
+                            ? new Date(
+                                model.metadata.created * 1000,
+                              ).toLocaleDateString()
+                            : "-"}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {translations.models.created}: {new Date(model.created * 1000).toLocaleDateString()}
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t mt-2">
+                        <div className="text-xs text-muted-foreground">
+                          {renderPricingLabel(model)}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => openPricingEditor(model.model_id)}
+                        >
+                          {t("providers.pricing_edit_button") ?? "编辑计费"}
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -456,9 +605,21 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
         {/* API 密钥标签页 */}
         <TabsContent value="keys">
           <Card>
-            <CardHeader>
-              <CardTitle>{translations.keys.title}</CardTitle>
-              <CardDescription>{translations.keys.description}</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>{translations.keys.title}</CardTitle>
+                <CardDescription>{translations.keys.description}</CardDescription>
+              </div>
+              {canManageKeys && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/dashboard/providers/${providerId}/keys`)}
+                >
+                  <Key className="w-4 h-4 mr-1" />
+                  {t("providers.action_manage_keys")}
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {!provider.api_keys || provider.api_keys.length === 0 ? (
@@ -539,6 +700,74 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* 计费编辑对话框（简单版：使用原生布局，不引入额外 Dialog 组件以减少改动） */}
+      {editingModelId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6 space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold">
+                {t("providers.pricing_edit_title") ?? "编辑模型计费"}
+              </h2>
+              <p className="text-xs text-muted-foreground break-all">
+                {provider?.provider_id} · {editingModelId}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("providers.pricing_edit_desc") ??
+                  "单位为每 1000 tokens 扣减的积分数，留空表示不配置 / 清空对应方向的价格。"}
+              </p>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground">
+                  {t("providers.pricing_input_label") ?? "输入价格（每 1k tokens）"}
+                </div>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-sm bg-background"
+                  value={pricingDraft.input}
+                  onChange={(e) =>
+                    setPricingDraft((prev) => ({ ...prev, input: e.target.value }))
+                  }
+                  placeholder={t("providers.pricing_input_placeholder") ?? "例如 5"}
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground">
+                  {t("providers.pricing_output_label") ?? "输出价格（每 1k tokens）"}
+                </div>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-sm bg-background"
+                  value={pricingDraft.output}
+                  onChange={(e) =>
+                    setPricingDraft((prev) => ({ ...prev, output: e.target.value }))
+                  }
+                  placeholder={t("providers.pricing_output_placeholder") ?? "例如 15"}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingModelId(null)}
+                disabled={pricingLoading}
+              >
+                {t("common.cancel") ?? "取消"}
+              </Button>
+              <Button size="sm" onClick={savePricing} disabled={pricingLoading}>
+                {pricingLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    {t("common.saving") ?? "保存中"}
+                  </>
+                ) : (
+                  t("common.save") ?? "保存"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,7 +13,14 @@ if str(ROOT_DIR) not in sys.path:
 
 from app.routes import create_app  # noqa: E402
 from app.settings import settings  # noqa: E402
-from app.models import CreditAccount, CreditTransaction, ModelBillingConfig, Provider, User  # noqa: E402
+from app.models import (  # noqa: E402
+    CreditAccount,
+    CreditTransaction,
+    ModelBillingConfig,
+    Provider,
+    ProviderModel,
+    User,
+)
 from app.services.credit_service import (  # noqa: E402
     InsufficientCreditsError,
     ensure_account_usable,
@@ -180,3 +187,80 @@ def test_provider_billing_factor_affects_cost(monkeypatch):
 
         assert cost_base > 0
         assert cost_high == cost_base * 2
+
+
+def test_provider_model_pricing_overrides_legacy_pricing(monkeypatch):
+    """
+    当 provider_models.pricing 配置了每模型定价时，应优先按该价格计费。
+
+    约定：
+    - pricing.input / pricing.output 为每 1000 tokens 的积分单价；
+    - 仍会叠加 ModelBillingConfig.multiplier 与 Provider.billing_factor。
+    """
+    app = create_app()
+    SessionLocal = install_inmemory_db(app)
+
+    with SessionLocal() as session:
+        user = _get_single_user(session)
+        user_id = user.id
+
+        # 创建 Provider 与其下的模型行，并配置 per-model pricing。
+        provider = Provider(
+            provider_id="p-pricing",
+            name="Provider Pricing",
+            base_url="https://p-pricing.local",
+            transport="http",
+        )
+        session.add(provider)
+        session.flush()  # 确保 provider.id 可用
+
+        # 模型计费倍率为 1.0，方便断言。
+        mb = ModelBillingConfig(
+            model_name="pricing-model",
+            multiplier=1.0,
+            is_active=True,
+        )
+        session.add(mb)
+
+        model = ProviderModel(
+            provider_id=provider.id,
+            model_id="pricing-model",
+            family="pricing-family",
+            display_name="Pricing Model",
+            context_length=8192,
+            capabilities=["chat"],
+            pricing={"input": 5.0, "output": 10.0},
+        )
+        session.add(model)
+        session.commit()
+
+        account = get_or_create_account_for_user(session, user_id)
+        account.balance = 10_000
+        session.commit()
+
+        payload = {
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 1000,
+                "total_tokens": 2000,
+            }
+        }
+
+        before = account.balance
+        record_chat_completion_usage(
+            session,
+            user_id=user_id,
+            api_key_id=None,
+            model_name="pricing-model",
+            provider_id="p-pricing",
+            payload=payload,
+            is_stream=False,
+        )
+        session.refresh(account)
+        cost = before - account.balance
+
+        # 预期扣费：
+        # - 输入：1k tokens × 5 credits/1k = 5
+        # - 输出：1k tokens × 10 credits/1k = 10
+        # - 总计：15 credits（multiplier=1.0，billing_factor 默认为 1.0）
+        assert cost == 15

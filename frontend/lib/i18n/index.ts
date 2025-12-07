@@ -17,6 +17,7 @@ import { permissionsTranslations } from "./permissions";
 import { errorsTranslations } from "./errors";
 import { apiKeysTranslations } from "./api-keys";
 import { providerPresetsTranslations } from "./provider-presets";
+import { metricsTranslations } from "./metrics";
 
 // Function to merge translation objects
 const mergeTranslations = (
@@ -41,6 +42,7 @@ export const allTranslations = mergeTranslations(
   commonTranslations,
   navigationTranslations,
   overviewTranslations,
+  metricsTranslations,
   providersTranslations,
   routingTranslations,
   creditsTranslations,
@@ -63,6 +65,7 @@ export {
   commonTranslations,
   navigationTranslations,
   overviewTranslations,
+  metricsTranslations,
   providersTranslations,
   routingTranslations,
   creditsTranslations,

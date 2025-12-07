@@ -28,7 +28,10 @@ function getStatusKey(successRate: number, latencyP95Ms: number | null): string 
 
 export function ActiveProviders() {
   const { t } = useI18n();
-  const { data, loading } = useActiveProvidersOverview();
+  // 概览页展示“今天”的活跃 Provider
+  const { data, loading } = useActiveProvidersOverview({
+    time_range: "today",
+  });
 
   const providers = useMemo(() => {
     if (!data) {
@@ -46,9 +49,11 @@ export function ActiveProviders() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">{t("dashboard.active_providers")}</h2>
-        <Button size="sm" variant="outline">
-          {t("overview.view_all")}
-        </Button>
+        <a href="/dashboard/metrics/providers">
+          <Button size="sm" variant="outline">
+            {t("overview.view_all")}
+          </Button>
+        </a>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {loading && providers.length === 0 ? (
@@ -76,4 +81,3 @@ export function ActiveProviders() {
     </div>
   );
 }
-

@@ -35,7 +35,8 @@ function computeChange(
 }
 
 export function StatsGrid() {
-  const { overview } = useOverviewMetrics();
+  // 概览页聚焦“今天”的运行情况
+  const { overview } = useOverviewMetrics({ time_range: "today" });
 
   const cards = useMemo(() => {
     if (!overview) {
@@ -118,4 +119,3 @@ export function StatsGrid() {
     </div>
   );
 }
-

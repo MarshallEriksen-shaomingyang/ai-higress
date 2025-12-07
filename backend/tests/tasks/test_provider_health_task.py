@@ -100,7 +100,12 @@ async def test_get_health_status_with_fallback_prefers_cache(
     assert result.status == ProviderStatus.DEGRADED
     assert result.response_time_ms == pytest.approx(33.3)
 
-    # When cache is cleared, fallback should return None because DB has no last_check
+    # 当缓存被清理时，应回退到数据库记录：
+    # 之前实现会因为 last_check 为空返回 None，导致上层误认为 Provider 不存在。
+    # 现在应返回一个基于 Provider.status 的默认健康状态。
     await redis.delete(key)
-    result_none = await get_health_status_with_fallback(redis, db_session, "mock")
-    assert result_none is None
+    fallback = await get_health_status_with_fallback(redis, db_session, "mock")
+    assert fallback is not None
+    assert fallback.status == ProviderStatus.DOWN
+    # 对于从未巡检过的记录，响应时间等细节可能为空，但对象本身必须存在
+    assert fallback.response_time_ms is None or fallback.response_time_ms >= 0

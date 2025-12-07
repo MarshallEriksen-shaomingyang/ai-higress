@@ -4,13 +4,14 @@ import { UserRolesPageClient } from "./components/user-roles-page-client";
 import type { UserInfo } from "@/lib/api-types";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     userId: string;
-  };
+  }>;
 }
 
 export default async function UserRolesPage({ params }: PageProps) {
-  const { userId } = params;
+  // Next.js 15 中 params 是 Promise，这里先解包
+  const { userId } = await params;
 
   let user: UserInfo | null = null;
 

@@ -27,7 +27,12 @@ from .logical_model import (
     LogicalModelsResponse,
     PhysicalModel,
 )
-from .model import Model, ModelCapability
+from .model import (
+    Model,
+    ModelCapability,
+    ModelPricingUpdateRequest,
+    ProviderModelPricingResponse,
+)
 from .metrics import (
     APIKeyMetricsSummary,
     MetricsBucket,
@@ -125,7 +130,9 @@ __all__ = [
     "MetricsTimeRange",
     "Model",
     "ModelCapability",
+    "ModelPricingUpdateRequest",
     "PhysicalModel",
+    "ProviderModelPricingResponse",
     "Provider",
     "ProviderAPIKey",
     "ProviderConfig",

@@ -1235,12 +1235,18 @@ async def chat_completions(
             yield error_chunk
 
         # 在开始返回流式响应之前，基于请求参数预估一次积分扣费。
+        # 这里使用候选列表中的首选 Provider 作为计费参考。
         try:
+            primary_provider_id: str | None = None
+            if ordered_candidates:
+                primary_provider_id = ordered_candidates[0].upstream.provider_id
+
             record_streaming_request(
                 db,
                 user_id=current_key.user_id,
                 api_key_id=current_key.id,
                 model_name=logical_model.logical_id,
+                provider_id=primary_provider_id,
                 payload=payload,
             )
         except Exception:  # pragma: no cover - 防御性日志

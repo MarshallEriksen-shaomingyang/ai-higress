@@ -3,13 +3,14 @@ import { PermissionsPageClient } from "./components/permissions-page-client";
 import { notFound } from "next/navigation";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     userId: string;
-  };
+  }>;
 }
 
 export default async function UserPermissionsPage({ params }: PageProps) {
-  const { userId } = params;
+  // Next.js 15 中 params 是 Promise，这里先解包
+  const { userId } = await params;
 
   let user = null;
 

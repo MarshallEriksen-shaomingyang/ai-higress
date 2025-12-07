@@ -45,6 +45,17 @@ def _convert_metadata(metadata: dict[str, Any] | None, key: str) -> Any:
 
 
 def _provider_to_health_status(provider: Provider) -> HealthStatus | None:
+    """
+    将 Provider ORM 实体转换为 HealthStatus。
+
+    这里有一个额外的兼容逻辑：
+    - 当 provider 记录存在但尚未写入 last_check（从未跑过健康检查）时，
+      之前实现会返回 None，导致上层 /providers/{id}/health 直接返回 404，
+      给人一种「Provider 不存在」的误导。
+    - 为避免这种歧义，我们现在对这类情况也返回一个默认的健康状态：
+      使用 provider.status 作为当前状态，时间戳优先取 last_check，
+      若为空则退回 created_at，再退回当前时间。
+    """
     if provider is None:
         return None
 
@@ -54,9 +65,11 @@ def _provider_to_health_status(provider: Provider) -> HealthStatus | None:
     except Exception:
         status = ProviderStatus.DOWN
 
-    timestamp = provider.last_check
+    # 优先使用最近一次健康检查时间；如果还没有检查过，则使用创建时间，
+    # 再退回到当前时间，避免因为 last_check 为空而让上层误判为「不存在」。
+    timestamp = provider.last_check or getattr(provider, "created_at", None)
     if timestamp is None:
-        return None
+        timestamp = datetime.now(timezone.utc)
 
     return HealthStatus(
         provider_id=provider.provider_id,

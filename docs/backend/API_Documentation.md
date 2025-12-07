@@ -1401,7 +1401,11 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 
 **接口**: `GET /providers/{provider_id}/health`
 
-**描述**: 执行轻量级健康检查。
+**描述**: 执行轻量级健康检查，或返回最近一次健康检查的结果。
+
+> 兼容说明  
+> - 若 Provider 记录存在但尚未执行过健康检查（没有 `last_check`），接口仍然返回 `200`，并根据当前 Provider 状态字段返回一个默认健康状态；  
+> - 仅当 Provider 记录本身不存在时才会返回 `404`。
 
 **认证**: JWT 令牌
 

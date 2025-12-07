@@ -3,13 +3,14 @@ import { notFound } from "next/navigation";
 import { RolePermissionsPageClient } from "./components/role-permissions-page-client";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     roleId: string;
-  };
+  }>;
 }
 
 export default async function RolePermissionsPage({ params }: PageProps) {
-  const { roleId } = params;
+  // Next.js 15 中 params 是 Promise，这里先解包
+  const { roleId } = await params;
 
   let roles: Role[] | null = null;
 

@@ -16,6 +16,8 @@ export interface UseOverviewMetricsParams {
   time_range?: OverviewTimeRange;
   transport?: OverviewTransport;
   is_stream?: OverviewStreamFlag;
+  // 仅在 useActiveProvidersOverview 中使用
+  limit?: number;
 }
 
 export function useOverviewMetrics(
@@ -65,6 +67,7 @@ export function useActiveProvidersOverview(
     time_range = "7d",
     transport = "all",
     is_stream = "all",
+    limit = 4,
   } = params;
 
   const {
@@ -81,7 +84,7 @@ export function useActiveProvidersOverview(
         time_range,
         transport,
         is_stream,
-        limit: 4,
+        limit,
       },
     }
   );
@@ -135,4 +138,3 @@ export function useOverviewActivity(
     refresh,
   };
 }
-

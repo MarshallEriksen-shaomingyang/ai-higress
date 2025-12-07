@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search } from "lucide-react";
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuthStore } from "@/lib/stores/auth-store";
 
 interface ProvidersPageClientProps {
   initialPrivateProviders: Provider[];
@@ -38,6 +39,8 @@ export function ProvidersPageClient({
   userId,
 }: ProvidersPageClientProps) {
   const { t } = useI18n();
+  const authUserId = useAuthStore((state) => state.user?.id ?? null);
+  const effectiveUserId = userId ?? authUserId;
   
   // 表单和对话框状态
   const [formOpen, setFormOpen] = useState(false);
@@ -55,6 +58,7 @@ export function ProvidersPageClient({
   const [privateProviders, setPrivateProviders] = useState<Provider[]>(initialPrivateProviders);
   const [publicProviders, setPublicProviders] = useState<Provider[]>(initialPublicProviders);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // 模型管理状态
   const [modelsPathByProvider, setModelsPathByProvider] = useState<Record<string, string>>({});
@@ -64,12 +68,12 @@ export function ProvidersPageClient({
 
   // 刷新提供商列表
   const refresh = useCallback(async () => {
-    if (!userId) return;
+    if (!effectiveUserId) return;
     
     setIsRefreshing(true);
     try {
       const response = await providerService.getUserAvailableProviders(
-        userId,
+        effectiveUserId,
         visibilityFilter === 'all' ? undefined : visibilityFilter
       );
       setPrivateProviders(response.private_providers);
@@ -80,7 +84,32 @@ export function ProvidersPageClient({
     } finally {
       setIsRefreshing(false);
     }
-  }, [userId, visibilityFilter, t]);
+  }, [effectiveUserId, visibilityFilter, t]);
+
+  // 首次加载时，根据登录用户自动拉取可用 Provider 列表
+  useEffect(() => {
+    if (!effectiveUserId || hasLoadedOnce) return;
+
+    const load = async () => {
+      setIsRefreshing(true);
+      try {
+        const response = await providerService.getUserAvailableProviders(
+          effectiveUserId,
+          visibilityFilter === "all" ? undefined : visibilityFilter,
+        );
+        setPrivateProviders(response.private_providers);
+        setPublicProviders(response.public_providers);
+      } catch (error) {
+        console.error("Failed to load providers on mount:", error);
+        toast.error(t("providers.error_loading"));
+      } finally {
+        setIsRefreshing(false);
+        setHasLoadedOnce(true);
+      }
+    };
+
+    load();
+  }, [effectiveUserId, hasLoadedOnce, visibilityFilter, t]);
 
   // 本地搜索过滤（优化：使用 useMemo）
   const filteredPrivateProviders = useMemo(() => {
@@ -142,11 +171,11 @@ export function ProvidersPageClient({
 
   // 确认删除（优化：使用 useCallback）
   const handleDeleteConfirm = useCallback(async () => {
-    if (!deletingProviderId || !userId) return;
+    if (!deletingProviderId || !effectiveUserId) return;
 
     setIsDeleting(true);
     try {
-      await providerService.deletePrivateProvider(userId, deletingProviderId);
+      await providerService.deletePrivateProvider(effectiveUserId, deletingProviderId);
       toast.success(t("providers.toast_delete_success"));
       await refresh();
     } catch (error: any) {
@@ -158,7 +187,7 @@ export function ProvidersPageClient({
       setDeleteConfirmOpen(false);
       setDeletingProviderId(null);
     }
-  }, [deletingProviderId, userId, refresh, t]);
+  }, [deletingProviderId, effectiveUserId, refresh, t]);
 
   // 查看详情（优化：使用 useCallback）
   const handleViewDetails = useCallback((providerId: string) => {
@@ -304,7 +333,7 @@ export function ProvidersPageClient({
         onDelete={handleDeleteClick}
         onViewDetails={handleViewDetails}
         onViewModels={handleViewModels}
-        currentUserId={userId ?? undefined}
+        currentUserId={effectiveUserId ?? undefined}
       />
 
       {/* 创建表单对话框 */}
