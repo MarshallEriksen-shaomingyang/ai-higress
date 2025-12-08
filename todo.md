@@ -39,9 +39,9 @@
     - 将早期分钟级指标按日/周聚合后持久化
     - 定期清理超出保留期的历史明细，控制表大小
 
-7. LogicalModel / Provider 缓存巡检
+<!-- 7. LogicalModel / Provider 缓存巡检
     - 定时全量调用 `sync_logical_models_task`，校正 Redis 缓存与数据库配置
-    - 检测并修复缺失/脏数据的逻辑模型缓存
+    - 检测并修复缺失/脏数据的逻辑模型缓存 -->
 
 <!-- 8. Redis 会话与 Token 维护
     - 巡检 `auth:user:{user_id}:sessions`，清理无效或损坏的会话记录

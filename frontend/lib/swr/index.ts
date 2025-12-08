@@ -8,3 +8,4 @@ export * from "./use-overview-metrics";
 export * from "./use-system-config";
 export * from "./use-logical-models";
 export * from "./use-registration-windows";
+export * from "./use-sdk-vendors";

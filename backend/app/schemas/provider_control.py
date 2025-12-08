@@ -6,9 +6,19 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
+from app.provider.sdk_selector import list_registered_sdk_vendors
 from app.schemas.provider import SdkVendorValue
 
 ApiStyleValue = Literal["openai", "responses", "claude"]
+
+
+def _validate_sdk_vendor_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    supported = list_registered_sdk_vendors()
+    if supported and value not in supported:
+        raise ValueError(f"sdk_vendor 不在已注册列表中: {', '.join(supported)}")
+    return value
 
 
 class UserProviderCreateRequest(BaseModel):
@@ -88,8 +98,10 @@ class UserProviderCreateRequest(BaseModel):
     @model_validator(mode="after")
     def validate_sdk_vendor(self) -> "UserProviderCreateRequest":
         # 明确约束：仅当 transport=sdk 时才需要 sdk_vendor
-        if self.transport == "sdk" and self.sdk_vendor is None:
-            raise ValueError("当 transport=sdk 时，必须指定 sdk_vendor")
+        if self.transport == "sdk":
+            if self.sdk_vendor is None:
+                raise ValueError("当 transport=sdk 时，必须指定 sdk_vendor")
+            self.sdk_vendor = _validate_sdk_vendor_value(self.sdk_vendor)
         if self.transport == "http":
             # HTTP 模式下忽略 sdk_vendor，避免产生误导
             self.sdk_vendor = None
@@ -184,6 +196,8 @@ class UserProviderUpdateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_sdk_vendor(self) -> "UserProviderUpdateRequest":
+        if self.sdk_vendor is not None:
+            self.sdk_vendor = _validate_sdk_vendor_value(self.sdk_vendor)
         # 如果显式切换到 HTTP，则清空 sdk_vendor
         if self.transport == "http":
             self.sdk_vendor = None
@@ -349,11 +363,15 @@ class ProviderPresetBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_sdk_vendor(self) -> "ProviderPresetBase":
-        if self.transport == "sdk" and self.sdk_vendor is None:
-            raise ValueError("当 transport=sdk 时，必须指定 sdk_vendor")
+        if self.transport == "sdk":
+            if self.sdk_vendor is None:
+                raise ValueError("当 transport=sdk 时，必须指定 sdk_vendor")
+            self.sdk_vendor = _validate_sdk_vendor_value(self.sdk_vendor)
         if self.transport == "http":
             self.sdk_vendor = None
         return self
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProviderPresetCreateRequest(ProviderPresetBase):
@@ -419,6 +437,8 @@ class ProviderPresetUpdateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_sdk_vendor(self) -> "ProviderPresetUpdateRequest":
+        if self.sdk_vendor is not None:
+            self.sdk_vendor = _validate_sdk_vendor_value(self.sdk_vendor)
         if self.transport == "http":
             self.sdk_vendor = None
         return self
@@ -434,6 +454,31 @@ class ProviderPresetResponse(ProviderPresetBase):
 
 class ProviderPresetListResponse(BaseModel):
     items: List[ProviderPresetResponse]
+    total: int
+
+
+class ProviderPresetImportError(BaseModel):
+    preset_id: str
+    reason: str
+
+
+class ProviderPresetImportResult(BaseModel):
+    created: List[str] = Field(default_factory=list, description="成功创建的预设ID列表")
+    updated: List[str] = Field(default_factory=list, description="成功覆盖更新的预设ID列表")
+    skipped: List[str] = Field(default_factory=list, description="因已存在且未开启覆盖而跳过的预设ID列表")
+    failed: List[ProviderPresetImportError] = Field(default_factory=list, description="导入失败的预设及原因")
+
+
+class ProviderPresetImportRequest(BaseModel):
+    presets: List[ProviderPresetBase] = Field(default_factory=list, min_length=1, description="要导入的预设列表")
+    overwrite: bool = Field(
+        default=False,
+        description="是否覆盖已存在的同名预设；默认不覆盖，若为false则同名预设会被跳过",
+    )
+
+
+class ProviderPresetExportResponse(BaseModel):
+    presets: List[ProviderPresetBase]
     total: int
 
 
@@ -504,6 +549,15 @@ class UserRolesUpdateRequest(BaseModel):
 __all__ = [
     "AdminProviderResponse",
     "AdminProvidersResponse",
+    "ProviderPresetBase",
+    "ProviderPresetCreateRequest",
+    "ProviderPresetUpdateRequest",
+    "ProviderPresetResponse",
+    "ProviderPresetListResponse",
+    "ProviderPresetImportRequest",
+    "ProviderPresetImportResult",
+    "ProviderPresetImportError",
+    "ProviderPresetExportResponse",
     "ProviderReviewRequest",
     "ProviderSubmissionRequest",
     "ProviderSubmissionResponse",

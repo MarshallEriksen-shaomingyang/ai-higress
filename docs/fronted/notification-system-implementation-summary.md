@@ -8,7 +8,7 @@
 
 - 设计阶段：2025-12-07
 - 实现阶段：2025-12-07
-- 状态：✅ 核心功能已完成，待集成到路由和导航
+- 状态：✅ 前端页面与导航已接入（含通知铃铛）
 
 ## 技术架构
 
@@ -154,57 +154,19 @@
 - **统一样式**: 遵循项目 UI 规范
 - **国际化**: 完整的多语言支持
 
-## 待完成的工作
+## 最近更新（已完成）
 
-### 1. 路由集成
+- 新增页面路由：
+  - `/dashboard/notifications`：使用 `NotificationList` 展示用户通知并支持已读操作。
+  - `/system/notifications`：使用 `AdminNotificationsTable` 管理通知。
+- 导航集成：
+  - 侧边栏新增“通知”“通知管理”菜单项，分别指向上述页面。
+  - 顶部导航使用 `NotificationBell`（Popover + 未读徽标），登录后可快速查看和标记通知。
 
-需要创建以下页面路由：
+## 后续建议
 
-#### 用户通知页面
-```typescript
-// frontend/app/dashboard/notifications/page.tsx
-import { NotificationList } from "@/components/dashboard/notifications/notification-list";
-
-export default function NotificationsPage() {
-  return (
-    <div className="container mx-auto py-6">
-      <NotificationList />
-    </div>
-  );
-}
-```
-
-#### 管理员通知页面
-```typescript
-// frontend/app/system/notifications/page.tsx
-import { AdminNotificationsTable } from "@/components/dashboard/notifications/admin-notifications-table";
-
-export default function SystemNotificationsPage() {
-  return (
-    <div className="container mx-auto py-6">
-      <AdminNotificationsTable />
-    </div>
-  );
-}
-```
-
-### 2. 导航集成
-
-需要在以下位置集成通知功能：
-
-#### 顶部导航栏
-在用户头像旁边添加通知铃铛：
-```typescript
-import { NotificationBell } from "@/components/dashboard/notifications/notification-bell";
-
-// 在导航栏组件中
-<NotificationBell />
-```
-
-#### 侧边栏菜单
-添加通知菜单项：
-- 用户端：Dashboard → 通知 (`/dashboard/notifications`)
-- 管理员：系统管理 → 通知管理 (`/system/notifications`)
+- 增补前端集成测试（SWR hooks、分页与已读交互）。
+- 在 CI 中回归 `pytest backend/tests/test_notification_routes.py` 确认后端接口稳定。
 
 ### 3. 测试建议
 
@@ -243,23 +205,18 @@ frontend/
             ├── notification-list.tsx (新增)
             ├── admin-notification-form.tsx (新增)
             └── admin-notifications-table.tsx (新增)
+└── app/
+    ├── dashboard/
+    │   └── notifications/
+    │       └── page.tsx (新增)
+    └── system/
+        └── notifications/
+            └── page.tsx (新增)
 
 docs/
 └── fronted/
     ├── notification-system-design.md (新增)
-    └── notification-system-implementation-summary.md (新增)
-```
-
-### 待创建文件
-```
-frontend/
-└── app/
-    ├── dashboard/
-    │   └── notifications/
-    │       └── page.tsx (待创建)
-    └── system/
-        └── notifications/
-            └── page.tsx (待创建)
+    └── notification-system-implementation-summary.md (更新)
 ```
 
 ## 使用示例
@@ -338,5 +295,4 @@ function AdminPanel() {
 - ✅ 6 个功能完整的 UI 组件
 - ✅ 用户端通知接收功能
 - ✅ 管理员通知发送功能
-
-剩余工作主要是路由集成和导航集成，这些都是简单的配置工作。整个系统遵循项目的设计规范和最佳实践，代码质量高，易于维护和扩展。
+整个系统遵循项目的设计规范和最佳实践，代码质量高，易于维护和扩展。后续重点在于增加测试覆盖、实时推送优化及通知偏好等增量能力。

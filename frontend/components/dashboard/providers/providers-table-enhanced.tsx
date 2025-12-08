@@ -51,7 +51,7 @@ export function ProvidersTableEnhanced({
   onViewModels,
   currentUserId,
 }: ProvidersTableEnhancedProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const router = useRouter();
   const allProviders = [...privateProviders, ...publicProviders];
 
@@ -128,7 +128,7 @@ export function ProvidersTableEnhanced({
         </Badge>
       </TableCell>
       <TableCell className="px-4 py-3 text-sm text-muted-foreground">
-        {formatRelativeTime(provider.updated_at)}
+        {formatRelativeTime(provider.updated_at, language)}
       </TableCell>
       <TableCell className="px-4 py-3 text-sm">
         <div className="flex items-center justify-end gap-2">

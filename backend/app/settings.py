@@ -41,6 +41,17 @@ class Settings(BaseSettings):
         alias="APP_ENV",
         description="当前运行环境，例如 development / production；默认 development",
     )
+    # 初始管理员
+    default_admin_username: str = Field(
+        "admin",
+        alias="DEFAULT_ADMIN_USERNAME",
+        description="首次启动时初始化的默认管理员用户名",
+    )
+    default_admin_email: str = Field(
+        "admin@example.com",
+        alias="DEFAULT_ADMIN_EMAIL",
+        description="首次启动时初始化的默认管理员邮箱",
+    )
 
     # Redis connection string
     redis_url: str = Field(

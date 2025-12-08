@@ -27,7 +27,7 @@ export function ProviderPresetTable({
   onEdit,
   onDelete,
 }: ProviderPresetTableProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   if (isLoading) {
     return (
@@ -127,7 +127,7 @@ export function ProviderPresetTable({
                 </Badge>
               </TableCell>
               <TableCell className="px-4 py-3 text-sm text-muted-foreground">
-                {formatRelativeTime(preset.created_at)}
+                {formatRelativeTime(preset.created_at, language)}
               </TableCell>
               <TableCell className="px-4 py-3 text-sm">
                 <div className="flex items-center justify-end gap-2">

@@ -15,7 +15,7 @@ interface AuthState {
   setLoading: (loading: boolean) => void;
   openAuthDialog: () => void;
   closeAuthDialog: () => void;
-  login: (credentials: LoginRequest) => Promise<void>;
+  login: (credentials: LoginRequest, options?: { remember?: boolean }) => Promise<void>;
   register: (data: RegisterRequest) => Promise<UserInfo>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -47,16 +47,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isAuthDialogOpen: false });
   },
 
-  login: async (credentials) => {
+  login: async (credentials, options) => {
     try {
       set({ isLoading: true });
+      const remember = options?.remember ?? true;
       
       // 调用登录 API
       const response = await authService.login(credentials);
       
-      // 存储 tokens（同时存储到 localStorage 和 Cookie）
-      tokenManager.setAccessToken(response.access_token);
-      tokenManager.setRefreshToken(response.refresh_token);
+      // 存储 tokens（根据记住登录选择存储介质）
+      tokenManager.setAccessToken(response.access_token, { remember });
+      tokenManager.setRefreshToken(response.refresh_token, { remember });
       
       // 获取用户信息
       const user = await authService.getCurrentUser();
@@ -136,8 +137,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   checkAuth: async () => {
     const accessToken = tokenManager.getAccessToken();
-    
-    if (!accessToken) {
+    const refreshToken = tokenManager.getRefreshToken();
+
+    if (!accessToken && !refreshToken) {
       set({ 
         user: null, 
         isAuthenticated: false,

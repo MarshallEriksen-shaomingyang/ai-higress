@@ -1,6 +1,4 @@
 "use client";
-
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,11 +18,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useI18n } from "@/lib/i18n-context";
 import { toast } from "sonner";
 import { useErrorDisplay } from "@/lib/errors";
 import { useCreateNotification } from "@/lib/swr/use-notifications";
+import { useAdminUsers } from "@/lib/swr/use-admin-users";
+import { useAllRoles } from "@/lib/swr/use-user-roles";
 import type { NotificationLevel, NotificationTargetType } from "@/lib/api-types";
+import { useMemo, useState } from "react";
 
 interface AdminNotificationFormProps {
   open: boolean;
@@ -37,7 +41,8 @@ interface FormData {
   content: string;
   level: NotificationLevel;
   target_type: NotificationTargetType;
-  target_user_ids?: string;
+  target_user_ids: string[];
+  target_role_codes: string[];
   link_url?: string;
 }
 
@@ -45,6 +50,7 @@ interface FormErrors {
   title?: string;
   content?: string;
   target_user_ids?: string;
+  target_role_codes?: string;
   link_url?: string;
 }
 
@@ -56,16 +62,21 @@ export function AdminNotificationForm({
   const { t } = useI18n();
   const { showError } = useErrorDisplay();
   const { createNotification, submitting, isSuperUser } = useCreateNotification();
+  const { users, loading: loadingUsers } = useAdminUsers();
+  const { roles, loading: loadingRoles } = useAllRoles();
   
   const [formData, setFormData] = useState<FormData>({
     title: '',
     content: '',
     level: 'info',
     target_type: 'all',
-    target_user_ids: '',
+    target_user_ids: [],
+    target_role_codes: [],
     link_url: '',
   });
-  
+  const [userSearch, setUserSearch] = useState("");
+  const [userPopoverOpen, setUserPopoverOpen] = useState(false);
+  const [rolePopoverOpen, setRolePopoverOpen] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
 
   // 如果不是超级管理员，不渲染组件
@@ -90,15 +101,14 @@ export function AdminNotificationForm({
     }
 
     if (formData.target_type === 'users') {
-      if (!formData.target_user_ids?.trim()) {
+      if (!formData.target_user_ids.length) {
         newErrors.target_user_ids = t("notifications.form.userIdsRequired");
-      } else {
-        // 验证 user_ids 格式（逗号分隔的 UUID）
-        const ids = formData.target_user_ids.split(',').map(id => id.trim());
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!ids.every(id => uuidRegex.test(id))) {
-          newErrors.target_user_ids = t("notifications.form.invalidUserIds");
-        }
+      }
+    }
+
+    if (formData.target_type === 'roles') {
+      if (!formData.target_role_codes.length) {
+        newErrors.target_role_codes = t("notifications.form.rolesRequired");
       }
     }
 
@@ -126,11 +136,12 @@ export function AdminNotificationForm({
         target_type: formData.target_type,
       };
 
-      if (formData.target_type === 'users' && formData.target_user_ids) {
-        payload.target_user_ids = formData.target_user_ids
-          .split(',')
-          .map(id => id.trim())
-          .filter(id => id);
+      if (formData.target_type === 'users' && formData.target_user_ids.length) {
+        payload.target_user_ids = formData.target_user_ids;
+      }
+
+      if (formData.target_type === 'roles' && formData.target_role_codes.length) {
+        payload.target_role_codes = formData.target_role_codes;
       }
 
       if (formData.link_url?.trim()) {
@@ -147,7 +158,8 @@ export function AdminNotificationForm({
         content: '',
         level: 'info',
         target_type: 'all',
-        target_user_ids: '',
+        target_user_ids: [],
+        target_role_codes: [],
         link_url: '',
       });
       setErrors({});
@@ -171,7 +183,8 @@ export function AdminNotificationForm({
         content: '',
         level: 'info',
         target_type: 'all',
-        target_user_ids: '',
+        target_user_ids: [],
+        target_role_codes: [],
         link_url: '',
       });
       setErrors({});
@@ -183,6 +196,41 @@ export function AdminNotificationForm({
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field as keyof FormErrors]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const filteredUsers = useMemo(() => {
+    const keyword = userSearch.trim().toLowerCase();
+    if (!keyword) return users;
+    return users.filter(user =>
+      user.username.toLowerCase().includes(keyword) ||
+      (user.email ?? "").toLowerCase().includes(keyword)
+    );
+  }, [users, userSearch]);
+
+  const toggleUser = (userId: string) => {
+    setFormData(prev => {
+      const exists = prev.target_user_ids.includes(userId);
+      const next = exists
+        ? prev.target_user_ids.filter(id => id !== userId)
+        : [...prev.target_user_ids, userId];
+      return { ...prev, target_user_ids: next };
+    });
+    if (errors.target_user_ids) {
+      setErrors(prev => ({ ...prev, target_user_ids: undefined }));
+    }
+  };
+
+  const toggleRole = (roleCode: string) => {
+    setFormData(prev => {
+      const exists = prev.target_role_codes.includes(roleCode);
+      const next = exists
+        ? prev.target_role_codes.filter(code => code !== roleCode)
+        : [...prev.target_role_codes, roleCode];
+      return { ...prev, target_role_codes: next };
+    });
+    if (errors.target_role_codes) {
+      setErrors(prev => ({ ...prev, target_role_codes: undefined }));
     }
   };
 
@@ -281,27 +329,150 @@ export function AdminNotificationForm({
             </Select>
           </div>
 
-          {/* 指定用户 ID（仅当 target_type 为 users 时显示） */}
+          {/* 指定用户（仅当 target_type 为 users 时显示） */}
           {formData.target_type === 'users' && (
             <div className="space-y-2">
-              <Label htmlFor="target_user_ids">
+              <Label>
                 {t("notifications.form.targetUserIds")} <span className="text-destructive">*</span>
               </Label>
-              <Textarea
-                id="target_user_ids"
-                placeholder={t("notifications.form.targetUserIdsPlaceholder")}
-                value={formData.target_user_ids}
-                onChange={(e) => updateField('target_user_ids', e.target.value)}
-                disabled={submitting}
-                rows={3}
-                className={errors.target_user_ids ? 'border-destructive' : ''}
-              />
+              <Popover open={userPopoverOpen} onOpenChange={setUserPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={userPopoverOpen}
+                    className={errors.target_user_ids ? "justify-between border-destructive" : "justify-between"}
+                    disabled={submitting}
+                  >
+                    {formData.target_user_ids.length > 0
+                      ? `${t("notifications.form.selectUsers")} (${formData.target_user_ids.length})`
+                      : t("notifications.form.selectUsers")}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[480px] p-3" align="start">
+                  <div className="space-y-3">
+                    <Input
+                      placeholder={t("notifications.form.searchUser")}
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      disabled={loadingUsers}
+                    />
+                    <ScrollArea className="h-64 pr-2">
+                      {loadingUsers ? (
+                        <p className="text-sm text-muted-foreground py-2">{t("common.loading")}</p>
+                      ) : filteredUsers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">{t("notifications.form.noUsers")}</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredUsers.map((user) => (
+                            <label
+                              key={user.id}
+                              className="flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50"
+                            >
+                              <Checkbox
+                                checked={formData.target_user_ids.includes(user.id)}
+                                onCheckedChange={() => toggleUser(user.id)}
+                              />
+                              <div className="flex flex-col text-sm leading-tight">
+                                <span className="font-medium">{user.username}</span>
+                                {user.email && (
+                                  <span className="text-muted-foreground text-xs">{user.email}</span>
+                                )}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>
+                        {t("notifications.form.selectedCount").replace("{count}", formData.target_user_ids.length.toString())}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => updateField("target_user_ids", [])}
+                        disabled={!formData.target_user_ids.length}
+                      >
+                        {t("notifications.form.clearSelection")}
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
               {errors.target_user_ids && (
                 <p className="text-sm text-destructive">{errors.target_user_ids}</p>
               )}
               <p className="text-xs text-muted-foreground">
                 {t("notifications.form.targetUserIdsHint")}
               </p>
+            </div>
+          )}
+
+          {/* 指定角色（仅当 target_type 为 roles 时显示） */}
+          {formData.target_type === 'roles' && (
+            <div className="space-y-2">
+              <Label>
+                {t("notifications.form.targetRoleCodes")} <span className="text-destructive">*</span>
+              </Label>
+              <Popover open={rolePopoverOpen} onOpenChange={setRolePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={rolePopoverOpen}
+                    className={errors.target_role_codes ? "justify-between border-destructive" : "justify-between"}
+                    disabled={submitting}
+                  >
+                    {formData.target_role_codes.length > 0
+                      ? `${t("notifications.form.selectRoles")} (${formData.target_role_codes.length})`
+                      : t("notifications.form.selectRoles")}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[480px] p-3" align="start">
+                  <ScrollArea className="h-64 pr-2">
+                    {loadingRoles ? (
+                      <p className="text-sm text-muted-foreground py-2">{t("common.loading")}</p>
+                    ) : roles.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">{t("notifications.form.noRoles")}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {roles.map((role) => (
+                          <label
+                            key={role.code}
+                            className="flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50"
+                          >
+                            <Checkbox
+                              checked={formData.target_role_codes.includes(role.code)}
+                              onCheckedChange={() => toggleRole(role.code)}
+                            />
+                            <div className="flex flex-col text-sm leading-tight">
+                              <span className="font-medium">{role.name}</span>
+                              <span className="text-muted-foreground text-xs">{role.code}</span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
+                    <span>
+                      {t("notifications.form.selectedCount").replace("{count}", formData.target_role_codes.length.toString())}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => updateField("target_role_codes", [])}
+                      disabled={!formData.target_role_codes.length}
+                    >
+                      {t("notifications.form.clearSelection")}
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              {errors.target_role_codes && (
+                <p className="text-sm text-destructive">{errors.target_role_codes}</p>
+              )}
             </div>
           )}
 

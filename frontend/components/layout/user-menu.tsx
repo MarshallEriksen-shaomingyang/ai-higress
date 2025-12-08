@@ -20,6 +20,8 @@ export function UserMenu() {
 
   if (!user) return null;
 
+  const userInitial = user.display_name?.[0]?.toUpperCase() || user.email[0].toUpperCase();
+
   const handleLogout = async () => {
     await logout();
     router.push('/login');
@@ -28,10 +30,21 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            {user.display_name?.[0] || user.email[0].toUpperCase()}
-          </div>
+        <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
+          {user.avatar ? (
+            <div className="h-10 w-10 overflow-hidden rounded-full bg-muted">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={user.avatar}
+                alt={user.display_name || user.email}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              {userInitial}
+            </div>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>

@@ -20,7 +20,9 @@ import {
     Shield,
     Package,
     Lock,
-    Send
+    Send,
+    Bell,
+    Megaphone
 } from "lucide-react";
 
 const navItems = [
@@ -38,6 +40,11 @@ const navItems = [
         titleKey: "nav.my_providers",
         href: "/dashboard/my-providers",
         icon: Lock,
+    },
+    {
+        titleKey: "nav.notifications",
+        href: "/dashboard/notifications",
+        icon: Bell,
     },
     {
         titleKey: "nav.logical_models",
@@ -96,6 +103,11 @@ const adminItems = [
         titleKey: "nav.provider_submissions",
         href: "/system/provider-submissions",
         icon: Send,
+    },
+    {
+        titleKey: "nav.notifications_admin",
+        href: "/system/notifications",
+        icon: Megaphone,
     },
 ];
 

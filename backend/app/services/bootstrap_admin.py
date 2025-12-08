@@ -6,12 +6,10 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
+from app.settings import settings
 from app.services.api_key_cache import cache_api_key_sync
 from app.services.key_management_service import initialize_system_admin
 from app.services.user_service import has_any_user
-
-DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_EMAIL = "admin@example.com"
 
 
 @dataclass
@@ -35,8 +33,8 @@ def ensure_initial_admin(session: Session) -> BootstrapAdminResult | None:
         # 使用统一的密钥管理服务初始化管理员
         admin_credentials = initialize_system_admin(
             session=session,
-            username=DEFAULT_ADMIN_USERNAME,
-            email=DEFAULT_ADMIN_EMAIL,
+            username=settings.default_admin_username,
+            email=settings.default_admin_email,
             display_name="Administrator",
         )
         

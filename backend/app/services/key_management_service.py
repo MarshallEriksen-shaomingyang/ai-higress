@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.logging_config import logger
 from app.models import User
+from app.settings import settings
 from app.schemas.api_key import APIKeyCreateRequest, APIKeyExpiry
 from app.schemas.user import UserCreateRequest
 from app.services.api_key_service import create_api_key
@@ -160,9 +161,9 @@ def create_user_with_api_key(
 
 def initialize_system_admin(
     session: Session,
-    username: str = "admin",
-    email: str = "admin@example.com",
-    display_name: str = "System Administrator",
+    username: str | None = None,
+    email: str | None = None,
+    display_name: str | None = None,
 ) -> Dict[str, str]:
     """
     初始化系统管理员账户
@@ -180,6 +181,10 @@ def initialize_system_admin(
         KeyManagementServiceError: 如果初始化失败
     """
     try:
+        username = username or settings.default_admin_username
+        email = email or settings.default_admin_email
+        display_name = display_name or "System Administrator"
+
         # 检查是否已有管理员
         from app.services.user_service import has_any_user
         if has_any_user(session):

@@ -24,7 +24,7 @@ export function CreditBalanceCard({
   onTopup,
   showTopupButton = false
 }: CreditBalanceCardProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   // 格式化积分数字（添加千位分隔符）
   const formattedBalance = useMemo(() => {
@@ -36,11 +36,11 @@ export function CreditBalanceCard({
   const lastUpdated = useMemo(() => {
     if (!balance) return '';
     try {
-      return formatRelativeTime(balance.updated_at);
+      return formatRelativeTime(balance.updated_at, language);
     } catch {
       return balance.updated_at;
     }
-  }, [balance]);
+  }, [balance, language]);
 
   // 状态徽章
   const statusBadge = useMemo(() => {

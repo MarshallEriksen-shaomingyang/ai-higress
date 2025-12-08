@@ -4,7 +4,7 @@ import { httpClient } from './client';
 export type ProviderVisibility = 'public' | 'private' | 'restricted';
 export type ProviderType = 'native' | 'aggregator';
 export type TransportType = 'http' | 'sdk';
-export type SdkVendor = 'openai' | 'google' | 'claude';
+export type SdkVendor = string;
 export type ProviderStatus = 'healthy' | 'degraded' | 'down';
 
 // API Key 接口
@@ -86,6 +86,11 @@ export interface ProviderModelAlias {
   provider_id: string;
   model_id: string;
   alias: string | null;
+}
+
+export interface SDKVendorsResponse {
+  vendors: SdkVendor[];
+  total: number;
 }
 
 // 模型列表响应
@@ -327,6 +332,14 @@ export const providerService = {
       `/admin/providers/${providerId}/models/${encodeURIComponent(modelId)}/pricing`,
       data
     );
+    return response.data;
+  },
+
+  /**
+   * 获取已注册的 SDK 厂商列表
+   */
+  getSdkVendors: async (): Promise<SDKVendorsResponse> => {
+    const response = await httpClient.get('/providers/sdk-vendors');
     return response.data;
   },
 };

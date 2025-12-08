@@ -11,7 +11,7 @@ export interface StaticModel {
 export type ApiStyle = 'openai' | 'responses' | 'claude';
 
 // SDK 厂商类型
-export type SdkVendor = 'openai' | 'google' | 'claude';
+export type SdkVendor = string;
 
 // 私有提供商接口
 export interface PrivateProvider {

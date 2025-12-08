@@ -1460,7 +1460,7 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
     "static_models": [],
     "transport": "http/sdk",
     "provider_type": "native/aggregator",
-    "sdk_vendor": "openai/google/claude 或 null",
+    "sdk_vendor": "string | null（参见 /providers/sdk-vendors）",
     "supported_api_styles": ["openai", "responses", "claude"] 或 null
   }
 ],
@@ -1469,8 +1469,26 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 ```
 
 > 说明：
-> - 当 `transport = "sdk"` 时，必须在后台配置 `sdk_vendor` 为 `openai` / `google` / `claude`，网关才会走对应官方 SDK；
+> - 当 `transport = "sdk"` 时，必须在后台配置 `sdk_vendor`，其值需来自 `/providers/sdk-vendors` 返回列表，网关才会走对应官方 SDK；
 > - 当 `transport = "http"` 时，`sdk_vendor` 一律为 `null`，表示纯 HTTP 代理模式。
+
+---
+
+### 1.1 获取已注册的 SDK 厂商列表
+
+**接口**: `GET /providers/sdk-vendors`
+
+**描述**: 返回后端当前注册的 SDK 厂商枚举，前端表单可据此动态渲染选项。
+
+**认证**: JWT 令牌
+
+**响应**:
+```json
+{
+  "vendors": ["openai", "google", "claude"],
+  "total": 3
+}
+```
 
 ---
 
@@ -2310,6 +2328,91 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 **错误响应**:
 - 404: Provider 不存在  
 - 403: 需要管理员权限
+
+---
+
+### 16. 管理员导出提供商预设
+
+**接口**: `GET /admin/provider-presets/export`
+
+**描述**: 导出当前所有官方提供商预设，便于批量备份或迁移。返回值中的 `presets` 字段可直接作为导入接口的输入。
+
+**认证**: JWT 令牌 (仅限超级用户)
+
+**响应示例**:
+```json
+{
+  "presets": [
+    {
+      "preset_id": "openai",
+      "display_name": "OpenAI",
+      "description": "官方 OpenAI 预设",
+      "provider_type": "native",
+      "transport": "http",
+      "sdk_vendor": null,
+      "base_url": "https://api.openai.com",
+      "models_path": "/v1/models",
+      "messages_path": "/v1/message",
+      "chat_completions_path": "/v1/chat/completions",
+      "responses_path": null,
+      "supported_api_styles": ["openai"],
+      "retryable_status_codes": [429, 500],
+      "custom_headers": {"X-Test": "1"},
+      "static_models": [{"id": "gpt-4o"}]
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### 17. 管理员导入提供商预设
+
+**接口**: `POST /admin/provider-presets/import`
+
+**描述**: 批量导入官方提供商预设。默认跳过已存在的同名预设，传入 `overwrite=true` 可覆盖更新。
+
+**认证**: JWT 令牌 (仅限超级用户)
+
+**请求体**:
+```json
+{
+  "overwrite": false,
+  "presets": [
+    {
+      "preset_id": "openai",
+      "display_name": "OpenAI",
+      "provider_type": "native",
+      "transport": "http",
+      "base_url": "https://api.openai.com",
+      "models_path": "/v1/models",
+      "messages_path": "/v1/message",
+      "chat_completions_path": "/v1/chat/completions",
+      "responses_path": null,
+      "supported_api_styles": ["openai"],
+      "retryable_status_codes": [429],
+      "custom_headers": null,
+      "static_models": []
+    }
+  ]
+}
+```
+
+**响应示例**:
+```json
+{
+  "created": ["claude"],
+  "updated": ["openai"],
+  "skipped": [],
+  "failed": [
+    {
+      "preset_id": "bad-preset",
+      "reason": "preset_id 已存在"
+    }
+  ]
+}
+```
 
 ---
 

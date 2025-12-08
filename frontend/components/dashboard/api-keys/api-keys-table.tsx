@@ -56,7 +56,7 @@ export function ApiKeysTable({
     onCreate,
 }: ApiKeysTableProps) {
     const { showError } = useErrorDisplay();
-    const { t } = useI18n();
+    const { t, language } = useI18n();
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [keyToDelete, setKeyToDelete] = useState<ApiKey | null>(null);
     const [deleting, setDeleting] = useState(false);
@@ -96,7 +96,7 @@ export function ApiKeysTable({
 
     const formatDate = (dateString: string) => {
         try {
-            return formatRelativeTime(dateString);
+            return formatRelativeTime(dateString, language);
         } catch {
             return dateString;
         }

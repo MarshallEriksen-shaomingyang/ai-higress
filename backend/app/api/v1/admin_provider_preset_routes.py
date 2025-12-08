@@ -8,6 +8,9 @@ from app.errors import bad_request, forbidden, not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.schemas import (
     ProviderPresetCreateRequest,
+    ProviderPresetExportResponse,
+    ProviderPresetImportRequest,
+    ProviderPresetImportResult,
     ProviderPresetResponse,
     ProviderPresetUpdateRequest,
 )
@@ -16,6 +19,8 @@ from app.services.provider_preset_service import (
     ProviderPresetNotFoundError,
     create_provider_preset,
     delete_provider_preset,
+    export_provider_presets,
+    import_provider_presets,
     update_provider_preset,
 )
 
@@ -80,6 +85,31 @@ def delete_provider_preset_endpoint(
         delete_provider_preset(db, preset_id)
     except ProviderPresetNotFoundError as exc:
         raise not_found(str(exc))
+
+
+@router.get(
+    "/admin/provider-presets/export",
+    response_model=ProviderPresetExportResponse,
+)
+def export_provider_presets_endpoint(
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderPresetExportResponse:
+    _ensure_admin(current_user)
+    return export_provider_presets(db)
+
+
+@router.post(
+    "/admin/provider-presets/import",
+    response_model=ProviderPresetImportResult,
+)
+def import_provider_presets_endpoint(
+    payload: ProviderPresetImportRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderPresetImportResult:
+    _ensure_admin(current_user)
+    return import_provider_presets(db, payload)
 
 
 __all__ = ["router"]

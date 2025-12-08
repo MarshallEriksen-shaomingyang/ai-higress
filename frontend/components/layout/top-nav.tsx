@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Bell, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useI18n } from "@/lib/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { UserMenu } from "./user-menu";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/dashboard/notifications/notification-bell";
 
 export function TopNav() {
     const [mounted, setMounted] = useState(false);
@@ -60,10 +61,9 @@ export function TopNav() {
                 )}
 
                 {/* Notification Bell */}
-                <button className="relative p-2 rounded hover:bg-muted transition-colors">
-                    <Bell className="w-5 h-5 text-muted-foreground" />
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
-                </button>
+                {!isLoading && isAuthenticated && (
+                    <NotificationBell />
+                )}
 
                 {/* User Profile or Login Button */}
                 <div className="flex items-center pl-4 border-l">

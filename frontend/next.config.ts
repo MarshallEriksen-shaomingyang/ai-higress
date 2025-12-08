@@ -5,6 +5,7 @@ const withPWA = require('next-pwa');
 
 const nextConfig: NextConfig = {
   // 现有配置...
+  turbopack: {},
 };
 
 export default withPWA({

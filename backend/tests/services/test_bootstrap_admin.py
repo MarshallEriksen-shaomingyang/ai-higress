@@ -8,7 +8,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.models import APIKey, Base, User
-from app.services.bootstrap_admin import DEFAULT_ADMIN_USERNAME, ensure_initial_admin
+from app.services.bootstrap_admin import ensure_initial_admin
+from app.settings import settings
 
 
 def _build_session_factory():
@@ -30,7 +31,7 @@ def test_ensure_initial_admin_creates_user_and_key(caplog):
         with SessionLocal() as session:
             result = ensure_initial_admin(session)
             assert result is not None
-            assert result.username == DEFAULT_ADMIN_USERNAME
+            assert result.username == settings.default_admin_username
             assert result.password
             assert result.api_key_token
 

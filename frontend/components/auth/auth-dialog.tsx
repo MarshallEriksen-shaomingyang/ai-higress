@@ -25,6 +25,7 @@ type AuthMode = "login" | "register";
 const loginSchema = z.object({
   email: z.string().email("请输入有效的邮箱地址"),
   password: z.string().min(6, "密码至少6个字符").max(128, "密码最多128个字符"),
+  rememberMe: z.boolean().optional(),
 });
 
 // 注册表单验证
@@ -62,6 +63,7 @@ export function AuthDialog() {
     defaultValues: {
       email: "",
       password: "",
+      rememberMe: true,
     },
   });
 
@@ -78,7 +80,8 @@ export function AuthDialog() {
   // 处理登录
   const handleLogin = async (data: LoginFormData) => {
     try {
-      await login(data);
+      const { rememberMe, ...loginData } = data;
+      await login(loginData, { remember: rememberMe ?? true });
       // 登录成功后，对话框会自动关闭（在 auth-store 中处理）
       // 如果有重定向参数，则跳转；否则刷新当前页面
       if (searchParams.get('redirect')) {
@@ -148,7 +151,11 @@ export function AuthDialog() {
 
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center space-x-2 cursor-pointer">
-                  <input type="checkbox" className="rounded border-gray-300" />
+                  <input 
+                    type="checkbox" 
+                    className="rounded border-gray-300" 
+                    {...loginForm.register("rememberMe")}
+                  />
                   <span>{t("auth.remember_me")}</span>
                 </label>
                 <Link href="#" className="text-primary hover:underline">

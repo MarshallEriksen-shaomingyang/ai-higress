@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 from app.logging_config import logger
 from app.models import ProviderPreset
 from app.schemas.provider_control import (
+    ProviderPresetBase,
     ProviderPresetCreateRequest,
+    ProviderPresetExportResponse,
+    ProviderPresetImportError,
+    ProviderPresetImportRequest,
+    ProviderPresetImportResult,
     ProviderPresetUpdateRequest,
 )
 
@@ -118,6 +123,55 @@ def delete_provider_preset(session: Session, preset_id: str) -> None:
     session.commit()
 
 
+def export_provider_presets(session: Session) -> ProviderPresetExportResponse:
+    presets = list_provider_presets(session)
+    serialized = [ProviderPresetBase.model_validate(preset) for preset in presets]
+    return ProviderPresetExportResponse(presets=serialized, total=len(serialized))
+
+
+def import_provider_presets(session: Session, payload: ProviderPresetImportRequest) -> ProviderPresetImportResult:
+    result = ProviderPresetImportResult()
+
+    for preset_payload in payload.presets:
+        try:
+            try:
+                existing = get_provider_preset(session, preset_payload.preset_id)
+            except ProviderPresetNotFoundError:
+                existing = None
+
+            if existing and not payload.overwrite:
+                result.skipped.append(preset_payload.preset_id)
+                continue
+
+            if existing and payload.overwrite:
+                update_payload = ProviderPresetUpdateRequest(
+                    **preset_payload.model_dump(exclude={"preset_id"})
+                )
+                update_provider_preset(session, preset_payload.preset_id, update_payload)
+                result.updated.append(preset_payload.preset_id)
+                continue
+
+            create_payload = ProviderPresetCreateRequest(**preset_payload.model_dump())
+            create_provider_preset(session, create_payload)
+            result.created.append(preset_payload.preset_id)
+        except ProviderPresetServiceError as exc:
+            session.rollback()
+            logger.error("Failed to import provider preset %s: %s", preset_payload.preset_id, exc)
+            result.failed.append(
+                ProviderPresetImportError(preset_id=preset_payload.preset_id, reason=str(exc))
+            )
+        except Exception as exc:  # pragma: no cover - unexpected branch
+            session.rollback()
+            logger.exception(
+                "Unexpected error importing provider preset %s", preset_payload.preset_id
+            )
+            result.failed.append(
+                ProviderPresetImportError(preset_id=preset_payload.preset_id, reason=str(exc))
+            )
+
+    return result
+
+
 __all__ = [
     "ProviderPresetServiceError",
     "ProviderPresetIdExistsError",
@@ -127,4 +181,6 @@ __all__ = [
     "delete_provider_preset",
     "list_provider_presets",
     "get_provider_preset",
+    "export_provider_presets",
+    "import_provider_presets",
 ]

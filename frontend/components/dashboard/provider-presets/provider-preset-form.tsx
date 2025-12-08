@@ -8,6 +8,7 @@ import {
   providerPresetService,
   SdkVendor,
 } from "@/http/provider-preset";
+import { useSdkVendors } from "@/lib/swr";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,8 @@ export function ProviderPresetForm({
 }: ProviderPresetFormProps) {
   const isEdit = !!preset;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: sdkVendorsData, loading: sdkVendorsLoading } = useSdkVendors();
+  const sdkVendorOptions = sdkVendorsData?.vendors || [];
 
   // 基础配置
   const [presetId, setPresetId] = useState("");
@@ -129,8 +132,15 @@ export function ProviderPresetForm({
     }
 
     // SDK 配置校验
-    if (transport === "sdk" && !sdkVendor) {
-      newErrors.sdkVendor = "当传输方式为 SDK 时必须选择 SDK 类型";
+    if (transport === "sdk") {
+      if (!sdkVendor) {
+        newErrors.sdkVendor = "当传输方式为 SDK 时必须选择 SDK 类型";
+      } else if (
+        sdkVendorOptions.length > 0 &&
+        !sdkVendorOptions.includes(sdkVendor)
+      ) {
+        newErrors.sdkVendor = "SDK 类型不在支持列表中";
+      }
     }
 
     // 路径验证
@@ -376,17 +386,28 @@ export function ProviderPresetForm({
                 </Label>
                 <Select
                   value={sdkVendor}
+                  disabled={sdkVendorsLoading || sdkVendorOptions.length === 0}
                   onValueChange={(v: any) => setSdkVendor(v)}
                 >
                   <SelectTrigger className={errors.sdkVendor ? "border-destructive" : ""}>
                     <SelectValue placeholder="选择 SDK 厂商" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="openai">OpenAI SDK</SelectItem>
-                    <SelectItem value="google">Google / Gemini SDK</SelectItem>
-                    <SelectItem value="claude">Claude / Anthropic SDK</SelectItem>
+                    {sdkVendorOptions.map((vendor) => (
+                      <SelectItem key={vendor} value={vendor} className="capitalize">
+                        {vendor}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {sdkVendorsLoading && (
+                  <p className="text-sm text-muted-foreground">正在加载 SDK 列表...</p>
+                )}
+                {!sdkVendorsLoading && sdkVendorOptions.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    暂无可用的 SDK 类型，请稍后重试或联系管理员注册。
+                  </p>
+                )}
                 {errors.sdkVendor && (
                   <p className="text-sm text-destructive">{errors.sdkVendor}</p>
                 )}

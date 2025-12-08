@@ -43,12 +43,12 @@ export function ProviderKeysTable({
   onDelete,
   onToggleStatus,
 }: ProviderKeysTableProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   // 格式化时间
   const formatTime = (dateString: string) => {
     try {
-      return formatRelativeTime(dateString);
+      return formatRelativeTime(dateString, language);
     } catch {
       return dateString;
     }

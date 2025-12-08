@@ -15,13 +15,17 @@ interface BasicProviderConfigProps {
     isFieldOverridden: (fieldName: string) => boolean;
     markFieldAsOverridden: (fieldName: string) => void;
     isSdkTransport: boolean;
+    sdkVendorOptions: string[];
+    sdkVendorsLoading?: boolean;
 }
 
 export function BasicProviderConfig({
     form,
     isFieldOverridden,
     markFieldAsOverridden,
-    isSdkTransport
+    isSdkTransport,
+    sdkVendorOptions,
+    sdkVendorsLoading,
 }: BasicProviderConfigProps) {
     return (
         <div className="space-y-4">
@@ -117,47 +121,39 @@ export function BasicProviderConfig({
                     name="sdkVendor"
                     render={({ field }: { field: any }) => (
                         <div className="space-y-2">
-                                <FormLabel>
-                                    SDK 类型 <span className="text-destructive">*</span>
-                                </FormLabel>
-                                <div className="flex gap-2">
-                                <Button
-                                    type="button"
-                                    variant={field.value === "openai" ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => {
-                                        field.onChange("openai");
-                                        markFieldAsOverridden("sdkVendor");
-                                    }}
-                                >
-                                    OpenAI
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant={field.value === "google" ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => {
-                                        field.onChange("google");
-                                        markFieldAsOverridden("sdkVendor");
-                                    }}
-                                >
-                                    Google / Gemini
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant={field.value === "claude" ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => {
-                                        field.onChange("claude");
-                                        markFieldAsOverridden("sdkVendor");
-                                    }}
-                                >
-                                    Claude / Anthropic
-                                </Button>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                选择与上游 API 兼容的官方 SDK 类型，例如 Kimi 这类 OpenAI 兼容服务选择 OpenAI。
-                            </p>
+                            <FormLabel>
+                                SDK 类型 <span className="text-destructive">*</span>
+                            </FormLabel>
+                            {sdkVendorsLoading ? (
+                                <p className="text-xs text-muted-foreground">正在加载 SDK 列表...</p>
+                            ) : sdkVendorOptions.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    暂无可用的 SDK 类型，请稍后重试或联系管理员注册。
+                                </p>
+                            ) : (
+                                <>
+                                    <div className="flex flex-wrap gap-2">
+                                        {sdkVendorOptions.map((vendor) => (
+                                            <Button
+                                                key={vendor}
+                                                type="button"
+                                                variant={field.value === vendor ? "default" : "outline"}
+                                                size="sm"
+                                                className="capitalize"
+                                                onClick={() => {
+                                                    field.onChange(vendor);
+                                                    markFieldAsOverridden("sdkVendor");
+                                                }}
+                                            >
+                                                {vendor}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        选择与上游 API 兼容的官方 SDK 类型，例如 Kimi 这类 OpenAI 兼容服务选择 OpenAI。
+                                    </p>
+                                </>
+                            )}
                         </div>
                     )}
                 />

@@ -42,7 +42,7 @@ export function CreditTransactionsTable({
   onPageChange,
   filterComponent
 }: CreditTransactionsTableProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   // 计算总页数
   const totalPages = useMemo(() => {
@@ -52,7 +52,7 @@ export function CreditTransactionsTable({
   // 格式化时间
   const formatTime = (dateString: string) => {
     try {
-      return formatRelativeTime(dateString);
+      return formatRelativeTime(dateString, language);
     } catch {
       return dateString;
     }

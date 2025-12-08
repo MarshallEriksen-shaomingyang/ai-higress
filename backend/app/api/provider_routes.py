@@ -26,10 +26,12 @@ from app.schemas.provider_routes import (
     ProviderMetricsResponse,
     ProviderModelsResponse,
     ProvidersResponse,
+    SDKVendorsResponse,
 )
 from app.provider.config import get_provider_config, load_provider_configs
 from app.provider.discovery import ensure_provider_models_cached
 from app.provider.health import HealthStatus
+from app.provider.sdk_selector import list_registered_sdk_vendors
 from app.services.provider_health_service import get_health_status_with_fallback
 from app.storage.redis_service import get_routing_metrics
 
@@ -119,6 +121,12 @@ def _ensure_can_edit_provider_models(
         return provider
 
     raise forbidden("只有提供商所有者或超级管理员可以修改该提供商的模型配置")
+
+
+@router.get("/providers/sdk-vendors", response_model=SDKVendorsResponse)
+async def list_supported_sdk_vendors() -> SDKVendorsResponse:
+    vendors = list_registered_sdk_vendors()
+    return SDKVendorsResponse(vendors=vendors, total=len(vendors))
 
 
 @router.get("/providers", response_model=ProvidersResponse)

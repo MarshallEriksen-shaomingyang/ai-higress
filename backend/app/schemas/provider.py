@@ -3,10 +3,11 @@ from typing import Any, Literal
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl, ConfigDict
+from pydantic import BaseModel, Field, HttpUrl, ConfigDict, model_validator
 
+from app.provider.sdk_selector import list_registered_sdk_vendors
 
-SdkVendorValue = Literal["openai", "google", "claude"]
+SdkVendorValue = str
 
 
 class ProviderStatus(str, Enum):
@@ -131,6 +132,20 @@ class ProviderConfig(BaseModel):
         default=None,
         description="Explicit upstream API styles supported by this provider",
     )
+
+    @model_validator(mode="after")
+    def validate_sdk_vendor(self) -> "ProviderConfig":
+        supported_vendors = list_registered_sdk_vendors()
+        if self.transport == "sdk":
+            if self.sdk_vendor is None:
+                raise ValueError("当 transport=sdk 时，必须指定 sdk_vendor")
+            if supported_vendors and self.sdk_vendor not in supported_vendors:
+                raise ValueError(
+                    f"sdk_vendor 不在已注册列表中: {', '.join(supported_vendors)}"
+                )
+        if self.transport == "http":
+            self.sdk_vendor = None
+        return self
 
     def get_api_keys(self) -> list[ProviderAPIKey]:
         """

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from .provider import ProviderConfig
 from .routing_metrics import RoutingMetrics
+from .provider import SdkVendorValue
 
 
 class ProvidersResponse(BaseModel):
@@ -20,8 +21,14 @@ class ProviderMetricsResponse(BaseModel):
     metrics: list[RoutingMetrics] = Field(default_factory=list)
 
 
+class SDKVendorsResponse(BaseModel):
+    vendors: list[SdkVendorValue] = Field(default_factory=list)
+    total: int
+
+
 __all__ = [
     "ProviderMetricsResponse",
     "ProviderModelsResponse",
     "ProvidersResponse",
+    "SDKVendorsResponse",
 ]

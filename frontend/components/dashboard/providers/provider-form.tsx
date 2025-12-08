@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,9 +22,11 @@ import { CreatePrivateProviderRequest, privateProviderService, ApiStyle, SdkVend
 import { PresetSelector } from "./preset-selector";
 import { BasicProviderConfig } from "./basic-provider-config";
 import { AdvancedProviderConfig } from "./advanced-provider-config";
+import { useSdkVendors } from "@/lib/swr";
 
-// 表单验证 Schema
-const providerFormSchema = z
+// 表单验证 Schema（根据服务端返回的 SDK 列表动态校验）
+const createProviderFormSchema = (sdkVendorOptions: string[]) =>
+    z
     .object({
         // 预设相关
         presetId: z.string().default(""),
@@ -39,7 +41,7 @@ const providerFormSchema = z
         // Provider 配置
         providerType: z.enum(["native", "aggregator"]),
         transport: z.enum(["http", "sdk"]),
-        sdkVendor: z.enum(["openai", "google", "claude"]).optional().or(z.literal("")),
+        sdkVendor: z.string().optional().or(z.literal("")),
         baseUrl: z.string().trim().default(""),
         
         // API 路径
@@ -87,12 +89,23 @@ const providerFormSchema = z
         }
 
         // SDK 模式下必须选择 SDK 类型
-        if (values.transport === "sdk" && !values.sdkVendor) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                path: ["sdkVendor"],
-                message: "SDK 模式必须选择 SDK 类型",
-            });
+        if (values.transport === "sdk") {
+            if (!values.sdkVendor) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ["sdkVendor"],
+                    message: "SDK 模式必须选择 SDK 类型",
+                });
+            } else if (
+                sdkVendorOptions.length > 0 &&
+                !sdkVendorOptions.includes(values.sdkVendor)
+            ) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ["sdkVendor"],
+                    message: "SDK 类型不在支持列表中",
+                });
+            }
         }
 
         // 路径验证
@@ -159,7 +172,8 @@ const providerFormSchema = z
         }
     });
 
-type ProviderFormValues = z.infer<typeof providerFormSchema>;
+type ProviderFormSchema = ReturnType<typeof createProviderFormSchema>;
+type ProviderFormValues = z.infer<ProviderFormSchema>;
 
 const providerFormDefaults: ProviderFormValues = {
     presetId: "",
@@ -198,13 +212,18 @@ export function ProviderFormEnhanced({
     editingProvider,
 }: ProviderFormEnhancedProps) {
     const { showError } = useErrorDisplay();
+    const { data: sdkVendorsData, loading: sdkVendorsLoading } = useSdkVendors();
+    const sdkVendors = sdkVendorsData?.vendors || [];
+    const providerFormSchema = useMemo(
+        () => createProviderFormSchema(sdkVendors),
+        [sdkVendors]
+    );
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [selectedPreset, setSelectedPreset] = useState<ProviderPreset | null>(null);
     const [overriddenFields, setOverriddenFields] = useState<Set<string>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const form = useForm<ProviderFormValues>({
-        // @ts-ignore
         resolver: zodResolver(providerFormSchema),
         defaultValues: providerFormDefaults,
         mode: "onSubmit",
@@ -433,6 +452,8 @@ export function ProviderFormEnhanced({
                             isFieldOverridden={isFieldOverridden}
                             markFieldAsOverridden={markFieldAsOverridden}
                             isSdkTransport={isSdkTransport}
+                            sdkVendorOptions={sdkVendors}
+                            sdkVendorsLoading={sdkVendorsLoading}
                         />
 
                         {/* 高级配置（可折叠） */}
