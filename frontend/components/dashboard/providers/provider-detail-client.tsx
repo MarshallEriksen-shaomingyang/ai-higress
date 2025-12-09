@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, CheckCircle, AlertCircle, XCircle, RefreshCw, Share2, Loader2, Key } from "lucide-react";
 import { useProviderDetail } from "@/lib/hooks/use-provider-detail";
-import type { ProviderStatus, ProviderModelPricing, Model } from "@/http/provider";
+import type { ProviderStatus, ProviderModelPricing, Model, ProviderVisibility } from "@/http/provider";
 import { providerService } from "@/http/provider";
 import { useI18n } from "@/lib/i18n-context";
 import { providerSubmissionService } from "@/http/provider-submission";
@@ -174,6 +176,10 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
   const [editingAliasModelId, setEditingAliasModelId] = useState<string | null>(null);
   const [aliasDraft, setAliasDraft] = useState("");
   const [aliasLoading, setAliasLoading] = useState(false);
+  const [sharedUsersDraft, setSharedUsersDraft] = useState("");
+  const [sharedVisibility, setSharedVisibility] = useState<ProviderVisibility | null>(null);
+  const [sharedLoading, setSharedLoading] = useState(false);
+  const [sharedSaving, setSharedSaving] = useState(false);
   const { provider, models, health, metrics, loading, error, refresh } = useProviderDetail({
     providerId,
   });
@@ -288,6 +294,8 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
   const canEditModelMapping =
     isSuperuser || (!!effectiveUserId && isUserOwnedPrivate);
 
+  const canEditSharing = !!effectiveUserId && isUserOwnedPrivate;
+
   const handleShareToPool = async () => {
     if (!canShareToPool || !effectiveUserId) {
       return;
@@ -312,6 +320,58 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const fetchSharedUsers = useCallback(async () => {
+    if (!effectiveUserId || !canEditSharing) {
+      return;
+    }
+    setSharedLoading(true);
+    try {
+      const resp = await providerService.getProviderSharedUsers(
+        effectiveUserId,
+        providerId,
+      );
+      setSharedUsersDraft((resp.shared_user_ids || []).join("\n"));
+      setSharedVisibility(resp.visibility);
+    } catch (err) {
+      showError(err, {
+        context: t("providers.sharing_error_load"),
+      });
+    } finally {
+      setSharedLoading(false);
+    }
+  }, [effectiveUserId, canEditSharing, providerId, showError, t]);
+
+  useEffect(() => {
+    if (!canEditSharing) return;
+    fetchSharedUsers();
+  }, [canEditSharing, fetchSharedUsers]);
+
+  const handleSaveSharing = async () => {
+    if (!effectiveUserId || !canEditSharing) return;
+    setSharedSaving(true);
+    const userIds = sharedUsersDraft
+      .split(/[\n,]/)
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    try {
+      const resp = await providerService.updateProviderSharedUsers(
+        effectiveUserId,
+        providerId,
+        { user_ids: userIds },
+      );
+      setSharedVisibility(resp.visibility);
+      toast.success(t("providers.sharing_save_success"));
+    } catch (err) {
+      showError(err, {
+        context: t("providers.sharing_save_error"),
+        onRetry: () => handleSaveSharing(),
+      });
+    } finally {
+      setSharedSaving(false);
     }
   };
 
@@ -418,9 +478,11 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
                 <>
                   <span>•</span>
                   <Badge variant="outline" className="text-xs">
-                    {provider.visibility === "private" 
-                      ? `🔒 ${translations.visibility.private}` 
-                      : `🌐 ${translations.visibility.public}`}
+                    {provider.visibility === "private"
+                      ? `🔒 ${translations.visibility.private}`
+                      : provider.visibility === "restricted"
+                        ? `👥 ${t("providers.visibility_restricted")}`
+                        : `🌐 ${translations.visibility.public}`}
                   </Badge>
                 </>
               )}
@@ -562,6 +624,61 @@ export function ProviderDetailClient({ providerId, currentUserId, translations }
               </div>
             </CardContent>
           </Card>
+
+          {canEditSharing && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("providers.sharing_title")}</CardTitle>
+                <CardDescription>{t("providers.sharing_description")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  {(sharedVisibility || provider.visibility) === "restricted"
+                    ? t("providers.sharing_visibility_restricted")
+                    : t("providers.sharing_visibility_private")}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="shared-users">{t("providers.sharing_user_ids_label")}</Label>
+                  <Textarea
+                    id="shared-users"
+                    value={sharedUsersDraft}
+                    onChange={(e) => setSharedUsersDraft(e.target.value)}
+                    placeholder={t("providers.sharing_hint")}
+                    className="min-h-[120px]"
+                    disabled={sharedLoading || sharedSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("providers.sharing_hint_helper")}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleSaveSharing}
+                    disabled={sharedSaving || sharedLoading}
+                  >
+                    {sharedSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        {t("providers.sharing_saving")}
+                      </>
+                    ) : (
+                      t("providers.sharing_save")
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={fetchSharedUsers}
+                    disabled={sharedLoading || sharedSaving}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${sharedLoading ? "animate-spin" : ""}`} />
+                    {sharedLoading
+                      ? t("providers.sharing_loading")
+                      : t("providers.sharing_refresh")}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* 模型标签页 */}

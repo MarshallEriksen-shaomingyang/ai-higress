@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Activity, Server, TrendingUp, AlertTriangle } from "lucide-react";
 import { useOverviewMetrics } from "@/lib/swr/use-overview-metrics";
+import { useI18n } from "@/lib/i18n-context";
 
 interface MetricProps {
   title: string;
@@ -49,27 +50,49 @@ function formatPercent01(value: number): string {
 
 function computeChange(
   current: number,
-  previous: number | null
+  previous: number | null,
+  t: (key: string) => string
 ): string {
   if (previous === null || previous <= 0) {
-    return "vs previous period: --";
+    return t("metrics.overview.change.na");
   }
   const delta = (current - previous) / previous;
   const sign = delta >= 0 ? "+" : "";
   const percent = (delta * 100).toFixed(1);
-  return `vs previous period: ${sign}${percent}%`;
+  return `${t("metrics.overview.change.prefix")}${sign}${percent}%`;
 }
 
 export function MetricsCards() {
+  const { t } = useI18n();
   const { overview } = useOverviewMetrics({ time_range: "7d" });
 
   const metrics = useMemo<MetricProps[]>(() => {
     if (!overview) {
       return [
-        { title: "Total Requests", value: "--", change: "", icon: Activity },
-        { title: "Active Providers", value: "--", change: "", icon: Server },
-        { title: "Success Rate", value: "--", change: "", icon: TrendingUp },
-        { title: "Error Rate", value: "--", change: "", icon: AlertTriangle },
+        {
+          title: t("metrics.overview.card.total_requests"),
+          value: "--",
+          change: t("metrics.overview.change.na"),
+          icon: Activity,
+        },
+        {
+          title: t("metrics.overview.card.active_providers"),
+          value: "--",
+          change: t("metrics.overview.change.na"),
+          icon: Server,
+        },
+        {
+          title: t("metrics.overview.card.success_rate"),
+          value: "--",
+          change: t("metrics.overview.change.na"),
+          icon: TrendingUp,
+        },
+        {
+          title: t("metrics.overview.card.error_rate"),
+          value: "--",
+          change: t("metrics.overview.change.na"),
+          icon: AlertTriangle,
+        },
       ];
     }
 
@@ -80,50 +103,54 @@ export function MetricsCards() {
 
     const totalChange = computeChange(
       totalRequests,
-      overview.total_requests_prev
+      overview.total_requests_prev,
+      t
     );
     const providerChange = computeChange(
       activeProviders,
-      overview.active_providers_prev
+      overview.active_providers_prev,
+      t
     );
     const successChange = computeChange(
       successRate,
-      overview.success_rate_prev
+      overview.success_rate_prev,
+      t
     );
     const errorChange = computeChange(
       errorRate,
       overview.error_requests_prev !== null && overview.total_requests_prev
         ? overview.error_requests_prev / overview.total_requests_prev
-        : null
+        : null,
+      t
     );
 
     return [
       {
-        title: "Total Requests",
+        title: t("metrics.overview.card.total_requests"),
         value: formatNumber(totalRequests),
         change: totalChange,
         icon: Activity,
       },
       {
-        title: "Active Providers",
+        title: t("metrics.overview.card.active_providers"),
         value: activeProviders.toString(),
         change: providerChange,
         icon: Server,
       },
       {
-        title: "Success Rate",
+        title: t("metrics.overview.card.success_rate"),
         value: formatPercent01(successRate),
         change: successChange,
         icon: TrendingUp,
       },
       {
-        title: "Error Rate",
+        title: t("metrics.overview.card.error_rate"),
         value: formatPercent01(errorRate),
         change: errorChange,
         icon: AlertTriangle,
       },
     ];
-  }, [overview]);
+  }, [overview, t]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -139,4 +166,3 @@ export function MetricsCards() {
     </div>
   );
 }
-

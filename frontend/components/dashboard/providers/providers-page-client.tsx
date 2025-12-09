@@ -30,12 +30,14 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 
 interface ProvidersPageClientProps {
   initialPrivateProviders: Provider[];
+  initialSharedProviders: Provider[];
   initialPublicProviders: Provider[];
   userId: string | null;
 }
 
 export function ProvidersPageClient({
   initialPrivateProviders,
+  initialSharedProviders,
   initialPublicProviders,
   userId,
 }: ProvidersPageClientProps) {
@@ -55,10 +57,11 @@ export function ProvidersPageClient({
   
   // 筛选器状态
   const [searchQuery, setSearchQuery] = useState("");
-  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'private' | 'public'>('all');
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'private' | 'public' | 'shared'>('all');
 
   // 提供商数据状态
   const [privateProviders, setPrivateProviders] = useState<Provider[]>(initialPrivateProviders);
+  const [sharedProviders, setSharedProviders] = useState<Provider[]>(initialSharedProviders);
   const [publicProviders, setPublicProviders] = useState<Provider[]>(initialPublicProviders);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -80,6 +83,7 @@ export function ProvidersPageClient({
         visibilityFilter === 'all' ? undefined : visibilityFilter
       );
       setPrivateProviders(response.private_providers);
+      setSharedProviders(response.shared_providers ?? []);
       setPublicProviders(response.public_providers);
     } catch (error) {
       console.error("Failed to refresh providers:", error);
@@ -101,6 +105,7 @@ export function ProvidersPageClient({
           visibilityFilter === "all" ? undefined : visibilityFilter,
         );
         setPrivateProviders(response.private_providers);
+        setSharedProviders(response.shared_providers ?? []);
         setPublicProviders(response.public_providers);
       } catch (error) {
         console.error("Failed to load providers on mount:", error);
@@ -131,6 +136,23 @@ export function ProvidersPageClient({
       );
     });
   }, [privateProviders, searchQuery]);
+
+  const filteredSharedProviders = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return sharedProviders;
+
+    return sharedProviders.filter((provider) => {
+      const name = provider.name?.toLowerCase() ?? "";
+      const providerId = provider.provider_id?.toLowerCase() ?? "";
+      const baseUrl = provider.base_url?.toLowerCase() ?? "";
+
+      return (
+        name.includes(query) ||
+        providerId.includes(query) ||
+        baseUrl.includes(query)
+      );
+    });
+  }, [sharedProviders, searchQuery]);
 
   const filteredPublicProviders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -307,6 +329,7 @@ export function ProvidersPageClient({
             <SelectContent>
               <SelectItem value="all">{t("providers.filter_all")}</SelectItem>
               <SelectItem value="private">{t("providers.filter_private")}</SelectItem>
+              <SelectItem value="shared">{t("providers.filter_shared")}</SelectItem>
               <SelectItem value="public">{t("providers.filter_public")}</SelectItem>
             </SelectContent>
           </Select>
@@ -333,6 +356,7 @@ export function ProvidersPageClient({
       {/* 提供商列表表格 */}
       <ProvidersTableEnhanced
         privateProviders={filteredPrivateProviders}
+        sharedProviders={filteredSharedProviders}
         publicProviders={filteredPublicProviders}
         isLoading={isRefreshing}
         onEdit={handleEdit}

@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Edit, Trash2, Settings, Lock, Globe, Eye, Database, Key } from "lucide-react";
+import { Edit, Trash2, Settings, Lock, Globe, Eye, Database, Key, Users } from "lucide-react";
 import { formatRelativeTime } from "@/lib/date-utils";
 import { useI18n } from "@/lib/i18n-context";
 import { useRouter } from "next/navigation";
@@ -32,6 +32,7 @@ import {
 
 interface ProvidersTableEnhancedProps {
   privateProviders: Provider[];
+  sharedProviders: Provider[];
   publicProviders: Provider[];
   isLoading: boolean;
   onEdit?: (provider: Provider) => void;
@@ -43,6 +44,7 @@ interface ProvidersTableEnhancedProps {
 
 export function ProvidersTableEnhanced({
   privateProviders,
+  sharedProviders,
   publicProviders,
   isLoading,
   onEdit,
@@ -53,12 +55,12 @@ export function ProvidersTableEnhanced({
 }: ProvidersTableEnhancedProps) {
   const { t, language } = useI18n();
   const router = useRouter();
-  const allProviders = [...privateProviders, ...publicProviders];
+  const allProviders = [...privateProviders, ...sharedProviders, ...publicProviders];
 
   // 判断是否可以编辑/删除
   const canModify = (provider: Provider) => {
     // 私有提供商：仅所有者可编辑
-    if (provider.visibility === 'private') {
+    if (provider.visibility === 'private' || provider.visibility === 'restricted') {
       return provider.owner_id === currentUserId;
     }
     // 公共提供商：普通用户不允许修改
@@ -68,7 +70,10 @@ export function ProvidersTableEnhanced({
   // 判断是否可以管理密钥
   const canManageKeys = (provider: Provider) => {
     // 仅私有提供商的所有者可以管理密钥
-    return provider.visibility === 'private' && provider.owner_id === currentUserId;
+    return (
+      (provider.visibility === 'private' || provider.visibility === 'restricted') &&
+      provider.owner_id === currentUserId
+    );
   };
 
   const renderProviderRow = (provider: Provider) => (
@@ -78,9 +83,13 @@ export function ProvidersTableEnhanced({
       </TableCell>
       <TableCell className="px-4 py-3 text-sm font-medium">
         <div className="flex items-center gap-2">
-          {provider.visibility === 'private' ? (
+          {provider.visibility === 'private' && (
             <Lock className="w-4 h-4 text-blue-500" />
-          ) : (
+          )}
+          {provider.visibility === 'restricted' && (
+            <Users className="w-4 h-4 text-amber-500" />
+          )}
+          {provider.visibility === 'public' && (
             <Globe className="w-4 h-4 text-gray-500" />
           )}
           {provider.name}
@@ -291,12 +300,15 @@ export function ProvidersTableEnhanced({
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="all">
               {t("providers.tab_all")} ({allProviders.length})
             </TabsTrigger>
             <TabsTrigger value="private">
               {t("providers.tab_private")} ({privateProviders.length})
+            </TabsTrigger>
+            <TabsTrigger value="shared">
+              {t("providers.tab_shared")} ({sharedProviders.length})
             </TabsTrigger>
             <TabsTrigger value="public">
               {t("providers.tab_public")} ({publicProviders.length})
@@ -312,6 +324,17 @@ export function ProvidersTableEnhanced({
                 </h3>
                 <div className="rounded-md border">
                   {renderTable(privateProviders, "")}
+                </div>
+              </div>
+            )}
+            {sharedProviders.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-500" />
+                  {t("providers.section_shared")}
+                </h3>
+                <div className="rounded-md border">
+                  {renderTable(sharedProviders, "")}
                 </div>
               </div>
             )}
@@ -340,6 +363,15 @@ export function ProvidersTableEnhanced({
               {renderTable(
                 privateProviders,
                 t("providers.empty_private")
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="shared" className="mt-4">
+            <div className="rounded-md border">
+              {renderTable(
+                sharedProviders,
+                t("providers.empty_shared")
               )}
             </div>
           </TabsContent>

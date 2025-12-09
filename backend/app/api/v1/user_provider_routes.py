@@ -19,6 +19,7 @@ from app.services.user_provider_service import (
     create_private_provider,
     get_private_provider_by_id,
     list_private_providers,
+    list_providers_shared_with_user,
     update_private_provider,
 )
 from app.schemas.provider_control import (
@@ -41,7 +42,7 @@ def list_user_available_providers(
     user_id: UUID,
     visibility: str | None = Query(
         default=None,
-        description="过滤可见性：all(全部) | private(仅私有) | public(仅公共)",
+        description="过滤可见性：all(全部) | private(仅私有) | public(仅公共) | shared(仅被授权)",
     ),
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
@@ -61,6 +62,10 @@ def list_user_available_providers(
     private_providers = []
     if visibility in (None, "all", "private"):
         private_providers = list_private_providers(db, user_id)
+
+    shared_providers = []
+    if visibility in (None, "all", "shared"):
+        shared_providers = list_providers_shared_with_user(db, user_id)
     
     # 获取公共提供商
     public_providers = []
@@ -73,12 +78,20 @@ def list_user_available_providers(
     
     # 转换为响应格式
     private_list = [ProviderResponse.model_validate(p) for p in private_providers]
-    public_list = [ProviderResponse.model_validate(p) for p in public_providers]
+    shared_list = [
+        ProviderResponse.model_validate(p, update={"shared_user_ids": None})
+        for p in shared_providers
+    ]
+    public_list = [
+        ProviderResponse.model_validate(p, update={"shared_user_ids": None})
+        for p in public_providers
+    ]
     
     return {
         "private_providers": private_list,
+        "shared_providers": shared_list,
         "public_providers": public_list,
-        "total": len(private_list) + len(public_list),
+        "total": len(private_list) + len(shared_list) + len(public_list),
     }
 
 

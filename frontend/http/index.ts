@@ -34,7 +34,9 @@ export {
   type ValidateKeyResponse,
   type SystemStatusResponse,
   type CacheSegment,
-  type CacheClearResponse
+  type CacheClearResponse,
+  type ProviderLimits,
+  type UpdateProviderLimitsRequest
 } from './system';
 export {
   adminService,

@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Database } from "lucide-react";
-import type { GatewayConfig } from "@/lib/api-types";
-import { useGatewayConfig } from "@/lib/swr";
+import type { GatewayConfig, ProviderLimits } from "@/lib/api-types";
+import { useGatewayConfig, useProviderLimits } from "@/lib/swr";
 import { systemService, type CacheSegment } from "@/http";
 import { useI18n } from "@/lib/i18n-context";
 import { toast } from "sonner";
@@ -15,7 +16,16 @@ import { toast } from "sonner";
 export default function SystemAdminPage() {
   const { t } = useI18n();
   const { config, loading, saving, error, saveConfig, refresh } = useGatewayConfig();
+  const {
+    limits,
+    loading: limitsLoading,
+    saving: limitsSaving,
+    error: limitsError,
+    saveLimits,
+    refresh: refreshLimits,
+  } = useProviderLimits();
   const [form, setForm] = useState<GatewayConfig | null>(null);
+  const [limitForm, setLimitForm] = useState<ProviderLimits | null>(null);
   const [clearing, setClearing] = useState(false);
   const [selectedSegments, setSelectedSegments] = useState<CacheSegment[]>([
     "models",
@@ -31,6 +41,12 @@ export default function SystemAdminPage() {
       setForm(config);
     }
   }, [config]);
+
+  useEffect(() => {
+    if (limits) {
+      setLimitForm(limits);
+    }
+  }, [limits]);
 
   const handleChange =
     (field: keyof GatewayConfig) => (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,6 +78,12 @@ export default function SystemAdminPage() {
     }
   };
 
+  const handleLimitReset = () => {
+    if (limits) {
+      setLimitForm(limits);
+    }
+  };
+
   const handleSave = async () => {
     if (!form) return;
     try {
@@ -77,6 +99,40 @@ export default function SystemAdminPage() {
   };
 
   const disabled = loading || saving || !form;
+  const limitsDisabled = limitsLoading || limitsSaving || !limitForm;
+
+  const handleLimitChange =
+    (field: keyof ProviderLimits) => (event: React.ChangeEvent<HTMLInputElement>) => {
+      const value = field === "require_approval_for_shared_providers"
+        ? (event.target as HTMLInputElement).checked
+        : event.target.value;
+
+      setLimitForm((prev) => {
+        if (!prev) return prev;
+        if (field === "require_approval_for_shared_providers") {
+          return { ...prev, [field]: Boolean(value) };
+        }
+        const parsed = value === "" ? 0 : Number(value);
+        if (Number.isNaN(parsed)) {
+          return prev;
+        }
+        return { ...prev, [field]: parsed };
+      });
+    };
+
+  const handleLimitSave = async () => {
+    if (!limitForm) return;
+    try {
+      const updated = await saveLimits(limitForm);
+      setLimitForm(updated);
+      await refreshLimits();
+      toast.success(t("system.provider_limits.save_success"));
+    } catch (e: any) {
+      const message =
+        e?.response?.data?.detail || e?.message || t("system.provider_limits.save_error");
+      toast.error(message);
+    }
+  };
 
   const handleClearCache = async () => {
     if (!selectedSegments.length) {
@@ -169,6 +225,81 @@ export default function SystemAdminPage() {
             </Button>
             <Button onClick={handleSave} disabled={disabled}>
               {saving ? t("system.config.saving") : t("system.config.save")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Provider Limits */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("system.provider_limits.title")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {limitsError && (
+            <p className="text-sm text-red-500">
+              {t("system.provider_limits.load_error")}
+            </p>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("system.provider_limits.default_limit")}
+              </label>
+              <Input
+                type="number"
+                min={0}
+                value={limitForm?.default_user_private_provider_limit ?? ""}
+                onChange={handleLimitChange("default_user_private_provider_limit")}
+                disabled={limitsDisabled}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("system.provider_limits.default_hint")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("system.provider_limits.max_limit")}
+              </label>
+              <Input
+                type="number"
+                min={0}
+                value={limitForm?.max_user_private_provider_limit ?? ""}
+                onChange={handleLimitChange("max_user_private_provider_limit")}
+                disabled={limitsDisabled}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("system.provider_limits.max_hint")}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">
+                {t("system.provider_limits.require_approval")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("system.provider_limits.require_approval_hint")}
+              </p>
+            </div>
+            <Switch
+              checked={limitForm?.require_approval_for_shared_providers ?? false}
+              onCheckedChange={(checked) =>
+                setLimitForm((prev) =>
+                  prev
+                    ? { ...prev, require_approval_for_shared_providers: checked }
+                    : prev
+                )
+              }
+              disabled={limitsDisabled}
+            />
+          </div>
+          <div className="flex justify-end space-x-2 pt-4">
+            <Button variant="outline" onClick={handleLimitReset} disabled={limitsDisabled}>
+              {t("system.config.reset")}
+            </Button>
+            <Button onClick={handleLimitSave} disabled={limitsDisabled}>
+              {limitsSaving ? t("system.config.saving") : t("system.config.save")}
             </Button>
           </div>
         </CardContent>

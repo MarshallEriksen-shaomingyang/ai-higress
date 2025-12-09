@@ -281,6 +281,14 @@ export interface GatewayConfig {
   cache_ttl_seconds: number;
 }
 
+export interface ProviderLimits {
+  default_user_private_provider_limit: number;
+  max_user_private_provider_limit: number;
+  require_approval_for_shared_providers: boolean;
+}
+
+export type UpdateProviderLimitsRequest = ProviderLimits;
+
 // ============= 逻辑模型 / Logical Models =============
 
 export type ModelCapability =

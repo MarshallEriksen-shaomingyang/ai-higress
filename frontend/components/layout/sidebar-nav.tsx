@@ -124,7 +124,9 @@ export function SidebarNav() {
     return (
         <div className="w-64 border-r bg-sidebar h-screen flex flex-col">
             <div className="p-6 border-b">
-                <h1 className="text-2xl font-bold tracking-tight">{t("app.title")}</h1>
+                <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-80 transition-opacity">
+                    {t("app.title")}
+                </Link>
             </div>
 
             <div className="flex-1 overflow-y-auto py-6">

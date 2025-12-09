@@ -221,6 +221,34 @@ class UserProviderResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    shared_user_ids: list[UUID] | None = Field(
+        default=None,
+        description="被授权使用该提供商的用户 ID 列表（仅所有者/管理员可见）",
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProviderSharedUsersUpdateRequest(BaseModel):
+    """更新 Provider 私有分享列表的请求模型。"""
+
+    user_ids: list[UUID] = Field(
+        default_factory=list,
+        description="允许使用该 Provider 的用户 ID 列表，留空则仅所有者可用",
+    )
+
+    @model_validator(mode="after")
+    def deduplicate(self) -> "ProviderSharedUsersUpdateRequest":
+        # 保持顺序不重要，去重即可
+        self.user_ids = list(dict.fromkeys(self.user_ids))
+        return self
+
+
+class ProviderSharedUsersResponse(BaseModel):
+    provider_id: str
+    visibility: str
+    shared_user_ids: list[UUID]
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -561,6 +589,8 @@ __all__ = [
     "ProviderReviewRequest",
     "ProviderSubmissionRequest",
     "ProviderSubmissionResponse",
+    "ProviderSharedUsersResponse",
+    "ProviderSharedUsersUpdateRequest",
     "ProviderValidationResult",
     "ProviderVisibilityUpdateRequest",
     "PermissionResponse",

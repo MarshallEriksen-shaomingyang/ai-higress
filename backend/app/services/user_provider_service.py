@@ -4,17 +4,20 @@ import re
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
-from app.models import Provider, ProviderAPIKey
+from app.models import Provider, ProviderAPIKey, ProviderAllowedUser
+from app.schemas.notification import NotificationCreateRequest
 from app.schemas.provider_control import (
     UserProviderCreateRequest,
     UserProviderUpdateRequest,
 )
 from app.services.encryption import encrypt_secret
+from app.services.notification_service import create_notification
+from app.services.user_service import get_user_by_id
 
 
 class UserProviderServiceError(RuntimeError):
@@ -131,7 +134,7 @@ def list_private_providers(session: Session, owner_id: UUID) -> List[Provider]:
     """列出指定用户的所有私有 Provider。"""
     stmt: Select[tuple[Provider]] = select(Provider).where(
         Provider.owner_id == owner_id,
-        Provider.visibility == "private",
+        Provider.visibility.in_(("private", "restricted")),
     )
     return list(session.execute(stmt).scalars().all())
 
@@ -143,7 +146,7 @@ def get_private_provider_by_id(
 ) -> Optional[Provider]:
     stmt: Select[tuple[Provider]] = select(Provider).where(
         Provider.owner_id == owner_id,
-        Provider.visibility == "private",
+        Provider.visibility.in_(("private", "restricted")),
         Provider.provider_id == provider_id,
     )
     return session.execute(stmt).scalars().first()
@@ -223,17 +226,152 @@ def count_user_private_providers(session: Session, owner_id: UUID) -> int:
     stmt = (
         select(func.count())
         .select_from(Provider)
-        .where(Provider.owner_id == owner_id, Provider.visibility == "private")
+        .where(
+            Provider.owner_id == owner_id,
+            Provider.visibility.in_(("private", "restricted")),
+        )
     )
     return int(session.execute(stmt).scalar_one() or 0)
+
+
+def list_providers_shared_with_user(session: Session, user_id: UUID) -> list[Provider]:
+    """列出通过私有分享授权给该用户的 Provider（不包含自己创建的）。"""
+    stmt: Select[tuple[Provider]] = (
+        select(Provider)
+        .join(
+            ProviderAllowedUser,
+            ProviderAllowedUser.provider_uuid == Provider.id,
+        )
+        .where(
+            Provider.visibility == "restricted",
+            ProviderAllowedUser.user_id == user_id,
+            Provider.owner_id != user_id,
+        )
+    )
+    return list(session.execute(stmt).scalars().all())
+
+
+def get_accessible_provider_ids(
+    session: Session,
+    user_id: UUID,
+) -> set[str]:
+    """返回当前用户可访问的 Provider ID 集合，用于路由过滤。"""
+    user = get_user_by_id(session, user_id)
+    if user is None:
+        return set()
+    if user.is_superuser:
+        stmt = select(Provider.provider_id)
+        return set(session.execute(stmt).scalars().all())
+
+    shared_exists = (
+        select(ProviderAllowedUser.id)
+        .where(
+            ProviderAllowedUser.provider_uuid == Provider.id,
+            ProviderAllowedUser.user_id == user_id,
+        )
+        .exists()
+    )
+    stmt = select(Provider.provider_id).where(
+        or_(
+            and_(Provider.visibility == "public", Provider.owner_id.is_(None)),
+            Provider.owner_id == user_id,
+            and_(Provider.visibility == "restricted", shared_exists),
+        )
+    )
+    return set(session.execute(stmt).scalars().all())
+
+
+def update_provider_shared_users(
+    session: Session,
+    owner_id: UUID,
+    provider_id: str,
+    user_ids: list[UUID],
+) -> Provider:
+    """更新私有 Provider 的共享列表并调整可见性。"""
+
+    provider = get_private_provider_by_id(session, owner_id, provider_id)
+    if provider is None:
+        raise UserProviderNotFoundError(
+            f"Private provider '{provider_id}' not found for user {owner_id}"
+        )
+
+    normalized: list[UUID] = []
+    seen: set[UUID] = set()
+    for raw in user_ids:
+        try:
+            uid = UUID(str(raw))
+        except (TypeError, ValueError):
+            raise UserProviderServiceError(f"非法的用户 ID: {raw}")
+        if uid == owner_id:
+            # 不需要显式授权所有者自己
+            continue
+        if uid in seen:
+            continue
+        normalized.append(uid)
+        seen.add(uid)
+
+    # 校验用户存在
+    missing = [uid for uid in normalized if get_user_by_id(session, uid) is None]
+    if missing:
+        missing_str = ", ".join(str(item) for item in missing)
+        raise UserProviderServiceError(f"以下用户不存在：{missing_str}")
+
+    existing_map = {link.user_id: link for link in provider.shared_users}
+    target_set = set(normalized)
+    added_user_ids = [uid for uid in target_set if uid not in existing_map]
+
+    # 删除已移除的授权
+    for link in list(provider.shared_users):
+        if link.user_id not in target_set:
+            provider.shared_users.remove(link)
+            session.delete(link)
+
+    # 新增授权
+    for uid in target_set:
+        if uid not in existing_map:
+            provider.shared_users.append(
+                ProviderAllowedUser(user_id=uid, provider_uuid=provider.id)
+            )
+
+    provider.visibility = "restricted" if target_set else "private"
+    session.add(provider)
+    session.commit()
+    session.refresh(provider)
+
+    if added_user_ids:
+        try:
+            create_notification(
+                session,
+                NotificationCreateRequest(
+                    title="私有提供商共享通知",
+                    content=(
+                        f"私有提供商 {provider.name}（ID: {provider.provider_id}）"
+                        "已向你开放访问权限。"
+                    ),
+                    level="info",
+                    target_type="users",
+                    target_user_ids=added_user_ids,
+                ),
+                creator_id=owner_id,
+            )
+        except Exception:  # pragma: no cover - 通知失败不影响共享
+            logger.exception(
+                "Failed to send share notification for provider %s to users %s",
+                provider.provider_id,
+                added_user_ids,
+            )
+    return provider
 
 
 __all__ = [
     "UserProviderServiceError",
     "UserProviderNotFoundError",
     "create_private_provider",
+    "get_accessible_provider_ids",
     "list_private_providers",
+    "list_providers_shared_with_user",
     "get_private_provider_by_id",
     "update_private_provider",
     "count_user_private_providers",
+    "update_provider_shared_users",
 ]

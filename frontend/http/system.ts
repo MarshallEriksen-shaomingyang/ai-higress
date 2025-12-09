@@ -1,5 +1,10 @@
 import { httpClient } from './client';
-import type { GatewayConfig, UpdateGatewayConfigRequest } from '@/lib/api-types';
+import type {
+  GatewayConfig,
+  ProviderLimits,
+  UpdateGatewayConfigRequest,
+  UpdateProviderLimitsRequest,
+} from '@/lib/api-types';
 
 // 系统管理相关接口
 export interface GenerateSecretKeyRequest {
@@ -104,4 +109,20 @@ export const systemService = {
     const response = await httpClient.put('/system/gateway-config', data);
     return response.data;
   },
+
+  // 获取 Provider 限制配置
+  getProviderLimits: async (): Promise<ProviderLimits> => {
+    const response = await httpClient.get('/system/provider-limits');
+    return response.data;
+  },
+
+  // 更新 Provider 限制配置
+  updateProviderLimits: async (
+    data: UpdateProviderLimitsRequest
+  ): Promise<ProviderLimits> => {
+    const response = await httpClient.put('/system/provider-limits', data);
+    return response.data;
+  },
 };
+
+export type { ProviderLimits, UpdateProviderLimitsRequest } from '@/lib/api-types';

@@ -10,14 +10,15 @@ runtime `ProviderConfig` schema used across the gateway.
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import SessionLocal
 from app.logging_config import logger
-from app.models import Provider
+from app.models import Provider, ProviderAllowedUser
 from app.schemas import ProviderAPIKey, ProviderConfig
 from app.services.encryption import decrypt_secret
 
@@ -202,7 +203,11 @@ def _build_provider_config(provider: Provider) -> ProviderConfig | None:
         return None
 
 
-def _load_providers_from_db(session: Session) -> list[Provider]:
+def _load_providers_from_db(
+    session: Session,
+    user_id: UUID | None = None,
+    is_superuser: bool = False,
+) -> list[Provider]:
     stmt = (
         select(Provider)
         .options(
@@ -211,20 +216,50 @@ def _load_providers_from_db(session: Session) -> list[Provider]:
         )
         .order_by(Provider.provider_id)
     )
+    if user_id is not None and not is_superuser:
+        shared_exists = (
+            select(ProviderAllowedUser.id)
+            .where(
+                ProviderAllowedUser.provider_uuid == Provider.id,
+                ProviderAllowedUser.user_id == user_id,
+            )
+            .exists()
+        )
+        stmt = stmt.where(
+            or_(
+                and_(Provider.visibility == "public", Provider.owner_id.is_(None)),
+                Provider.owner_id == user_id,
+                and_(Provider.visibility == "restricted", shared_exists),
+            )
+        )
     result = session.execute(stmt)
     return list(result.scalars().all())
 
 
-def load_provider_configs(session: Session | None = None) -> list[ProviderConfig]:
+def load_provider_configs(
+    session: Session | None = None,
+    *,
+    user_id: UUID | None = None,
+    is_superuser: bool = False,
+) -> list[ProviderConfig]:
     """
-    Load all providers from the database and convert them to ProviderConfig objects.
+    Load providers from the database and convert them to ProviderConfig objects.
+
+    当传入 user_id 且非超级管理员时，仅返回该用户可访问的 Provider：
+    - 全局公共 Provider（visibility=public 且无 owner）
+    - 用户自己创建的 Provider
+    - 通过私有分享授权给该用户的 Provider（visibility=restricted）
     """
     owns_session = False
     if session is None:
         session = SessionLocal()
         owns_session = True
     try:
-        providers = _load_providers_from_db(session)
+        providers = _load_providers_from_db(
+            session,
+            user_id=user_id,
+            is_superuser=is_superuser,
+        )
         configs: list[ProviderConfig] = []
         for provider in providers:
             cfg = _build_provider_config(provider)
@@ -238,6 +273,9 @@ def load_provider_configs(session: Session | None = None) -> list[ProviderConfig
 
 def load_providers_with_configs(
     session: Session | None = None,
+    *,
+    user_id: UUID | None = None,
+    is_superuser: bool = False,
 ) -> list[tuple[Provider, ProviderConfig]]:
     """
     Load providers and keep their ORM objects for downstream persistence needs.
@@ -252,7 +290,11 @@ def load_providers_with_configs(
         session = SessionLocal()
         owns_session = True
     try:
-        providers = _load_providers_from_db(session)
+        providers = _load_providers_from_db(
+            session,
+            user_id=user_id,
+            is_superuser=is_superuser,
+        )
         pairs: list[tuple[Provider, ProviderConfig]] = []
         for provider in providers:
             cfg = _build_provider_config(provider)

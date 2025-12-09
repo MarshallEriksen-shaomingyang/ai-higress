@@ -41,6 +41,7 @@ export interface Provider {
   responses_path: string | null;
   supported_api_styles: string[] | null;
   static_models: any[] | null;
+  shared_user_ids?: string[] | null;
   api_keys?: ProviderApiKey[];
   created_at: string;
   updated_at: string;
@@ -88,6 +89,16 @@ export interface ProviderModelAlias {
   alias: string | null;
 }
 
+export interface ProviderSharedUsersResponse {
+  provider_id: string;
+  visibility: ProviderVisibility;
+  shared_user_ids: string[];
+}
+
+export interface UpdateProviderSharedUsersRequest {
+  user_ids: string[];
+}
+
 export interface SDKVendorsResponse {
   vendors: SdkVendor[];
   total: number;
@@ -133,6 +144,7 @@ export interface MetricsResponse {
 // 用户可用提供商响应
 export interface UserAvailableProvidersResponse {
   private_providers: Provider[];
+  shared_providers: Provider[];
   public_providers: Provider[];
   total: number;
 }
@@ -189,7 +201,7 @@ export const providerService = {
    */
   getUserAvailableProviders: async (
     userId: string,
-    visibility?: 'all' | 'private' | 'public'
+    visibility?: 'all' | 'private' | 'public' | 'shared'
   ): Promise<UserAvailableProvidersResponse> => {
     const params = visibility ? { visibility } : {};
     const response = await httpClient.get(`/users/${userId}/providers`, { params });
@@ -316,6 +328,31 @@ export const providerService = {
   ): Promise<ProviderModelPricing> => {
     const response = await httpClient.get(
       `/admin/providers/${providerId}/models/${encodeURIComponent(modelId)}/pricing`
+    );
+    return response.data;
+  },
+
+  /**
+   * 查询或更新私有 Provider 的授权用户列表
+   */
+  getProviderSharedUsers: async (
+    userId: string,
+    providerId: string
+  ): Promise<ProviderSharedUsersResponse> => {
+    const response = await httpClient.get(
+      `/users/${userId}/private-providers/${providerId}/shared-users`
+    );
+    return response.data;
+  },
+
+  updateProviderSharedUsers: async (
+    userId: string,
+    providerId: string,
+    data: UpdateProviderSharedUsersRequest
+  ): Promise<ProviderSharedUsersResponse> => {
+    const response = await httpClient.put(
+      `/users/${userId}/private-providers/${providerId}/shared-users`,
+      data
     );
     return response.data;
   },

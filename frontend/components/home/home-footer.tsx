@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n-context";
+import { DASHBOARD_PATH, DOCS_URL, GITHUB_URL } from "./home-links";
 
 export function HomeFooter() {
   const { t } = useI18n();
@@ -14,13 +15,23 @@ export function HomeFooter() {
             {t("home.footer_copyright")}
           </p>
           <div className="flex gap-6 text-sm text-muted-foreground">
-            <Link href="/dashboard/overview" className="hover:text-foreground transition-colors">
+            <Link href={DASHBOARD_PATH} className="hover:text-foreground transition-colors">
               {t("home.footer_console")}
             </Link>
-            <Link href="#" className="hover:text-foreground transition-colors">
+            <Link
+              href={DOCS_URL}
+              className="hover:text-foreground transition-colors"
+              target="_blank"
+              rel="noreferrer"
+            >
               {t("home.footer_docs")}
             </Link>
-            <Link href="#" className="hover:text-foreground transition-colors">
+            <Link
+              href={GITHUB_URL}
+              className="hover:text-foreground transition-colors"
+              target="_blank"
+              rel="noreferrer"
+            >
               {t("home.footer_github")}
             </Link>
           </div>

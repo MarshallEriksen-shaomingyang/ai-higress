@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n-context";
+import { DASHBOARD_PATH, DOCS_URL } from "./home-links";
 
 export function CTASection() {
   const { t } = useI18n();
@@ -17,13 +18,13 @@ export function CTASection() {
             {t("home.cta_description")}
           </p>
           <div className="flex gap-4 justify-center">
-            <Link href="/dashboard/overview">
+            <Link href={DASHBOARD_PATH}>
               <Button size="lg">
                 {t("home.btn_view_demo")}
               </Button>
             </Link>
-            <Link href="https://github.com" target="_blank">
-              <Button variant="outline" size="lg">
+            <Link href={DOCS_URL} target="_blank" rel="noreferrer">
+              <Button variant="outline" size="lg" className="gap-2">
                 {t("home.btn_view_docs")}
               </Button>
             </Link>

@@ -265,9 +265,16 @@ class ProviderResponse(BaseModel):
     chat_completions_path: str = Field(default="/v1/chat/completions", description="聊天完成路径")
     responses_path: str | None = Field(default=None, description="响应API路径")
     status: str = Field(default="healthy", description="提供商状态")
-    visibility: str = Field(default="public", description="可见性：public或private")
+    visibility: str = Field(
+        default="public",
+        description="可见性：public/private/restricted",
+    )
     owner_id: UUID | None = Field(default=None, description="所有者用户ID（私有提供商）")
     preset_id: str | None = Field(default=None, description="关联的预设ID")
+    shared_user_ids: list[UUID] | None = Field(
+        default=None,
+        description="被授权使用该 Provider 的用户 ID 列表（仅所有者/管理员可见）",
+    )
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
 

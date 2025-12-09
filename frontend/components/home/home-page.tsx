@@ -1,46 +1,101 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
+import { toast } from "sonner";
+import { ArrowRight, Zap, Shield, BarChart3, Network, Cpu, Key, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowRight, Zap, Shield, BarChart3, Network, Cpu, Key } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
+import { useGatewayConfig } from "@/lib/swr";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { DASHBOARD_PATH, DOCS_URL, GITHUB_URL } from "./home-links";
+import { TypewriterSuffixes } from "./typewriter-suffixes";
 
 export function HomePage() {
   const { t } = useI18n();
+  const { isAuthenticated } = useAuthStore();
+  const { config, loading: configLoading } = useGatewayConfig(isAuthenticated);
 
-  const features = [
-    {
-      icon: Network,
-      title: t("home.feature.smart_routing.title"),
-      description: t("home.feature.smart_routing.description"),
-    },
-    {
-      icon: Cpu,
-      title: t("home.feature.multi_model.title"),
-      description: t("home.feature.multi_model.description"),
-    },
-    {
-      icon: Zap,
-      title: t("home.feature.high_performance.title"),
-      description: t("home.feature.high_performance.description"),
-    },
-    {
-      icon: Shield,
-      title: t("home.feature.secure_reliable.title"),
-      description: t("home.feature.secure_reliable.description"),
-    },
-    {
-      icon: BarChart3,
-      title: t("home.feature.real_time_monitoring.title"),
-      description: t("home.feature.real_time_monitoring.description"),
-    },
-    {
-      icon: Key,
-      title: t("home.feature.unified_interface.title"),
-      description: t("home.feature.unified_interface.description"),
-    },
-  ];
+  const envBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const resolvedBaseUrl = config?.api_base_url?.trim() || envBaseUrl;
+  const displayBaseUrl = configLoading && !config ? "…" : resolvedBaseUrl;
+
+  const features = useMemo(
+    () => [
+      {
+        icon: Network,
+        title: t("home.feature.smart_routing.title"),
+        description: t("home.feature.smart_routing.description"),
+      },
+      {
+        icon: Cpu,
+        title: t("home.feature.multi_model.title"),
+        description: t("home.feature.multi_model.description"),
+      },
+      {
+        icon: Zap,
+        title: t("home.feature.high_performance.title"),
+        description: t("home.feature.high_performance.description"),
+      },
+      {
+        icon: Shield,
+        title: t("home.feature.secure_reliable.title"),
+        description: t("home.feature.secure_reliable.description"),
+      },
+      {
+        icon: BarChart3,
+        title: t("home.feature.real_time_monitoring.title"),
+        description: t("home.feature.real_time_monitoring.description"),
+      },
+      {
+        icon: Key,
+        title: t("home.feature.unified_interface.title"),
+        description: t("home.feature.unified_interface.description"),
+      },
+    ],
+    [t],
+  );
+
+  const apiSuffixes = useMemo(
+    () => [
+      {
+        path: "/v1/chat/completions",
+        description: t("home.api_card.suffix.chat"),
+      },
+      {
+        path: "/v1/responses",
+        description: t("home.api_card.suffix.responses"),
+      },
+      {
+        path: "/models",
+        description: t("home.api_card.suffix.models"),
+      },
+      {
+        path: "/v1/messages",
+        description: t("home.api_card.suffix.messages"),
+      },
+    ],
+    [t],
+  );
+
+  const handleCopyBaseUrl = async () => {
+    try {
+      if (navigator?.clipboard) {
+        await navigator.clipboard.writeText(resolvedBaseUrl);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = resolvedBaseUrl;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      toast.success(t("home.api_card.copy_success"));
+    } catch (error) {
+      toast.error(t("home.api_card.copy_failed"));
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -57,7 +112,7 @@ export function HomePage() {
             {t("home.description")}
           </p>
           <div className="flex gap-4 justify-center pt-4">
-            <Link href="/dashboard/overview">
+            <Link href={DASHBOARD_PATH}>
               <Button size="lg" className="gap-2">
                 {t("home.btn_enter_console")}
                 <ArrowRight className="w-4 h-4" />
@@ -70,6 +125,49 @@ export function HomePage() {
             </Link>
           </div>
         </div>
+      </section>
+
+      {/* API Access */}
+      <section className="container mx-auto px-6 pb-12 max-w-5xl">
+        <Card className="border bg-muted/30">
+          <CardContent className="p-6 space-y-6">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground uppercase tracking-wide">
+                {t("home.api_card.title")}
+              </p>
+              <h2 className="text-2xl font-semibold">{t("home.api_card.subtitle")}</h2>
+              <p className="text-sm text-muted-foreground">
+                {t("home.api_card.description")}
+              </p>
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">{t("home.api_card.base_label")}</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleCopyBaseUrl}
+                    aria-label={t("home.api_card.copy")}
+                  >
+                    <Copy className="h-4 w-4" />
+                    {t("home.api_card.copy")}
+                  </Button>
+                </div>
+                <code className="block rounded border bg-background px-4 py-3 font-mono text-sm break-all">
+                  {displayBaseUrl}
+                </code>
+              </div>
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{t("home.api_card.suffix_label")}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <TypewriterSuffixes suffixes={apiSuffixes} />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       {/* Features Grid */}
@@ -130,30 +228,6 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="container mx-auto px-6 py-16 max-w-4xl">
-        <Card className="bg-muted/50">
-          <CardContent className="pt-12 pb-12 text-center">
-            <h2 className="text-3xl font-bold mb-4">{t("home.cta_title")}</h2>
-            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
-              {t("home.cta_description")}
-            </p>
-            <div className="flex gap-4 justify-center">
-              <Link href="/dashboard/overview">
-                <Button size="lg">
-                  {t("home.btn_view_demo")}
-                </Button>
-              </Link>
-              <Link href="https://github.com" target="_blank">
-                <Button variant="outline" size="lg">
-                  {t("home.btn_view_docs")}
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
       {/* Footer */}
       <footer className="border-t mt-16">
         <div className="container mx-auto px-6 py-8 max-w-6xl">
@@ -162,13 +236,23 @@ export function HomePage() {
               {t("home.footer_copyright")}
             </p>
             <div className="flex gap-6 text-sm text-muted-foreground">
-              <Link href="/dashboard/overview" className="hover:text-foreground transition-colors">
+              <Link href={DASHBOARD_PATH} className="hover:text-foreground transition-colors">
                 {t("home.footer_console")}
               </Link>
-              <Link href="#" className="hover:text-foreground transition-colors">
+              <Link
+                href={DOCS_URL}
+                className="hover:text-foreground transition-colors"
+                target="_blank"
+                rel="noreferrer"
+              >
                 {t("home.footer_docs")}
               </Link>
-              <Link href="#" className="hover:text-foreground transition-colors">
+              <Link
+                href={GITHUB_URL}
+                className="hover:text-foreground transition-colors"
+                target="_blank"
+                rel="noreferrer"
+              >
                 {t("home.footer_github")}
               </Link>
             </div>

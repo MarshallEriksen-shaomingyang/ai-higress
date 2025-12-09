@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useActiveProvidersOverview } from "@/lib/swr/use-overview-metrics";
+import { useI18n } from "@/lib/i18n-context";
 import {
   ResponsiveContainer,
   BarChart,
@@ -14,9 +15,18 @@ import {
 } from "recharts";
 
 export function ProviderPerformance() {
+  const { t } = useI18n();
   const { data, loading } = useActiveProvidersOverview({
     time_range: "7d",
   });
+
+  const tooltipLabels = useMemo(
+    () => ({
+      latency: t("metrics.overview.tooltip.latency_p95"),
+      successRatePct: t("metrics.overview.tooltip.success_rate"),
+    }),
+    [t]
+  );
 
   const chartData = useMemo(() => {
     if (!data) {
@@ -35,16 +45,16 @@ export function ProviderPerformance() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Provider Performance</CardTitle>
+        <CardTitle>{t("metrics.overview.provider_performance")}</CardTitle>
       </CardHeader>
       <CardContent>
         {loading && !hasData ? (
           <div className="h-80 flex items-center justify-center text-muted-foreground">
-            Loading provider metrics...
+            {t("metrics.overview.provider_loading")}
           </div>
         ) : !hasData ? (
           <div className="h-80 flex items-center justify-center text-muted-foreground">
-            No provider metrics
+            {t("metrics.overview.provider_empty")}
           </div>
         ) : (
           <div className="h-80">
@@ -66,7 +76,7 @@ export function ProviderPerformance() {
                   tickLine={false}
                   axisLine={false}
                   label={{
-                    value: "P95 Latency (ms)",
+                    value: t("metrics.overview.axis.latency_p95"),
                     angle: -90,
                     position: "insideLeft",
                     fontSize: 11,
@@ -80,18 +90,18 @@ export function ProviderPerformance() {
                   tickLine={false}
                   axisLine={false}
                 />
-                <Tooltip
-                  contentStyle={{ fontSize: 12 }}
-                  formatter={(value, name) => {
-                    if (name === "latency") {
-                      return [`${value} ms`, "P95 Latency"];
-                    }
-                    if (name === "successRatePct") {
-                      return [`${(Number(value)).toFixed(1)}%`, "Success Rate"];
-                    }
-                    return [value, name];
-                  }}
-                />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12 }}
+                    formatter={(value, name) => {
+                      if (name === "latency") {
+                        return [`${value} ms`, tooltipLabels.latency];
+                      }
+                      if (name === "successRatePct") {
+                        return [`${(Number(value)).toFixed(1)}%`, tooltipLabels.successRatePct];
+                      }
+                      return [value, tooltipLabels[name as keyof typeof tooltipLabels] ?? name];
+                    }}
+                  />
                 <Bar
                   yAxisId="left"
                   dataKey="latency"

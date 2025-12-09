@@ -8,11 +8,12 @@ import type {
 
 interface UseProvidersOptions {
   userId: string | null;
-  visibility?: 'all' | 'private' | 'public';
+  visibility?: 'all' | 'private' | 'public' | 'shared';
 }
 
 interface UseProvidersResult {
   privateProviders: Provider[];
+  sharedProviders: Provider[];
   publicProviders: Provider[];
   allProviders: Provider[];
   total: number;
@@ -23,11 +24,11 @@ interface UseProvidersResult {
 }
 
 /**
- * 使用 SWR 获取用户可用的提供商列表（私有 + 公共）
+ * 使用 SWR 获取用户可用的提供商列表（私有 + 授权 + 公共）
  * 
  * @param options - 配置选项
  * @param options.userId - 用户 ID
- * @param options.visibility - 可见性过滤：'all' | 'private' | 'public'
+ * @param options.visibility - 可见性过滤：'all' | 'private' | 'public' | 'shared'
  * 
  * @example
  * ```tsx
@@ -56,11 +57,13 @@ export const useProviders = (options: UseProvidersOptions): UseProvidersResult =
   );
 
   const privateProviders = data?.private_providers ?? [];
+  const sharedProviders = data?.shared_providers ?? [];
   const publicProviders = data?.public_providers ?? [];
-  const allProviders = [...privateProviders, ...publicProviders];
+  const allProviders = [...privateProviders, ...sharedProviders, ...publicProviders];
 
   return {
     privateProviders,
+    sharedProviders,
     publicProviders,
     allProviders,
     total: data?.total ?? 0,

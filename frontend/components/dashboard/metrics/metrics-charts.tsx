@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useOverviewActivity } from "@/lib/swr/use-overview-metrics";
+import { useI18n } from "@/lib/i18n-context";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -26,9 +27,20 @@ function formatDateLabel(iso: string): string {
 
 export function MetricsCharts() {
   // 这里用最近 7 天的全局时间序列作为指标图的数据源
+  const { t } = useI18n();
   const { activity, loading } = useOverviewActivity({
     time_range: "7d",
   });
+
+  const tooltipLabels = useMemo(
+    () => ({
+      total: t("metrics.overview.tooltip.requests"),
+      errors: t("metrics.overview.tooltip.errors"),
+      latencyP95: t("metrics.overview.tooltip.latency_p95"),
+      errorRatePct: t("metrics.overview.tooltip.error_rate"),
+    }),
+    [t]
+  );
 
   const chartData = useMemo(() => {
     if (!activity) {
@@ -54,16 +66,16 @@ export function MetricsCharts() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Request Volume</CardTitle>
+          <CardTitle>{t("metrics.overview.request_volume")}</CardTitle>
         </CardHeader>
         <CardContent>
           {loading && !hasData ? (
             <div className="h-64 flex items-center justify-center text-muted-foreground">
-              Loading metrics...
+              {t("metrics.overview.loading")}
             </div>
           ) : !hasData ? (
             <div className="h-64 flex items-center justify-center text-muted-foreground">
-              No metrics data
+              {t("metrics.overview.empty")}
             </div>
           ) : (
             <div className="h-64">
@@ -85,12 +97,12 @@ export function MetricsCharts() {
                     contentStyle={{ fontSize: 12 }}
                     formatter={(value, name) => {
                       if (name === "total") {
-                        return [value, "Requests"];
+                        return [value, tooltipLabels.total];
                       }
                       if (name === "errors") {
-                        return [value, "Errors"];
+                        return [value, tooltipLabels.errors];
                       }
-                      return [value, name];
+                      return [value, tooltipLabels[name as keyof typeof tooltipLabels] ?? name];
                     }}
                   />
                   <Area
@@ -122,16 +134,16 @@ export function MetricsCharts() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Latency & Error Rate</CardTitle>
+          <CardTitle>{t("metrics.overview.latency_error_rate")}</CardTitle>
         </CardHeader>
         <CardContent>
           {loading && !hasData ? (
             <div className="h-64 flex items-center justify-center text-muted-foreground">
-              Loading metrics...
+              {t("metrics.overview.loading")}
             </div>
           ) : !hasData ? (
             <div className="h-64 flex items-center justify-center text-muted-foreground">
-              No metrics data
+              {t("metrics.overview.empty")}
             </div>
           ) : (
             <div className="h-64">
@@ -161,12 +173,12 @@ export function MetricsCharts() {
                     contentStyle={{ fontSize: 12 }}
                     formatter={(value, name) => {
                       if (name === "latencyP95") {
-                        return [`${value} ms`, "P95 Latency"];
+                        return [`${value} ms`, tooltipLabels.latencyP95];
                       }
                       if (name === "errorRatePct") {
-                        return [`${(Number(value)).toFixed(2)}%`, "Error Rate"];
+                        return [`${(Number(value)).toFixed(2)}%`, tooltipLabels.errorRatePct];
                       }
-                      return [value, name];
+                      return [value, tooltipLabels[name as keyof typeof tooltipLabels] ?? name];
                     }}
                   />
                   <Line

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from app.models import Provider, ProviderSubmission, User
+from app.models import Notification, Provider, ProviderSubmission, User
 from app.schemas import ProviderValidationResult, UserProviderCreateRequest
+from app.schemas.provider_control import ProviderSubmissionRequest
+from app.services.provider_submission_service import create_submission
 from app.services.user_permission_service import UserPermissionService
 from app.services.user_provider_service import create_private_provider
 from tests.utils import jwt_auth_headers, seed_user_and_key
@@ -215,3 +217,51 @@ def test_admin_list_submissions_uses_submission_router(client, db_session):
     assert isinstance(data, list)
     ids = {item["id"] for item in data}
     assert str(submission.id) in ids
+
+
+def test_submission_review_broadcasts_notification(client, db_session):
+    admin = _create_user(
+        db_session,
+        "notify-admin",
+        "notify-admin@example.com",
+        is_superuser=True,
+    )
+    submitter = _create_user(
+        db_session,
+        "notify-user",
+        "notify-user@example.com",
+        is_superuser=False,
+    )
+
+    submission = create_submission(
+        db_session,
+        submitter.id,
+        ProviderSubmissionRequest(
+            name="Broadcast Provider",
+            provider_id="broadcast-provider",
+            base_url="https://broadcast.example.com",
+            provider_type="native",
+            api_key="sk-test-broadcast",
+        ),
+    )
+
+    notifications_after_submit = db_session.execute(select(Notification)).scalars().all()
+    assert len(notifications_after_submit) == 1
+    assert notifications_after_submit[0].title == "共享提供商提交已创建"
+
+    headers = jwt_auth_headers(str(admin.id))
+    resp = client.put(
+        f"/providers/submissions/{submission.id}/review",
+        headers=headers,
+        json={"approved": True, "review_notes": "ok"},
+    )
+    assert resp.status_code == 200
+
+    db_session.expire_all()
+    notifications_after_review = db_session.execute(select(Notification)).scalars().all()
+    assert len(notifications_after_review) == 3
+    titles = {n.title for n in notifications_after_review}
+    assert "共享提供商审核通过" in titles
+    broadcast = [n for n in notifications_after_review if n.target_type == "all"]
+    assert len(broadcast) == 1
+    assert submission.provider_id in (broadcast[0].content or "")

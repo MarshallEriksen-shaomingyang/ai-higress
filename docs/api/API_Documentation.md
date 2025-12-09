@@ -1856,11 +1856,11 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 > 提示：当客户端使用带有 `allowed_provider_ids` 限制的 API 密钥访问 `/models` 或聊天接口时，
 > 实际可用的模型和路由候选 Provider 会根据该密钥允许的 `provider_id` 自动过滤。
 
-### 6. 获取用户可用的提供商列表（私有 + 公共）
+### 6. 获取用户可用的提供商列表（私有 + 授权 + 公共）
 
 **接口**: `GET /users/{user_id}/providers`
 
-**描述**: 获取用户可用的所有提供商列表，包括用户的私有提供商和系统的公共提供商。
+**描述**: 获取用户可用的所有提供商列表，包括用户的私有提供商、被授权的受限（restricted）提供商以及系统的公共提供商。
 
 **认证**: JWT 令牌
 
@@ -1868,6 +1868,7 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 - `visibility` (可选): 过滤可见性
   - `all`: 全部可用（默认）
   - `private`: 仅私有提供商
+  - `shared`: 仅被授权的提供商（visibility=restricted）
   - `public`: 仅公共提供商
 
 **响应**:
@@ -1884,6 +1885,23 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
       "sdk_vendor": null,
       "visibility": "private",
       "owner_id": "uuid",
+      "shared_user_ids": ["other-user-uuid"],
+      "status": "healthy",
+      "created_at": "datetime",
+      "updated_at": "datetime"
+    }
+  ],
+  "shared_providers": [
+    {
+      "id": "uuid",
+      "provider_id": "friend-provider",
+      "name": "好友共享的 Provider",
+      "base_url": "https://friend.example.com",
+      "provider_type": "native",
+      "transport": "http",
+      "sdk_vendor": null,
+      "visibility": "restricted",
+      "owner_id": "owner-uuid",
       "status": "healthy",
       "created_at": "datetime",
       "updated_at": "datetime"
@@ -2037,6 +2055,37 @@ cost_credits = ceil(total_tokens / 1000 * CREDITS_BASE_PER_1K_TOKENS * effective
 **错误响应**:
 - 404: Private provider 不存在  
 - 403: 无权修改其他用户的私有提供商
+
+---
+
+#### 9.1 查询/更新私有分享用户列表
+
+**接口（查询）**: `GET /users/{user_id}/private-providers/{provider_id}/shared-users`  
+**接口（更新）**: `PUT /users/{user_id}/private-providers/{provider_id}/shared-users`
+
+**描述**: 查看或设置该私有 Provider 授权给哪些用户使用（可见性自动切换为 `restricted`）。仅支持 Provider 拥有者或超级管理员。
+
+**认证**: JWT 令牌
+
+**更新请求体**:
+```json
+{
+  "user_ids": ["uuid", "uuid2"] // 留空表示仅自己可见，visibility 将恢复为 private
+}
+```
+
+**响应**（查询/更新一致）:
+```json
+{
+  "provider_id": "my-openai-proxy",
+  "visibility": "restricted",
+  "shared_user_ids": ["uuid", "uuid2"]
+}
+```
+
+**错误响应**:
+- 404: Private provider 不存在  
+- 403: 无权管理其他用户的私有提供商  
 
 ---
 

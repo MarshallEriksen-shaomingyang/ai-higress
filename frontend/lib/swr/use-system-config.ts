@@ -1,4 +1,9 @@
-import type { GatewayConfig, UpdateGatewayConfigRequest } from '@/lib/api-types';
+import type {
+  GatewayConfig,
+  ProviderLimits,
+  UpdateGatewayConfigRequest,
+  UpdateProviderLimitsRequest,
+} from '@/lib/api-types';
 import { useApiGet, useApiPut } from './hooks';
 
 /**
@@ -7,14 +12,14 @@ import { useApiGet, useApiPut } from './hooks';
  * - GET /system/gateway-config
  * - PUT /system/gateway-config
  */
-export function useGatewayConfig() {
+export function useGatewayConfig(enabled: boolean = true) {
   const {
     data,
     error,
     loading,
     validating,
     refresh,
-  } = useApiGet<GatewayConfig>('/system/gateway-config', {
+  } = useApiGet<GatewayConfig>(enabled ? '/system/gateway-config' : null, {
     strategy: 'static',
   });
 
@@ -36,3 +41,37 @@ export function useGatewayConfig() {
   };
 }
 
+/**
+ * 获取和更新 Provider 限制配置的 Hook。
+ *
+ * - GET /system/provider-limits
+ * - PUT /system/provider-limits
+ */
+export function useProviderLimits() {
+  const {
+    data,
+    error,
+    loading,
+    validating,
+    refresh,
+  } = useApiGet<ProviderLimits>('/system/provider-limits', {
+    strategy: 'static',
+  });
+
+  const {
+    trigger,
+    submitting,
+    error: updateError,
+  } = useApiPut<ProviderLimits, UpdateProviderLimitsRequest>('/system/provider-limits');
+
+  return {
+    limits: data,
+    loading,
+    validating,
+    error,
+    refresh,
+    saveLimits: trigger,
+    saving: submitting,
+    saveError: updateError,
+  };
+}

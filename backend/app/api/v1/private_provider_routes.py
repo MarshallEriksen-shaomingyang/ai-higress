@@ -15,6 +15,8 @@ from app.schemas import (
     UserProviderResponse,
     UserProviderUpdateRequest,
     UserQuotaResponse,
+    ProviderSharedUsersResponse,
+    ProviderSharedUsersUpdateRequest,
 )
 from app.services.encryption import decrypt_secret
 from app.services.provider_submission_service import (
@@ -31,6 +33,7 @@ from app.services.user_provider_service import (
     get_private_provider_by_id,
     list_private_providers,
     update_private_provider,
+    update_provider_shared_users,
 )
 from app.settings import settings
 
@@ -158,6 +161,64 @@ def update_private_provider_endpoint(
         raise bad_request(str(exc))
 
     return UserProviderResponse.model_validate(provider)
+
+
+@router.get(
+    "/users/{user_id}/private-providers/{provider_id}/shared-users",
+    response_model=ProviderSharedUsersResponse,
+)
+def list_provider_shared_users_endpoint(
+    user_id: UUID,
+    provider_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderSharedUsersResponse:
+    """查询私有 Provider 的授权用户列表。"""
+
+    _ensure_can_manage_user(current_user, user_id)
+
+    provider = get_private_provider_by_id(db, user_id, provider_id)
+    if provider is None:
+        raise not_found(f"Private provider '{provider_id}' not found")
+
+    shared_ids = [link.user_id for link in provider.shared_users]
+    return ProviderSharedUsersResponse(
+        provider_id=provider.provider_id,
+        visibility=provider.visibility,
+        shared_user_ids=shared_ids,
+    )
+
+
+@router.put(
+    "/users/{user_id}/private-providers/{provider_id}/shared-users",
+    response_model=ProviderSharedUsersResponse,
+)
+def update_provider_shared_users_endpoint(
+    user_id: UUID,
+    provider_id: str,
+    payload: ProviderSharedUsersUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderSharedUsersResponse:
+    """设置或清空私有 Provider 的授权用户列表。"""
+
+    _ensure_can_manage_user(current_user, user_id)
+
+    try:
+        provider = update_provider_shared_users(
+            db, user_id, provider_id, payload.user_ids
+        )
+    except UserProviderNotFoundError:
+        raise not_found(f"Private provider '{provider_id}' not found")
+    except UserProviderServiceError as exc:
+        raise bad_request(str(exc))
+
+    shared_ids = [link.user_id for link in provider.shared_users]
+    return ProviderSharedUsersResponse(
+        provider_id=provider.provider_id,
+        visibility=provider.visibility,
+        shared_user_ids=shared_ids,
+    )
 
 
 @router.post(

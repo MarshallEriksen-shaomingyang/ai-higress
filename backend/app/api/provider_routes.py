@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, Query
@@ -33,6 +34,7 @@ from app.provider.discovery import ensure_provider_models_cached
 from app.provider.health import HealthStatus
 from app.provider.sdk_selector import list_registered_sdk_vendors
 from app.services.provider_health_service import get_health_status_with_fallback
+from app.services.user_provider_service import get_accessible_provider_ids
 from app.storage.redis_service import get_routing_metrics
 
 router = APIRouter(
@@ -92,7 +94,7 @@ def _ensure_can_edit_provider_models(
     确保当前用户有权限修改指定 Provider 下的模型配置（计费 / 映射等）。
 
     - 超级管理员：可以管理所有 Provider；
-    - 普通用户：仅能管理自己私有 Provider（visibility=private 且 owner_id 匹配）。
+    - 普通用户：仅能管理自己私有/受限 Provider（visibility=private/restricted 且 owner_id 匹配）。
     """
     # 超级管理员直接放行
     if current_user.is_superuser:
@@ -114,7 +116,7 @@ def _ensure_can_edit_provider_models(
         raise not_found(f"Provider '{provider_id_slug}' not found")
 
     if (
-        getattr(provider, "visibility", "public") == "private"
+        getattr(provider, "visibility", "public") in {"private", "restricted"}
         and provider.owner_id is not None
         and str(provider.owner_id) == current_user.id
     ):
@@ -130,16 +132,31 @@ async def list_supported_sdk_vendors() -> SDKVendorsResponse:
 
 
 @router.get("/providers", response_model=ProvidersResponse)
-async def list_providers() -> ProvidersResponse:
+async def list_providers(
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProvidersResponse:
     """Return all configured providers stored in the database."""
-    providers = load_provider_configs()
+    providers = load_provider_configs(
+        session=db,
+        user_id=UUID(current_user.id),
+        is_superuser=current_user.is_superuser,
+    )
     sanitized = [_sanitize_provider_config(p) for p in providers]
     return ProvidersResponse(providers=sanitized, total=len(sanitized))
 
 
 @router.get("/providers/{provider_id}", response_model=ProviderConfig)
-async def get_provider(provider_id: str) -> ProviderConfig:
+async def get_provider(
+    provider_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderConfig:
     """Return configuration of a single provider."""
+    if not current_user.is_superuser:
+        allowed = get_accessible_provider_ids(db, UUID(current_user.id))
+        if provider_id not in allowed:
+            raise forbidden("无权查看该提供商配置")
     cfg = get_provider_config(provider_id)
     if cfg is None:
         raise not_found(f"Provider '{provider_id}' not found")

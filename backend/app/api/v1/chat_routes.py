@@ -63,6 +63,7 @@ from app.services.metrics_service import (
     stream_sdk_with_metrics,
     stream_upstream_with_metrics,
 )
+from app.services.user_provider_service import get_accessible_provider_ids
 from app.storage.redis_service import get_logical_model
 from app.upstream import UpstreamStreamError, detect_request_format
 
@@ -154,6 +155,10 @@ async def chat_completions(
             },
         )
 
+    accessible_provider_ids = get_accessible_provider_ids(db, current_key.user_id)
+    if not accessible_provider_ids:
+        raise forbidden("当前用户暂无可用的提供商")
+
     # Try multi-provider logical-model routing first. When a LogicalModel
     # named `lookup_model_id` exists in Redis, we use the routing
     # scheduler to pick a concrete upstream provider+model.
@@ -191,6 +196,9 @@ async def chat_completions(
             lookup_model_id=lookup_model_id,
             api_style=api_style,
             db=db,
+            allowed_provider_ids=accessible_provider_ids,
+            user_id=current_key.user_id,
+            is_superuser=current_key.is_superuser,
         )
 
         if logical_model is not None:
@@ -221,14 +229,13 @@ async def chat_completions(
             preferred_region=None,
             exclude_providers=[],
         )
+        candidates = [
+            cand
+            for cand in candidates
+            if cand.upstream.provider_id in accessible_provider_ids
+        ]
         if not candidates:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=(
-                    f"No upstreams available for logical model "
-                    f"'{logical_model.logical_id}'"
-                ),
-            )
+            raise forbidden("当前用户无权访问该模型的任何可用 Provider")
 
         try:
             candidates = _enforce_allowed_providers(candidates, current_key)

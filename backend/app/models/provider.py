@@ -9,6 +9,7 @@ from app.db.types import JSONBCompat
 
 from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from .provider_preset import ProviderPreset
+from .provider_allowed_user import ProviderAllowedUser
 
 
 class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -94,6 +95,13 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         passive_deletes=True,
         lazy="selectin",
     )
+    shared_users: Mapped[list["ProviderAllowedUser"]] = relationship(
+        "ProviderAllowedUser",
+        back_populates="provider",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+    )
     owner: Mapped["User"] = relationship("User")
     preset: Mapped[ProviderPreset | None] = relationship(
         "ProviderPreset", back_populates="providers", foreign_keys=[preset_uuid]
@@ -104,6 +112,11 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         if self.preset is None:
             return None
         return self.preset.preset_id
+
+    @property
+    def shared_user_ids(self) -> list[UUID]:
+        """辅助属性：返回已授权的用户 ID 列表。"""
+        return [link.user_id for link in self.shared_users or []]
 
 
 __all__ = ["Provider"]

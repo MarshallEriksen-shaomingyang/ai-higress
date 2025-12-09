@@ -12,6 +12,7 @@ from .provider_preset import ProviderPreset
 from .provider_api_key import ProviderAPIKey
 from .provider_model import ProviderModel
 from .provider_submission import ProviderSubmission
+from .provider_allowed_user import ProviderAllowedUser
 from .provider_metrics_history import ProviderRoutingMetricsHistory
 from .registration_window import RegistrationWindow, RegistrationWindowStatus
 from .notification import Notification, NotificationReceipt
@@ -37,6 +38,7 @@ __all__ = [
     "ProviderAPIKey",
     "ProviderModel",
     "ProviderSubmission",
+    "ProviderAllowedUser",
     "Notification",
     "NotificationReceipt",
     "GatewayConfig",

@@ -220,6 +220,7 @@ export function MyProvidersPageClient({
       ) : (
         <ProvidersTableEnhanced
           privateProviders={filteredProviders}
+          sharedProviders={[]}
           publicProviders={[]}
           isLoading={isRefreshing}
           onEdit={handleEdit}

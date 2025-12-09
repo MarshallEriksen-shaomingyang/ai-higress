@@ -47,7 +47,7 @@ def _ensure_can_manage_provider_keys(
     确保当前用户有权限管理指定 Provider 的上游 API 密钥。
 
     - 超级管理员：可以管理所有 Provider；
-    - 普通用户：仅能管理自己私有 Provider 的密钥（owner_id 匹配且 visibility=private）。
+    - 普通用户：仅能管理自己私有/受限 Provider 的密钥（owner_id 匹配且 visibility 为 private/restricted）。
     """
     # 超级管理员直接放行
     if current_user.is_superuser:
@@ -63,10 +63,8 @@ def _ensure_can_manage_provider_keys(
         raise not_found(f"Provider {provider_id} not found")
 
     # 仅允许该私有 Provider 的所有者管理密钥
-    if (
-        getattr(provider, "visibility", "public") == "private"
-        and provider.owner_id is not None
-        and str(provider.owner_id) == current_user.id
+    if getattr(provider, "visibility", "public") in {"private", "restricted"} and (
+        provider.owner_id is not None and str(provider.owner_id) == current_user.id
     ):
         return
 

@@ -766,10 +766,10 @@ async def test_dynamic_logical_model_uses_alias_mapping(monkeypatch):
     fake_provider = _FakeProvider()
 
     # 只返回一个 provider+config 对
-    def _load_providers_with_configs(session=None):
+    def _load_providers_with_configs(session=None, **kwargs):
         return [(fake_provider, cfg)]
 
-    def _load_provider_configs(session=None):
+    def _load_provider_configs(session=None, **kwargs):
         return [cfg]
 
     async def _ensure_models_cached(client, redis, provider, *, ttl_seconds: int = 300):

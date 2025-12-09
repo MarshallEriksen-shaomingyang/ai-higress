@@ -1378,6 +1378,9 @@ async def _build_dynamic_logical_model_for_group(
     lookup_model_id: str | None,
     api_style: str,
     db: Session | None = None,
+    allowed_provider_ids: set[str] | None = None,
+    user_id: UUID | None = None,
+    is_superuser: bool = False,
 ) -> LogicalModel | None:
     """
     Build a transient LogicalModel for cases where no static logical
@@ -1401,11 +1404,18 @@ async def _build_dynamic_logical_model_for_group(
     # stored in provider_models.alias.
     alias_map: dict[str, dict[str, str]] = {}
     if db is not None:
-        providers_with_configs = load_providers_with_configs(session=db)
+        providers_with_configs = load_providers_with_configs(
+            session=db,
+            user_id=user_id,
+            is_superuser=is_superuser,
+        )
         providers = [cfg for (_provider, cfg) in providers_with_configs]
         alias_map = _build_model_alias_map(providers_with_configs)
     else:
-        providers = load_provider_configs()
+        providers = load_provider_configs(
+            user_id=user_id,
+            is_superuser=is_superuser,
+        )
 
     if not providers:
         return None
@@ -1418,6 +1428,8 @@ async def _build_dynamic_logical_model_for_group(
     now = time.time()
 
     for cfg in providers:
+        if allowed_provider_ids is not None and cfg.id not in allowed_provider_ids:
+            continue
         provider_alias_map = alias_map.get(cfg.id) or {}
         try:
             items = await ensure_provider_models_cached(client, redis, cfg)

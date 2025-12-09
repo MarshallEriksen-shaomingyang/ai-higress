@@ -196,6 +196,26 @@ def approve_submission(
         logger.exception(
             "Failed to send approval notification for submission %s", submission_id
         )
+
+    # 广播公共池新增通知
+    try:
+        create_notification(
+            session,
+            NotificationCreateRequest(
+                title="公共池新增提供商",
+                content=(
+                    f"共享提供商 {submission.name}（ID: {submission.provider_id}）已通过审核，"
+                    "现已加入公共池供所有用户使用。"
+                ),
+                level="success",
+                target_type="all",
+            ),
+            creator_id=reviewer_id,
+        )
+    except Exception:  # pragma: no cover
+        logger.exception(
+            "Failed to broadcast approval notification for submission %s", submission_id
+        )
     return provider
 
 

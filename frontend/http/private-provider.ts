@@ -39,7 +39,7 @@ export interface PrivateProvider {
   last_check?: string;
   preset_uuid?: string;
   owner_id: string;
-  visibility: 'public' | 'private';
+  visibility: 'public' | 'private' | 'restricted';
   created_at: string;
   updated_at: string;
 }

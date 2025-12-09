@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
+import { DASHBOARD_PATH } from "./home-links";
 
 export function HeroSection() {
   const { t } = useI18n();
@@ -21,7 +22,7 @@ export function HeroSection() {
           {t("home.description")}
         </p>
         <div className="flex gap-4 justify-center pt-4">
-          <Link href="/dashboard/overview">
+          <Link href={DASHBOARD_PATH}>
             <Button size="lg" className="gap-2">
               {t("home.btn_enter_console")}
               <ArrowRight className="w-4 h-4" />
