@@ -52,11 +52,11 @@ export function ActiveProviders({ timeRange = "today" }: ActiveProvidersProps) {
   }, [data]);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">{t("dashboard.active_providers")}</h2>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-medium">{t("dashboard.active_providers")}</h2>
         <a href="/dashboard/metrics/providers">
-          <Button size="sm" variant="outline">
+          <Button size="sm" variant="ghost" className="h-8 text-xs">
             {t("overview.view_all")}
           </Button>
         </a>

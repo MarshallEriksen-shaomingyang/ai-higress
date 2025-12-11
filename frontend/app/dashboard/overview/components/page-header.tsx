@@ -10,9 +10,9 @@ export function PageHeader() {
   const { t } = useI18n();
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-2">{t("overview.title")}</h1>
-      <p className="text-muted-foreground">{t("overview.subtitle")}</p>
+    <div className="space-y-1">
+      <h1 className="text-2xl font-light tracking-tight">{t("overview.title")}</h1>
+      <p className="text-sm text-muted-foreground">{t("overview.subtitle")}</p>
     </div>
   );
 }

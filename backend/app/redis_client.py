@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
+
 try:
     from redis.asyncio import Redis
 except ModuleNotFoundError:  # pragma: no cover - allows running without redis installed
@@ -56,7 +58,8 @@ async def redis_set_json(
     """
     Store a JSON-serialisable value under the given key with optional TTL.
     """
-    data = json.dumps(value, ensure_ascii=False)
+    serialisable_value = jsonable_encoder(value)
+    data = json.dumps(serialisable_value, ensure_ascii=False)
     if ttl_seconds is not None:
         await redis.set(key, data, ex=ttl_seconds)
     else:

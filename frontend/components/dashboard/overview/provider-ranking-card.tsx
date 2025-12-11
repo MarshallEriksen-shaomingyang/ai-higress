@@ -152,105 +152,65 @@ export function ProviderRankingCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle>{t("provider_ranking.title")}</CardTitle>
-            <CardDescription>{t("overview.from_last_month")}</CardDescription>
-          </div>
-          <Badge variant="outline" className="flex items-center gap-1">
-            <TrendingUp className="h-3 w-3" />
-            {providers.length} {t("overview.active_providers")}
+    <Card className="border-none shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-medium">{t("provider_ranking.title")}</CardTitle>
+          <Badge variant="outline" className="h-5 text-xs font-normal">
+            {providers.length}
           </Badge>
         </div>
       </CardHeader>
 
       <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">{t("provider_ranking.rank")}</TableHead>
-                <TableHead>{t("provider_ranking.provider")}</TableHead>
-                <TableHead className="text-right">
-                  {t("provider_ranking.consumption")}
-                </TableHead>
-                <TableHead className="text-right">
-                  {t("provider_ranking.requests")}
-                </TableHead>
-                <TableHead className="text-right">
-                  {t("provider_ranking.success_rate")}
-                </TableHead>
-                <TableHead className="text-right">
-                  {t("provider_ranking.percentage")}
-                </TableHead>
-                {/* Latency 列可选 */}
-                {rankedProviders.some((p) => p.latency_p95_ms !== undefined) && (
-                  <TableHead className="text-right">
-                    {t("provider_ranking.latency")}
-                  </TableHead>
-                )}
-                <TableHead className="w-20"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rankedProviders.map((provider) => (
-                <TableRow
-                  key={provider.provider_id}
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => handleProviderClick(provider)}
-                  data-testid={`provider-row-${provider.provider_id}`}
+        <div className="space-y-3">
+          {rankedProviders.slice(0, 5).map((provider) => (
+            <div
+              key={provider.provider_id}
+              className="flex items-center gap-4 py-2 cursor-pointer hover:bg-muted/30 -mx-2 px-2 rounded transition-colors"
+              onClick={() => handleProviderClick(provider)}
+              data-testid={`provider-row-${provider.provider_id}`}
+            >
+              {/* 排名 */}
+              <div className="w-6 text-center">
+                <span className="text-sm font-light text-muted-foreground">
+                  {provider.rank}
+                </span>
+              </div>
+
+              {/* Provider 名称 */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {provider.provider_name}
+                </p>
+              </div>
+
+              {/* 消耗 */}
+              <div className="text-right">
+                <p className="text-sm font-light">
+                  {formatNumber(provider.total_consumption)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {formatPercentage(provider.percentage_of_total)}%
+                </p>
+              </div>
+
+              {/* 成功率 */}
+              <div className="w-16 text-right">
+                <span
+                  className={`text-xs font-medium ${
+                    provider.success_rate >= 0.95
+                      ? "text-foreground"
+                      : provider.success_rate >= 0.9
+                        ? "text-muted-foreground"
+                        : "text-destructive"
+                  }`}
                 >
-                  <TableCell className="font-medium">{provider.rank}</TableCell>
-                  <TableCell className="font-medium">
-                    {provider.provider_name}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatNumber(provider.total_consumption)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatNumber(provider.request_count)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge
-                      variant={
-                        provider.success_rate >= 0.95
-                          ? "default"
-                          : provider.success_rate >= 0.9
-                            ? "secondary"
-                            : "destructive"
-                      }
-                    >
-                      {formatPercentage(provider.success_rate)}%
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatPercentage(provider.percentage_of_total)}%
-                  </TableCell>
-                  {rankedProviders.some((p) => p.latency_p95_ms !== undefined) && (
-                    <TableCell className="text-right">
-                      {provider.latency_p95_ms !== undefined
-                        ? `${provider.latency_p95_ms}ms`
-                        : "-"}
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleProviderClick(provider);
-                      }}
-                    >
-                      {t("provider_ranking.view_details")}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  {formatPercentage(provider.success_rate)}%
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

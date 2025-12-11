@@ -230,7 +230,10 @@ export function useOverviewEvents(
 export type UseOverviewEventsResult = ReturnType<typeof useOverviewEvents>;
 
 /**
- * 获取成功率趋势数据（按时间序列和 Provider 维度）
+ * 获取成功率趋势数据（复用 timeseries 端点）
+ * 
+ * 注意：此 hook 复用 /metrics/overview/timeseries 端点，
+ * 该端点已包含成功率计算所需的所有数据点。
  */
 export function useSuccessRateTrend(
   params: UseOverviewMetricsParams = {}
@@ -248,14 +251,14 @@ export function useSuccessRateTrend(
     validating,
     refresh,
   } = useApiGet<OverviewMetricsTimeSeries>(
-    "/metrics/overview/success-rate-trend",
+    "/metrics/overview/timeseries",
     {
-      strategy: "static",
+      strategy: "frequent",
       params: {
         time_range,
         transport,
         is_stream,
-        bucket: "day",
+        bucket: "minute",
       },
     }
   );

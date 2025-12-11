@@ -17,29 +17,26 @@ export function StatCard({ titleKey, value, change, trend, icon: Icon }: StatCar
   const { t } = useI18n();
 
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              {t(titleKey)}
-            </p>
-            <h3 className="text-3xl font-bold mt-2">{value}</h3>
-          </div>
-          <div className="p-2 bg-muted rounded">
-            <Icon className="w-5 h-5" />
-          </div>
+    <Card className="border-none shadow-sm">
+      <CardContent className="pt-6 pb-6">
+        <div className="flex items-start justify-between mb-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">
+            {t(titleKey)}
+          </p>
+          <Icon className="w-4 h-4 text-muted-foreground" />
         </div>
-        <div className="mt-4 flex items-center text-sm">
-          {trend === "up" ? (
-            <ArrowUpRight className="w-4 h-4 text-green-600 mr-1" />
-          ) : (
-            <ArrowDownRight className="w-4 h-4 text-red-600 mr-1" />
-          )}
-          <span className={trend === "up" ? "text-green-600" : "text-red-600"}>
-            {change}
-          </span>
-          <span className="text-muted-foreground ml-2">{t("overview.from_last_month")}</span>
+        <div className="space-y-2">
+          <h3 className="text-4xl font-light tracking-tight">{value}</h3>
+          <div className="flex items-center text-xs">
+            {trend === "up" ? (
+              <ArrowUpRight className="w-3 h-3 text-muted-foreground mr-1" />
+            ) : (
+              <ArrowDownRight className="w-3 h-3 text-muted-foreground mr-1" />
+            )}
+            <span className="text-muted-foreground">
+              {change}
+            </span>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -57,30 +54,28 @@ export function ProviderStatusCard({ name, statusKey, latency, success }: Provid
   const { t } = useI18n();
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-none shadow-sm">
+      <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{name}</CardTitle>
+          <CardTitle className="text-sm font-medium">{name}</CardTitle>
           <span
-            className={`px-2 py-1 rounded text-xs font-medium ${
+            className={`h-2 w-2 rounded-full ${
               statusKey === "overview.status_healthy"
-                ? "bg-green-100 text-green-700"
-                : "bg-yellow-100 text-yellow-700"
+                ? "bg-green-500"
+                : "bg-yellow-500"
             }`}
-          >
-            {t(statusKey)}
-          </span>
+          />
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">{t("table.latency")}</span>
-            <span className="font-medium">{latency}</span>
+        <div className="space-y-3 text-xs">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground uppercase tracking-wide">{t("table.latency")}</span>
+            <span className="font-light">{latency}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">{t("table.success_rate")}</span>
-            <span className="font-medium">{success}</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground uppercase tracking-wide">{t("table.success_rate")}</span>
+            <span className="font-light">{success}</span>
           </div>
         </div>
       </CardContent>

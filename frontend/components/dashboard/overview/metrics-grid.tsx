@@ -39,10 +39,10 @@ interface MetricsGridProps {
  */
 export function MetricsGrid({
   children,
-  gap = "gap-6",
+  gap = "gap-4",
 }: MetricsGridProps) {
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${gap}`}>
+    <div className={`grid grid-cols-1 lg:grid-cols-3 ${gap}`}>
       {children}
     </div>
   );

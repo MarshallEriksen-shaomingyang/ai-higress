@@ -89,14 +89,14 @@ export function FilterBar({
   }
 
   return (
-    <div className="flex items-center gap-4 p-4 bg-background border border-border rounded-lg">
+    <div className="flex items-center justify-between">
       {/* 时间范围选择器 */}
-      <div className="flex items-center gap-2">
-        <label className="text-sm font-medium text-foreground">
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-muted-foreground uppercase tracking-wider">
           {t("filter.time_range.label")}
-        </label>
+        </span>
         <Select value={timeRange} onValueChange={handleTimeRangeChange}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-32 h-8 text-sm border-none shadow-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -108,10 +108,6 @@ export function FilterBar({
           </SelectContent>
         </Select>
       </div>
-
-      {/* 预留空间用于未来的 Provider 和 Model 筛选器 */}
-      {/* Provider 筛选器可在此添加 */}
-      {/* Model 筛选器可在此添加 */}
     </div>
   );
 }

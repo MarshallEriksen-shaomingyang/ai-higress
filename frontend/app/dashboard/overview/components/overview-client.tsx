@@ -8,10 +8,8 @@ import { MetricsGrid } from "@/components/dashboard/overview/metrics-grid";
 import { ConsumptionSummaryCard } from "@/components/dashboard/overview/consumption-summary-card";
 import { ProviderRankingCard } from "@/components/dashboard/overview/provider-ranking-card";
 import { SuccessRateTrendCard } from "@/components/dashboard/overview/success-rate-trend-card";
-import { QuickActionsBar } from "@/components/dashboard/overview/quick-actions-bar";
 import { ActiveProviders } from "@/components/dashboard/overview/active-providers";
 import { RecentActivity } from "@/components/dashboard/overview/recent-activity";
-import { GatewayConfigCard } from "@/components/dashboard/overview/gateway-config-card";
 
 /**
  * 客户端包装器组件
@@ -47,13 +45,7 @@ export function OverviewClient() {
 
         {/* 成功率趋势卡片 */}
         <SuccessRateTrendCard timeRange={timeRange} />
-
-        {/* 快捷操作栏 */}
-        <QuickActionsBar />
       </MetricsGrid>
-
-      {/* Gateway configuration (visible to all logged-in users) */}
-      <GatewayConfigCard />
 
       {/* Active Providers */}
       <ActiveProviders timeRange={timeRange} />

@@ -111,7 +111,7 @@ export function StatsGrid({ timeRange = "today" }: StatsGridProps) {
   }, [overview]);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {cards.map((stat, index) => (
         <StatCard
           key={index}

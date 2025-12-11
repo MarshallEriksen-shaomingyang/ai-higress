@@ -19,7 +19,7 @@ import { OverviewClient } from "./components/overview-client";
  */
 export default function OverviewPage() {
   return (
-    <div className="space-y-8 max-w-7xl">
+    <div className="space-y-6 max-w-7xl">
       {/* 页面头部 - 客户端组件（用于 i18n） */}
       <PageHeader />
 

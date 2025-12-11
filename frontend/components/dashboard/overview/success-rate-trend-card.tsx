@@ -14,16 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n-context";
 import { useSuccessRateTrend } from "@/lib/swr/use-overview-metrics";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import { LineChart, Line, XAxis, YAxis } from "recharts";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 
 interface SuccessRateTrendCardProps {
   timeRange?: string;
@@ -181,16 +173,13 @@ export function SuccessRateTrendCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle>{t("success_rate_trend.title")}</CardTitle>
-            <CardDescription>{t("overview.from_last_month")}</CardDescription>
-          </div>
+    <Card className="border-none shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-medium">{t("success_rate_trend.title")}</CardTitle>
           {successRateStats.hasAnomaly && (
-            <Badge variant="destructive" className="flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
+            <Badge variant="destructive" className="h-5 text-xs">
+              <AlertCircle className="h-3 w-3 mr-1" />
               {t("success_rate_trend.anomaly_detected")}
             </Badge>
           )}
@@ -198,15 +187,15 @@ export function SuccessRateTrendCard({
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* 成功率统计指标 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* 成功率统计指标 - 极简网格 */}
+        <div className="grid grid-cols-2 gap-6">
           {/* 当前成功率 */}
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
               {t("success_rate_trend.overall_rate")}
             </p>
             <p
-              className={`text-2xl font-bold ${
+              className={`text-3xl font-light tracking-tight ${
                 successRateStats.current < anomalyThreshold * 100
                   ? "text-destructive"
                   : ""
@@ -217,22 +206,22 @@ export function SuccessRateTrendCard({
           </div>
 
           {/* 平均成功率 */}
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
               {t("chart.average")}
             </p>
-            <p className="text-2xl font-bold">
+            <p className="text-3xl font-light tracking-tight">
               {formatPercentage(successRateStats.average)}
             </p>
           </div>
 
           {/* 最低成功率 */}
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
               {t("chart.minimum")}
             </p>
             <p
-              className={`text-2xl font-bold ${
+              className={`text-3xl font-light tracking-tight ${
                 successRateStats.min < anomalyThreshold * 100
                   ? "text-destructive"
                   : ""
@@ -243,70 +232,73 @@ export function SuccessRateTrendCard({
           </div>
 
           {/* 最高成功率 */}
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
               {t("chart.maximum")}
             </p>
-            <p className="text-2xl font-bold">
+            <p className="text-3xl font-light tracking-tight">
               {formatPercentage(successRateStats.max)}
             </p>
           </div>
         </div>
 
-        {/* 异常警告 */}
+        {/* 异常警告 - 极简样式 */}
         {successRateStats.hasAnomaly && (
-          <div className="flex items-center gap-3 p-3 bg-destructive/10 rounded-lg border border-destructive/20">
-            <TrendingDown className="h-5 w-5 text-destructive flex-shrink-0" />
-            <p className="text-sm text-destructive">
+          <div className="flex items-start gap-3 py-3 border-t border-destructive/20">
+            <TrendingDown className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-destructive leading-relaxed">
               {t("success_rate_trend.low_success_rate")}
             </p>
           </div>
         )}
 
-        {/* 成功率趋势折线图 */}
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">
-            {t("success_rate_trend.provider_breakdown")}
-          </p>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ left: 8, right: 16, top: 16 }}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                />
-                <XAxis
-                  dataKey="timestamp"
-                  tick={{ fontSize: 12 }}
-                  stroke="var(--color-muted-foreground)"
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  label={{ value: "%", angle: -90, position: "insideLeft" }}
-                  tick={{ fontSize: 12 }}
-                  stroke="var(--color-muted-foreground)"
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--color-background)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "0.5rem",
-                  }}
-                  formatter={(value) => [formatPercentage(value as number), t("chart.success_rate")]}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="overall"
-                  name={t("chart.overall_success_rate")}
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        {/* 成功率趋势折线图 - 极简样式 */}
+        <div className="pt-4 border-t">
+          <ChartContainer
+            config={{
+              overall: {
+                label: t("chart.success_rate"),
+                color: "hsl(var(--foreground))",
+              },
+            }}
+            className="h-28 w-full"
+          >
+            <LineChart 
+              data={chartData}
+              margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+            >
+              <XAxis
+                dataKey="timestamp"
+                tick={{ fontSize: 9 }}
+                axisLine={false}
+                tickLine={false}
+                height={20}
+              />
+              <YAxis
+                domain={[0, 100]}
+                tick={{ fontSize: 9 }}
+                axisLine={false}
+                tickLine={false}
+                width={30}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => `${formatPercentage(value as number)}`}
+                  />
+                }
+                cursor={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="overall"
+                stroke="var(--color-overall)"
+                strokeWidth={1.5}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ChartContainer>
         </div>
       </CardContent>
     </Card>
