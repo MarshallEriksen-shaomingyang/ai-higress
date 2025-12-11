@@ -24,10 +24,13 @@ backend/logs/
 
 # Backend environment
 backend/.env
+backend/.env.deploy
 
 # Root environment (for Docker Compose)
 .env
 .env.deploy
+docker-compose-deploy.yml
+docker-compose.override.yml
 
 # Celery Beat scheduler database
 backend/celerybeat-schedule

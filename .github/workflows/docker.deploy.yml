@@ -1,0 +1,50 @@
+name: Deploy Backend (Docker)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "镜像标签（默认 latest）"
+        required: false
+        default: "latest"
+      deploy_path:
+        description: "服务器上的部署目录（存放 docker-compose.yml 和 .env）"
+        required: false
+        default: "/opt/apiproxy"
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_NAMESPACE }}/apiproxy-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.repository.private == true
+
+    steps:
+      - name: Checkout (for completeness)
+        uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+            IMAGE="${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag || 'latest' }}"
+            DEPLOY_PATH="${{ github.event.inputs.deploy_path || '/opt/apiproxy' }}"
+
+            echo "Using image: $IMAGE"
+            echo "Deploy path: $DEPLOY_PATH"
+
+            mkdir -p "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
+
+            # 需提前在服务器放好 docker-compose.yml/.env，并将 api/celery_* 指向远程镜像
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+            docker pull "$IMAGE"
+            docker compose pull api celery_worker celery_beat
+            docker compose up -d api celery_worker celery_beat
