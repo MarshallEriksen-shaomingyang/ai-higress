@@ -53,7 +53,21 @@
 
 ## 🚀 快速开始
 
-### 后端
+### Docker 镜像（推荐新手）
+1) 准备环境变量：
+```bash
+cp .env.example .env
+# 按需修改 .env（尤其是数据库/Redis 密码、SECRET_KEY、OAuth 回调等）
+```
+2) 启动开发栈（后端镜像 + PostgreSQL + Redis，可选前端容器）：
+```bash
+IMAGE_TAG=latest docker compose -f docker-compose.develop.yml --env-file .env up -d
+```
+3) 访问：
+- 后端 API: http://127.0.0.1:8000
+- 前端管理台（启用 frontend 服务时）: http://127.0.0.1:3000
+
+### 后端源码开发
 1) 克隆仓库：
 ```bash
 git clone https://github.com/MarshallEriksen-Neura/AI-Higress-Gateway.git
@@ -65,9 +79,9 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e backend/
 ```
-3) 启动 Redis（本地）：
+3) 启动 PostgreSQL + Redis（Docker）：
 ```bash
-docker-compose up -d
+docker compose -f docker-compose.develop.yml --env-file .env up -d postgres redis
 ```
 4) 运行网关（开发模式）：
 ```bash
@@ -93,7 +107,7 @@ bun dev       # 启动 Next.js 管理台
   - `DATABASE_URL`（postgresql+psycopg）
   - `SECRET_KEY`
   - `LOG_LEVEL`（默认 INFO）
-  - `ENABLE_AUTO_MIGRATION`（开发可选自动迁移）
+  - `AUTO_APPLY_DB_MIGRATIONS`（默认 true）+ `ENABLE_AUTO_MIGRATION=true`（显式开启实际迁移）
 
 ## 🧪 测试
 后端使用 `pytest` / `pytest-asyncio`（AI Agent 不代跑，请本地执行）：
@@ -103,9 +117,11 @@ pytest
 ```
 
 ## 🐳 容器化
-```bash
-docker-compose up -d  # 后端 + Redis
-```
+- 开发/本地试用（镜像模式）：  
+  `IMAGE_TAG=latest docker compose -f docker-compose.develop.yml --env-file .env up -d`
+- 生产部署（镜像模式）：  
+  `IMAGE_TAG=latest docker compose -f docker-compose-deploy.yml --env-file .env up -d`
+
 生产建议在 CI 先执行 `alembic upgrade head`，并结合外部 Redis、监控与日志。
 
 ## 📂 目录速览
@@ -114,7 +130,9 @@ docker-compose up -d  # 后端 + Redis
 - `docs/`：设计与 API 文档（接口变更时同步更新 `docs/api/`）。
 - `scripts/`：脚本工具（模型检查、批量任务、密钥生成示例等）。
 - `tests/`：pytest 测试套件（含异步用例）。
-- `docker-compose.yml`：本地开发编排（含 Redis）。
+- `docker-compose.develop.yml`：开发/本地试用编排（后端镜像 + PostgreSQL/Redis + 可选前端）。
+- `docker-compose-deploy.yml`：生产部署编排（仅后端镜像 + PostgreSQL/Redis）。
+- `docker-compose.images.yml`：纯镜像后端编排（不含前端，可用于快速试跑）。
 
 ## 📚 文档与规范
 - API 文档：`docs/api/`

@@ -40,23 +40,22 @@ services:
       apiproxy-net:
         ipv4_address: 172.20.0.10
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
 
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: apiproxy-api:latest
+    # 开发环境后端默认直接拉取预构建镜像（与 deploy 一致），避免新手本地构建
+    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-api
     restart: unless-stopped
     env_file:
-      - backend/.env.local
+      - .env
     volumes:
       - ./backend/logs:/app/logs
-      # 开发模式:挂载源代码实现热重载
+      - ./backend/media:/app/backend/media
+      # 开发模式: 挂载源代码实现热重载（可选）
       - ./backend/app:/app/app:ro
       - ./backend/main.py:/app/main.py:ro
     depends_on:
@@ -79,16 +78,14 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: apiproxy-api:latest
+    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-celery-worker
     restart: unless-stopped
     env_file:
-      - backend/.env.local
+      - .env
     volumes:
       - ./backend/logs:/app/logs
+      - ./backend/media:/app/backend/media
       - ./backend/app:/app/app:ro
       - ./backend/main.py:/app/main.py:ro
     depends_on:
@@ -102,16 +99,14 @@ services:
     command: celery -A app.celery_app.celery_app worker -l info
 
   celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: apiproxy-api:latest
+    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-celery-beat
     restart: unless-stopped
     env_file:
-      - backend/.env.local
+      - .env
     volumes:
       - ./backend/logs:/app/logs
+      - ./backend/media:/app/backend/media
       - ./backend/app:/app/app:ro
       - ./backend/main.py:/app/main.py:ro
     depends_on:

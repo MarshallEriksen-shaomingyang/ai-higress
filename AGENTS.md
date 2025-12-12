@@ -11,7 +11,8 @@
 ## Build, Run & Test Commands
 - Create env & install: `python -m venv .venv && source .venv/bin/activate && pip install .`
 - Local dev server: `apiproxy` or `uvicorn main:app --reload`.
-- Docker stack (app + Redis): `docker-compose up -d` / `docker-compose down`.
+- Docker 开发/本地试用栈（镜像）：`IMAGE_TAG=latest docker compose -f docker-compose.develop.yml --env-file .env up -d` / `docker compose -f docker-compose.develop.yml down`.
+- Docker 生产部署栈（镜像）：`IMAGE_TAG=latest docker compose -f docker-compose-deploy.yml --env-file .env up -d`.
 - Run tests: `pytest` (or `pytest tests/test_chat_greeting.py` for a single file).
 
 ## Coding Style & Naming Conventions

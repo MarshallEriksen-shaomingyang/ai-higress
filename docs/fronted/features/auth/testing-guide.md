@@ -9,11 +9,12 @@
 ### 1. 启动后端服务
 
 ```bash
-cd backend
-# 确保数据库和 Redis 已启动
-docker-compose up -d
+# 在仓库根目录确保数据库和 Redis 已启动（Docker）
+cp .env.example .env
+docker compose -f docker-compose.develop.yml --env-file .env up -d postgres redis
 
-# 启动后端 API
+# 本地启动后端 API（开发热重载）
+cd backend
 uvicorn main:app --reload
 ```
 

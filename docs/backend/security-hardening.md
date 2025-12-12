@@ -104,7 +104,7 @@ app.add_middleware(
 
 ### 2. 容器化安全
 
-#### Docker 配置 (`docker-compose.yml`)
+#### Docker 配置（`docker-compose.develop.yml` / `docker-compose-deploy.yml`）
 - **网络隔离**：独立的 bridge 网络（172.20.0.0/24）
 - **端口绑定**：数据库和 Redis 仅绑定到 127.0.0.1
 - **健康检查**：所有服务配置健康检查

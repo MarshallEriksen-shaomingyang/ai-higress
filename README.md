@@ -65,9 +65,10 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e backend/
 ```
-3) Local dev (hot-reload):
+3) Start Postgres + Redis (Docker):
 ```bash
-docker compose up -d  # uses docker-compose.yml, .env.local
+cp .env.example .env
+docker compose -f docker-compose.develop.yml --env-file .env up -d postgres redis
 ```
 4) Run API gateway (dev):
 ```bash
@@ -93,7 +94,7 @@ Env (frontend) is in `frontend/.env.example` (`NEXT_PUBLIC_API_BASE_URL` → bac
   - `DATABASE_URL` (postgresql+psycopg)
   - `SECRET_KEY`
   - `LOG_LEVEL` (default INFO)
-  - `ENABLE_AUTO_MIGRATION` (optional dev auto-upgrade)
+  - `AUTO_APPLY_DB_MIGRATIONS` (default true) + `ENABLE_AUTO_MIGRATION=true` (explicit opt-in to actually run migrations)
 
 ### 🧪 Testing (backend)
 We use `pytest` and `pytest-asyncio`. Run locally (AI agent will not run tests for you):
@@ -103,12 +104,13 @@ pytest
 ```
 
 ### 🐳 Docker Compose (dev vs deploy)
-- Dev: `docker compose up -d` (uses `docker-compose.yml`, env from `backend/.env.local`, mounts code, `--reload`).
-- Deploy: use `docker-compose-deploy.yml` + your `.env`/`.env.deploy`, with prebuilt image `marshalleriksen/apiproxy-api:<tag>` (see GitHub Actions workflow `Publish Backend Image`). Run:
+- Dev/local tryout (images):  
+  `IMAGE_TAG=latest docker compose -f docker-compose.develop.yml --env-file .env up -d`
+- Deploy (images): use `docker-compose-deploy.yml` + your `.env`/`.env.deploy`, with prebuilt image `marshalleriksen/apiproxy-api:<tag>` (see GitHub Actions workflow `Publish Backend Image`). Run:
 ```bash
 IMAGE_TAG=latest docker compose -f docker-compose-deploy.yml --env-file .env up -d
 ```
-Alembic migrations auto-run when `AUTO_APPLY_DB_MIGRATIONS=true` (default in `.env.example`); existing DBs should already have `alembic_version.version_num` widened to 128.
+Alembic migrations auto-run when `AUTO_APPLY_DB_MIGRATIONS=true` and `ENABLE_AUTO_MIGRATION=true` (see `.env.example`); existing DBs should already have `alembic_version.version_num` widened to 128.
 
 ### 🗺️ API Surface (high-level)
 - OpenAI-compatible gateway: `/v1/chat/completions`, `/v1/responses`, `/models`.
@@ -120,7 +122,9 @@ Alembic migrations auto-run when `AUTO_APPLY_DB_MIGRATIONS=true` (default in `.e
 - `docs/`: Design/API notes; keep API behavior in sync (`docs/api/`).
 - `scripts/`: Helper scripts (model listing, key ops, etc.).
 - `tests/`: Pytest suite (sync + async).
-- `docker-compose.yml`: Local stack (includes Redis).
+- `docker-compose.develop.yml`: Dev/local stack (prebuilt backend image + Postgres/Redis + optional frontend).
+- `docker-compose-deploy.yml`: Deploy stack (prebuilt backend image + Postgres/Redis).
+- `docker-compose.images.yml`: Image-only backend stack (no frontend).
 
 ### 📚 Documentation
 - API docs: `docs/api/`
@@ -192,7 +196,21 @@ MIT
 - 可观测性：用户/Provider 指标、成功率趋势、请求历史、会话审计片段。
 - 运维与管理：系统配置、通知、Provider 审核、网关健康检查。
 
-### 🚀 快速开始（后端）
+### 🚀 快速开始（Docker 镜像，推荐新手）
+1) 准备环境变量：
+```bash
+cp .env.example .env
+# 按需修改 .env（尤其是数据库/Redis 密码、SECRET_KEY、OAuth 回调等）
+```
+2) 启动开发栈（后端镜像 + PostgreSQL + Redis，可选前端容器）：
+```bash
+IMAGE_TAG=latest docker compose -f docker-compose.develop.yml --env-file .env up -d
+```
+3) 访问：
+- 后端 API: http://127.0.0.1:8000
+- 前端管理台（启用 frontend 服务时）: http://127.0.0.1:3000
+
+### 🚀 快速开始（后端源码开发）
 1) 克隆并进入目录：
 ```bash
 git clone https://github.com/MarshallEriksen-Neura/AI-Higress-Gateway.git
@@ -204,14 +222,14 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e backend/
 ```
-3) 启动 Redis（本地）：
+3) 启动 PostgreSQL + Redis（Docker）：
 ```bash
-docker-compose up -d
+docker compose -f docker-compose.develop.yml --env-file .env up -d postgres redis
 ```
 4) 开发模式运行网关：
 ```bash
 cd backend
-apiproxy  # 或 uvicorn main:app --reload
+uv run main.py  # 或 uvicorn main:app --reload
 ```
 
 ### 🖥️ 快速开始（前端）
@@ -232,7 +250,7 @@ bun dev       # 启动 Next.js 管理台
   - `DATABASE_URL`（postgresql+psycopg）
   - `SECRET_KEY`
   - `LOG_LEVEL`（默认 INFO）
-  - `ENABLE_AUTO_MIGRATION`（开发可选自动迁移）
+  - `AUTO_APPLY_DB_MIGRATIONS`（默认 true）+ `ENABLE_AUTO_MIGRATION=true`（显式开启实际迁移）
 
 ### 🧪 测试（后端）
 使用 `pytest` / `pytest-asyncio`：
@@ -243,9 +261,11 @@ pytest
 AI Agent 不会代跑测试，请本地执行并关注结果。
 
 ### 🐳 容器化
-```bash
-docker-compose up -d  # 启动后端 + Redis
-```
+- 开发/本地试用（镜像模式）：  
+  `IMAGE_TAG=latest docker compose -f docker-compose.develop.yml --env-file .env up -d`
+- 生产部署（镜像模式）：  
+  `IMAGE_TAG=latest docker compose -f docker-compose-deploy.yml --env-file .env up -d`
+
 生产发布建议在 CI 先执行 `alembic upgrade head`，并结合外部 Redis、监控与日志。
 
 ### 📂 仓库结构
@@ -254,7 +274,9 @@ docker-compose up -d  # 启动后端 + Redis
 - `docs/`：设计与 API 文档（修改接口时同步更新 `docs/api/`）。
 - `scripts/`：脚本工具（模型检查、批量任务、密钥生成示例等）。
 - `tests/`：pytest 测试套件（含异步用例）。
-- `docker-compose.yml`：本地开发编排（含 Redis）。
+- `docker-compose.develop.yml`：开发/本地试用编排（后端镜像 + PostgreSQL/Redis + 可选前端）。
+- `docker-compose-deploy.yml`：生产部署编排（仅后端镜像 + PostgreSQL/Redis）。
+- `docker-compose.images.yml`：纯镜像后端编排（不含前端，可用于快速试跑）。
 
 ### 📚 文档与规范
 - API 文档：`docs/api/`
