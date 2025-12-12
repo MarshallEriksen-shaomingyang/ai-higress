@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/images/logo.svg" alt="AI-Higress logo" width="360" />
+  <img src="docs/images/logo.svg" alt="AI-Higress logo" width="600" />
 </p>
 
 <div align="center">
 
 [![Release](https://img.shields.io/github/v/release/MarshallEriksen-Neura/AI-Higress-Gateway?label=release&style=flat-square)](https://github.com/MarshallEriksen-Neura/AI-Higress-Gateway/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/MarshallEriksen-Neura/AI-Higress-Gateway/test.yml?branch=main&style=flat-square)](https://github.com/MarshallEriksen-Neura/AI-Higress-Gateway/actions)
-[![License](https://img.shields.io/github/license/MarshallEriksen-Neura/AI-Higress-Gateway?style=flat-square)](https://github.com/MarshallEriksen-Neura/AI-Higress-Gateway/blob/main/LICENSE)
+[![Build](https://img.shields.io/github/actions/workflow/status/MarshallEriksen-Neura/AI-Higress-Gateway/backend.yml?branch=main&style=flat-square)](https://github.com/MarshallEriksen-Neura/AI-Higress-Gateway/actions)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/MarshallEriksen-Neura/AI-Higress-Gateway/blob/main/LICENSE)
 [![Stars](https://img.shields.io/github/stars/MarshallEriksen-Neura/AI-Higress-Gateway?style=flat-square)](https://github.com/MarshallEriksen-Neura/AI-Higress-Gateway/stargazers)
 
 </div>
@@ -31,17 +31,17 @@
 - 🧰 Dev UX: FastAPI backend + Next.js (App Router) admin UI, docker-compose one-click stack.
 
 <p align="center">
-  <img src="docs/images/architecture.svg" alt="Architecture diagram" width="780" />
+  <img src="docs/images/architecture.svg" alt="Architecture diagram" width="100%" />
 </p>
 
 ### 📸 Screenshots
 
 <p align="center">
-  <img src="docs/images/overview.png" alt="Dashboard overview" width="820" />
+  <img src="docs/images/overview.png" alt="Dashboard overview" width="100%" />
 </p>
 
 <p align="center">
-  <img src="docs/images/provider-overview.png" alt="Provider overview" width="820" />
+  <img src="docs/images/provider-overview.png" alt="Provider overview" width="100%" />
 </p>
 
 ### 🧩 Feature Matrix
