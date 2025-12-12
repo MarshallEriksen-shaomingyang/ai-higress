@@ -426,6 +426,23 @@ async def chat_completions(
                 dynamic_weights=dynamic_weights,
             )
         except RuntimeError as exc:
+            # This is a common source of "silent" 503s: we map to 503 but
+            # previously didn't emit an application log line.
+            logger.error(
+                "chat_completions: choose_upstream failed for logical_model=%s; "
+                "candidates=%s; dynamic_weights=%s; metrics_status=%s",
+                logical_model.logical_id,
+                [
+                    (c.provider_id, c.model_id, c.base_weight)
+                    for c in candidates
+                ],
+                dynamic_weights,
+                {
+                    pid: (m.status.value if m is not None else None)
+                    for pid, m in metrics_by_provider.items()
+                },
+                exc_info=True,
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(exc),
