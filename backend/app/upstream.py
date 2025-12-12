@@ -157,6 +157,14 @@ async def stream_upstream(
                 ).encode()
                 buffer.extend(error_chunk)
                 yield error_chunk
+    except httpx.HTTPError as exc:
+        # Transport error before any response/chunk is available (e.g. proxy/connect error).
+        logger.warning("Upstream streaming open error for %s: %s", url, exc)
+        raise UpstreamStreamError(
+            status_code=None,
+            message="Upstream streaming transport error",
+            text=str(exc),
+        ) from exc
     finally:
         # Save context after stream finishes (or fails)
         if buffer:

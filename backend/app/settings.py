@@ -354,6 +354,28 @@ class Settings(BaseSettings):
     # HTTP timeouts
     upstream_timeout: float = 600.0
 
+    # Upstream proxy pool (optional). Comma/newline separated proxy URLs.
+    # Example: "http://user:pass@1.2.3.4:8080, socks5://5.6.7.8:1080"
+    upstream_proxy_pool: str = Field(
+        "",
+        alias="UPSTREAM_PROXY_POOL",
+        description=(
+            "上游请求代理池，多个代理 URL 用英文逗号或换行分隔。"
+            "为空则不启用。支持 http(s):// 与 socks5(h)://。"
+        ),
+    )
+    upstream_proxy_strategy: str = Field(
+        "random",
+        alias="UPSTREAM_PROXY_STRATEGY",
+        description="代理池选择策略：random / round_robin。",
+    )
+    upstream_proxy_max_retries: int = Field(
+        1,
+        alias="UPSTREAM_PROXY_MAX_RETRIES",
+        description="同一次上游请求内，代理连接失败时的最大换代理重试次数；0 表示不重试。",
+        ge=0,
+    )
+
     # Models cache TTL in seconds
     models_cache_ttl: int = Field(300, alias="MODELS_CACHE_TTL")
 

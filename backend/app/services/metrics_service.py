@@ -11,6 +11,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
+from app.proxy_pool import pick_upstream_proxy
 from app.upstream import UpstreamStreamError, stream_upstream
 from app.settings import settings
 from app.services.metrics_buffer import (
@@ -239,8 +240,53 @@ async def call_upstream_http_with_metrics(
     """
     start = time.perf_counter()
     success = False
+    proxy_url = await pick_upstream_proxy()
+    timeout_cfg = getattr(client, "timeout", settings.upstream_timeout)
     try:
-        resp = await client.post(url, headers=headers, json=json_body)
+        if proxy_url:
+            max_attempts = settings.upstream_proxy_max_retries + 1
+            tried: set[str] = set()
+            last_exc: httpx.HTTPError | None = None
+            for attempt in range(max_attempts):
+                if attempt == 0:
+                    current_proxy = proxy_url
+                else:
+                    current_proxy = await pick_upstream_proxy(exclude=tried)
+                if not current_proxy:
+                    break
+                tried.add(current_proxy)
+                logger.debug(
+                    "call_upstream_http_with_metrics: 使用代理 %s 请求上游 %s (attempt %d/%d)",
+                    current_proxy,
+                    url,
+                    attempt + 1,
+                    max_attempts,
+                )
+                try:
+                    async with httpx.AsyncClient(timeout=timeout_cfg, proxy=current_proxy) as proxy_client:
+                        resp = await proxy_client.post(
+                            url, headers=headers, json=json_body
+                        )
+                    success = resp.status_code < 400
+                    return resp
+                except httpx.HTTPError as exc:
+                    last_exc = exc
+                    if attempt + 1 < max_attempts:
+                        logger.warning(
+                            "call_upstream_http_with_metrics: 代理 %s 请求失败，将换代理重试 (%d/%d): %s",
+                            current_proxy,
+                            attempt + 2,
+                            max_attempts,
+                            exc,
+                        )
+                        continue
+                    raise
+            if last_exc:
+                raise last_exc
+            # 代理池为空或不可用时回退直连
+            resp = await client.post(url, headers=headers, json=json_body)
+        else:
+            resp = await client.post(url, headers=headers, json=json_body)
         success = resp.status_code < 400
         return resp
     except httpx.HTTPError as exc:
@@ -298,40 +344,146 @@ async def stream_upstream_with_metrics(
     """
     start = time.perf_counter()
     first_chunk_seen = False
+    proxy_url = await pick_upstream_proxy()
+    timeout_cfg = getattr(client, "timeout", settings.upstream_timeout)
 
     try:
-        async for chunk in stream_upstream(
-            client=client,
-            method=method,
-            url=url,
-            headers=headers,
-            json_body=json_body,
-            redis=redis,
-            session_id=session_id,
-        ):
-            if not first_chunk_seen:
-                first_chunk_seen = True
-                latency_ms = (time.perf_counter() - start) * 1000.0
+        if proxy_url:
+            max_attempts = settings.upstream_proxy_max_retries + 1
+            tried: set[str] = set()
+            last_err: UpstreamStreamError | None = None
+            for attempt in range(max_attempts):
+                if attempt == 0:
+                    current_proxy = proxy_url
+                else:
+                    current_proxy = await pick_upstream_proxy(exclude=tried)
+                if not current_proxy:
+                    break
+                tried.add(current_proxy)
+                logger.debug(
+                    "stream_upstream_with_metrics: 使用代理 %s 连接上游 %s (attempt %d/%d)",
+                    current_proxy,
+                    url,
+                    attempt + 1,
+                    max_attempts,
+                )
                 try:
-                    record_provider_call_metric(
-                        db,
-                        provider_id=provider_id,
-                        logical_model=logical_model,
-                        transport="http",
-                        is_stream=True,
-                        user_id=user_id,
-                        api_key_id=api_key_id,
-                        success=True,
-                        latency_ms=latency_ms,
-                    )
-                except Exception:  # pragma: no cover - 防御性日志
-                    logger.exception(
-                        "record_provider_call_metric failed in stream_upstream_with_metrics "
-                        "for provider=%s logical_model=%s (first chunk)",
-                        provider_id,
-                        logical_model,
-                    )
-            yield chunk
+                    async with httpx.AsyncClient(timeout=timeout_cfg, proxy=current_proxy) as proxy_client:
+                        async for chunk in stream_upstream(
+                            client=proxy_client,
+                            method=method,
+                            url=url,
+                            headers=headers,
+                            json_body=json_body,
+                            redis=redis,
+                            session_id=session_id,
+                        ):
+                            if not first_chunk_seen:
+                                first_chunk_seen = True
+                                latency_ms = (time.perf_counter() - start) * 1000.0
+                                try:
+                                    record_provider_call_metric(
+                                        db,
+                                        provider_id=provider_id,
+                                        logical_model=logical_model,
+                                        transport="http",
+                                        is_stream=True,
+                                        user_id=user_id,
+                                        api_key_id=api_key_id,
+                                        success=True,
+                                        latency_ms=latency_ms,
+                                    )
+                                except Exception:  # pragma: no cover - 防御性日志
+                                    logger.exception(
+                                        "record_provider_call_metric failed in stream_upstream_with_metrics "
+                                        "for provider=%s logical_model=%s (first chunk)",
+                                        provider_id,
+                                        logical_model,
+                                    )
+                            yield chunk
+                    return
+                except UpstreamStreamError as err:
+                    last_err = err
+                    # 仅在“连接/代理传输错误（status_code=None）”时换代理重试
+                    if err.status_code is None and attempt + 1 < max_attempts:
+                        logger.warning(
+                            "stream_upstream_with_metrics: 代理 %s 连接失败，将换代理重试 (%d/%d): %s",
+                            current_proxy,
+                            attempt + 2,
+                            max_attempts,
+                            err.text,
+                        )
+                        continue
+                    raise
+            if last_err:
+                raise last_err
+            # 代理池不可用时回退直连
+            async for chunk in stream_upstream(
+                client=client,
+                method=method,
+                url=url,
+                headers=headers,
+                json_body=json_body,
+                redis=redis,
+                session_id=session_id,
+            ):
+                if not first_chunk_seen:
+                    first_chunk_seen = True
+                    latency_ms = (time.perf_counter() - start) * 1000.0
+                    try:
+                        record_provider_call_metric(
+                            db,
+                            provider_id=provider_id,
+                            logical_model=logical_model,
+                            transport="http",
+                            is_stream=True,
+                            user_id=user_id,
+                            api_key_id=api_key_id,
+                            success=True,
+                            latency_ms=latency_ms,
+                        )
+                    except Exception:  # pragma: no cover - 防御性日志
+                        logger.exception(
+                            "record_provider_call_metric failed in stream_upstream_with_metrics "
+                            "for provider=%s logical_model=%s (first chunk)",
+                            provider_id,
+                            logical_model,
+                        )
+                yield chunk
+            return
+        else:
+            async for chunk in stream_upstream(
+                client=client,
+                method=method,
+                url=url,
+                headers=headers,
+                json_body=json_body,
+                redis=redis,
+                session_id=session_id,
+            ):
+                if not first_chunk_seen:
+                    first_chunk_seen = True
+                    latency_ms = (time.perf_counter() - start) * 1000.0
+                    try:
+                        record_provider_call_metric(
+                            db,
+                            provider_id=provider_id,
+                            logical_model=logical_model,
+                            transport="http",
+                            is_stream=True,
+                            user_id=user_id,
+                            api_key_id=api_key_id,
+                            success=True,
+                            latency_ms=latency_ms,
+                        )
+                    except Exception:  # pragma: no cover - 防御性日志
+                        logger.exception(
+                            "record_provider_call_metric failed in stream_upstream_with_metrics "
+                            "for provider=%s logical_model=%s (first chunk)",
+                            provider_id,
+                            logical_model,
+                        )
+                yield chunk
     except UpstreamStreamError as err:
         latency_ms = (time.perf_counter() - start) * 1000.0
         try:
