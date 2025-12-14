@@ -14,6 +14,22 @@ export function PWAInstallPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
+    // 检查是否已经安装
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const isInWebAppiOS = (window.navigator as any).standalone === true;
+    if (isStandalone || isInWebAppiOS) {
+      return; // 已安装，不显示提示
+    }
+
+    // 检查是否之前被拒绝
+    const dismissedTime = localStorage.getItem('pwa-install-dismissed');
+    if (dismissedTime) {
+      const daysSinceDismissed = (Date.now() - parseInt(dismissedTime)) / (1000 * 60 * 60 * 24);
+      if (daysSinceDismissed < 7) { // 7天后重新显示
+        return;
+      }
+    }
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -23,6 +39,7 @@ export function PWAInstallPrompt() {
     const handleAppInstalled = () => {
       setDeferredPrompt(null);
       setShowPrompt(false);
+      localStorage.removeItem('pwa-install-dismissed');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -45,6 +62,8 @@ export function PWAInstallPrompt() {
         console.log('用户接受了安装提示');
       } else {
         console.log('用户拒绝了安装提示');
+        // 用户拒绝时也记录，避免频繁弹出
+        localStorage.setItem('pwa-install-dismissed', Date.now().toString());
       }
     } catch (error) {
       console.error('安装提示失败:', error);
@@ -56,20 +75,9 @@ export function PWAInstallPrompt() {
 
   const handleDismiss = () => {
     setShowPrompt(false);
-    // 可以设置一个标志来避免再次显示
+    // 记录用户关闭的时间，7天内不再显示
     localStorage.setItem('pwa-install-dismissed', Date.now().toString());
   };
-
-  // 检查是否已经安装或之前被拒绝
-  useEffect(() => {
-    const dismissedTime = localStorage.getItem('pwa-install-dismissed');
-    if (dismissedTime) {
-      const daysSinceDismissed = (Date.now() - parseInt(dismissedTime)) / (1000 * 60 * 60 * 24);
-      if (daysSinceDismissed < 7) { // 7天后重新显示
-        setShowPrompt(false);
-      }
-    }
-  }, []);
 
   if (!showPrompt) return null;
 

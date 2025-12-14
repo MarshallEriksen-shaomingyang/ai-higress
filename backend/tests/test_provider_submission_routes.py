@@ -161,6 +161,7 @@ def test_submit_private_provider_to_shared_pool_success(
         name="My Private Provider",
         base_url="https://api.example.com",
         api_key="sk-test-123",
+        chat_completions_path="/v1/chat/completions",
     )
     provider: Provider = create_private_provider(db_session, user.id, create_payload)
 
@@ -210,6 +211,7 @@ def test_submit_private_provider_to_shared_pool_requires_permission(
         name="My Private Provider",
         base_url="https://api.example.com",
         api_key="sk-test-123",
+        chat_completions_path="/v1/chat/completions",
     )
     provider: Provider = create_private_provider(db_session, user.id, create_payload)
 
@@ -339,6 +341,7 @@ def test_submission_review_promotes_private_provider_to_public(client, db_sessio
         name="Private Provider",
         base_url="https://private.example.com",
         api_key="sk-private-123",
+        chat_completions_path="/v1/chat/completions",
     )
     provider = create_private_provider(db_session, submitter.id, create_payload)
 

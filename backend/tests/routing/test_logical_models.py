@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Callable
 
 from fastapi.testclient import TestClient
 
@@ -44,17 +44,19 @@ async def override_get_redis():
     return fake_redis
 
 
-async def override_require_jwt_token() -> AuthenticatedUser:
-    # 简化依赖：测试路由行为时，不关心具体用户信息
-    return AuthenticatedUser(
-        id="00000000-0000-0000-0000-000000000000",
-        username="test",
-        email="test@example.com",
-        is_superuser=True,
-        is_active=True,
-        display_name=None,
-        avatar=None,
-    )
+def make_override_require_jwt_token(user_id: str) -> Callable:
+    async def override_require_jwt_token() -> AuthenticatedUser:
+        # 简化依赖：测试路由行为时，不关心具体用户信息
+        return AuthenticatedUser(
+            id=user_id,
+            username="test",
+            email="test@example.com",
+            is_superuser=True,
+            is_active=True,
+            display_name=None,
+            avatar=None,
+        )
+    return override_require_jwt_token
 
 
 def _store_logical_model(logical: LogicalModel) -> None:
@@ -88,7 +90,18 @@ def _make_sample_models() -> list[LogicalModel]:
         display_name="GPT-4 Mini",
         description="Smaller GPT-4 variant",
         capabilities=[ModelCapability.CHAT],
-        upstreams=[],
+        upstreams=[
+            PhysicalModel(
+                provider_id="openai",
+                model_id="gpt-4-mini",
+                endpoint="https://api.openai.com/v1/chat/completions",
+                base_weight=1.0,
+                region="global",
+                max_qps=50,
+                meta_hash=None,
+                updated_at=1704067200.0,
+            )
+        ],
         enabled=True,
         updated_at=1704067200.0,
     )
@@ -96,13 +109,40 @@ def _make_sample_models() -> list[LogicalModel]:
 
 
 def test_logical_model_routes_list_and_get():
+    from app.models import Provider, User
+    
     app = create_app()
     # logical_model_routes is already included by create_app via app.include_router
 
     app.dependency_overrides[get_redis] = override_get_redis
-    app.dependency_overrides[require_jwt_token] = override_require_jwt_token
-    install_inmemory_db(app)
+    SessionLocal = install_inmemory_db(app)
 
+    # 获取测试用户的 ID
+    with SessionLocal() as session:
+        user = session.query(User).filter_by(username="admin").first()
+        user_id = str(user.id)
+    
+    # 使用真实的用户 ID 来 override JWT token
+    app.dependency_overrides[require_jwt_token] = make_override_require_jwt_token(user_id)
+
+    # Clear Redis before seeding
+    fake_redis._data.clear()
+    
+    # 创建 Provider，使得用户有权限访问
+    with SessionLocal() as session:
+        provider1 = Provider(
+            provider_id="openai",
+            name="OpenAI",
+            base_url="https://api.openai.com/v1",
+            transport="http",
+            provider_type="native",
+            weight=1.0,
+            status="healthy",
+            visibility="public",
+        )
+        session.add(provider1)
+        session.commit()
+    
     # Seed Redis with two logical models.
     for lm in _make_sample_models():
         _store_logical_model(lm)
@@ -127,14 +167,39 @@ def test_logical_model_routes_list_and_get():
 
 
 def test_logical_model_routes_upstreams():
+    from app.models import Provider, User
+    from app.deps import get_db
+    
     app = create_app()
     app.dependency_overrides[get_redis] = override_get_redis
-    app.dependency_overrides[require_jwt_token] = override_require_jwt_token
-    install_inmemory_db(app)
+    SessionLocal = install_inmemory_db(app)
+
+    # 获取测试用户的 ID
+    with SessionLocal() as session:
+        user = session.query(User).filter_by(username="admin").first()
+        user_id = str(user.id)
+    
+    # 使用真实的用户 ID 来 override JWT token
+    app.dependency_overrides[require_jwt_token] = make_override_require_jwt_token(user_id)
 
     fake_redis._data.clear()
     logical = _make_sample_models()[0]
     _store_logical_model(logical)
+    
+    # 创建一个 Provider，使得用户有权限访问
+    with SessionLocal() as session:
+        provider = Provider(
+            provider_id="openai",
+            name="OpenAI",
+            base_url="https://api.openai.com/v1",
+            transport="http",
+            provider_type="native",
+            weight=1.0,
+            status="healthy",
+            visibility="public",
+        )
+        session.add(provider)
+        session.commit()
 
     with TestClient(app=app, base_url="http://test") as client:
         resp = client.get("/logical-models/gpt-4/upstreams")

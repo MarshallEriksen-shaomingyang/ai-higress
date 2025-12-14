@@ -48,6 +48,7 @@ export function MyProvidersPageClient({
   const [isDeleting, setIsDeleting] = useState(false);
   const [modelsDialogOpen, setModelsDialogOpen] = useState(false);
   const [viewingModelsProviderId, setViewingModelsProviderId] = useState<string | null>(null);
+  const [modelsPathByProvider, setModelsPathByProvider] = useState<Record<string, string>>({});
 
   // 私有 Provider 配额信息
   const {
@@ -145,6 +146,14 @@ export function MyProvidersPageClient({
   const handleViewModels = useCallback((providerId: string) => {
     setViewingModelsProviderId(providerId);
     setModelsDialogOpen(true);
+  }, []);
+
+  // 更新模型路径
+  const handleModelsPathChange = useCallback((providerId: string, path: string) => {
+    setModelsPathByProvider((prev) => ({
+      ...prev,
+      [providerId]: path,
+    }));
   }, []);
 
   return (
@@ -286,8 +295,8 @@ export function MyProvidersPageClient({
         open={modelsDialogOpen}
         onOpenChange={setModelsDialogOpen}
         providerId={viewingModelsProviderId}
-        modelsPathByProvider={{}}
-        onModelsPathChange={() => {}}
+        modelsPathByProvider={modelsPathByProvider}
+        onModelsPathChange={handleModelsPathChange}
       />
     </div>
   );

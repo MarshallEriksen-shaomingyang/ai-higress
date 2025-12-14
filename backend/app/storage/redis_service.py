@@ -110,6 +110,19 @@ async def list_logical_models(redis: Redis) -> list[LogicalModel]:
     return models
 
 
+async def invalidate_logical_models_cache(redis: Redis) -> int:
+    """
+    清空所有逻辑模型缓存，用于 Provider 创建/更新后触发缓存失效。
+    
+    返回删除的键数量。
+    """
+    pattern = LOGICAL_MODEL_KEY_TEMPLATE.format(logical_model="*")
+    keys = await redis.keys(pattern)  # type: ignore[attr-defined]
+    if not keys:
+        return 0
+    return int(await redis.delete(*keys))  # type: ignore[attr-defined]
+
+
 async def get_routing_metrics(
     redis: Redis, logical_model_id: str, provider_id: str
 ) -> RoutingMetrics | None:
@@ -164,13 +177,14 @@ __all__ = [
     "PROVIDER_MODELS_KEY_TEMPLATE",
     "SESSION_KEY_TEMPLATE",
     "append_metrics_history",
+    "delete_logical_model",
     "get_logical_model",
     "get_provider_models_json",
     "get_routing_metrics",
     "get_session",
-    "set_logical_model",
-    "delete_logical_model",
+    "invalidate_logical_models_cache",
     "list_logical_models",
+    "set_logical_model",
     "set_provider_models",
     "set_routing_metrics",
     "set_session",

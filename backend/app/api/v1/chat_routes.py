@@ -1542,23 +1542,27 @@ async def claude_messages_endpoint(
     request: Request,
     client: httpx.AsyncClient = Depends(get_http_client),
     redis: Redis = Depends(get_redis),
+    db: DbSession = Depends(get_db),
     x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
     raw_body: dict[str, Any] = Body(...),
     current_key: AuthenticatedAPIKey = Depends(require_api_key),
 ):
     """
-    Claude/Anthropic Messages API 兼容端点，向上游的 /v1/message 转发。
+    Claude/Anthropic Messages API 兼容端点。
+    不再硬编码 messages_path，而是使用 Provider 配置中的路径。
     """
     forward_body = dict(raw_body)
     forward_body["_apiproxy_api_style"] = "claude"
     forward_body["_apiproxy_skip_normalize"] = True
-    forward_body["_apiproxy_messages_path"] = "/v1/message"
+    # 移除硬编码的 _apiproxy_messages_path，让系统使用 Provider 配置
+    # forward_body["_apiproxy_messages_path"] = "/v1/message"
     forward_body["_apiproxy_fallback_path"] = "/v1/chat/completions"
 
     return await chat_completions(
         request=request,
         client=client,
         redis=redis,
+        db=db,
         x_session_id=x_session_id,
         raw_body=forward_body,
         current_key=current_key,

@@ -36,6 +36,7 @@ def test_create_private_provider_generates_id() -> None:
                 name="OpenAI 生产环境",
                 base_url="https://api.openai.com/v1",
                 api_key="sk-test",
+                chat_completions_path="/chat/completions",
             )
             provider = create_private_provider(session, user.id, payload)
             assert provider.provider_id
@@ -55,6 +56,7 @@ def test_duplicate_names_generate_unique_provider_ids() -> None:
             "name": "Aggregator",
             "base_url": "https://upstream.example.com/api",
             "api_key": "sk-test",
+            "chat_completions_path": "/chat/completions",
         }
 
         with SessionLocal() as session:
@@ -114,6 +116,7 @@ def test_update_private_provider_can_change_paths_and_supported_styles() -> None
                 name="Updatable Provider",
                 base_url="https://upstream.example.com",
                 api_key="sk-test",
+                chat_completions_path="/chat/completions",
             )
             provider = create_private_provider(session, user.id, base_payload)
             provider_id = provider.provider_id

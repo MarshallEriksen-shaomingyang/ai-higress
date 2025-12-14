@@ -63,16 +63,14 @@ def test_daily_folder_file_handler_writes_to_named_file(tmp_path: Path) -> None:
         timezone_name="UTC",
         now_fn=_fixed_now,
     )
-    handler.setFormatter(logging.Formatter("[%(biz)s] %(message)s"))
-    handler.addFilter(lambda record: setattr(record, "biz", "access") or True)
+    handler.setFormatter(logging.Formatter("%(message)s"))
 
-    handler.emit(
-        _make_record(
-            name="uvicorn.access",
-            pathname="/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py",
-            msg="GET / 200",
-        )
+    record = _make_record(
+        name="uvicorn.access",
+        pathname="/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py",
+        msg="GET / 200",
     )
+    handler.emit(record)
 
     content = (tmp_path / "2025-01-02" / "access.log").read_text(encoding="utf-8")
     assert "GET / 200" in content

@@ -6,9 +6,15 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
-from app.deps import get_db
+try:
+    from redis.asyncio import Redis
+except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is missing
+    Redis = object  # type: ignore[misc,assignment]
+
+from app.deps import get_db, get_redis
 from app.errors import bad_request, forbidden, not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
+from app.logging_config import logger
 from app.models import Provider, ProviderModel
 from app.provider.config import get_provider_config
 from app.schemas import (
@@ -147,10 +153,11 @@ def admin_list_providers_endpoint(
     "/admin/providers/{provider_id}/visibility",
     response_model=AdminProviderResponse,
 )
-def update_provider_visibility_endpoint(
+async def update_provider_visibility_endpoint(
     provider_id: str,
     payload: ProviderVisibilityUpdateRequest,
     db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
 ) -> AdminProviderResponse:
     """更新 Provider 的可见性（public/private/restricted）。"""
@@ -167,6 +174,15 @@ def update_provider_visibility_endpoint(
     db.add(provider)
     db.commit()
     db.refresh(provider)
+    
+    # 失效逻辑模型缓存
+    try:
+        from app.storage.redis_service import invalidate_logical_models_cache
+        deleted = await invalidate_logical_models_cache(redis)
+        logger.info("Invalidated %d logical model cache keys after updating provider visibility %s", deleted, provider_id)
+    except Exception:
+        logger.exception("Failed to invalidate logical models cache")
+    
     return _build_admin_provider_response(db, provider)
 
 
@@ -174,10 +190,11 @@ def update_provider_visibility_endpoint(
     "/admin/providers/{provider_id}/probe-config",
     response_model=AdminProviderResponse,
 )
-def update_provider_probe_config_endpoint(
+async def update_provider_probe_config_endpoint(
     provider_id: str,
     payload: ProviderProbeConfigUpdate,
     db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
 ) -> AdminProviderResponse:
     """更新 Provider 的探针配置（启用开关/自定义频率/指定模型）。"""
@@ -200,6 +217,15 @@ def update_provider_probe_config_endpoint(
     db.add(provider)
     db.commit()
     db.refresh(provider)
+    
+    # 失效逻辑模型缓存
+    try:
+        from app.storage.redis_service import invalidate_logical_models_cache
+        deleted = await invalidate_logical_models_cache(redis)
+        logger.info("Invalidated %d logical model cache keys after updating provider probe config %s", deleted, provider_id)
+    except Exception:
+        logger.exception("Failed to invalidate logical models cache")
+    
     return _build_admin_provider_response(db, provider)
 
 

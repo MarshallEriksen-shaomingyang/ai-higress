@@ -176,10 +176,13 @@ def _provider_supports_api_style(cfg: ProviderConfig, style: str) -> bool:
 
 def _path_for_api_style(cfg: ProviderConfig, style: str) -> str | None:
     if style == "responses":
-        return getattr(cfg, "responses_path", None)
+        path = getattr(cfg, "responses_path", None)
+        return path if path else None
     if style == "claude":
-        return getattr(cfg, "messages_path", None)
-    return getattr(cfg, "chat_completions_path", None) or "/v1/chat/completions"
+        path = getattr(cfg, "messages_path", None)
+        return path if path else None
+    path = getattr(cfg, "chat_completions_path", None)
+    return path if path else "/v1/chat/completions"
 
 
 def _select_provider_endpoint(
@@ -194,6 +197,7 @@ def _select_provider_endpoint(
 
     priorities = _STYLE_PRIORITY.get(requested_style, ["openai"])
     base = str(cfg.base_url).rstrip("/")
+    
     for style in priorities:
         if not _provider_supports_api_style(cfg, style):
             continue

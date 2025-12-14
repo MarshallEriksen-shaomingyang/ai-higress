@@ -283,9 +283,9 @@ class ProviderResponse(BaseModel):
     cost_output: float | None = Field(default=None, description="输出token价格")
     billing_factor: float = Field(default=1.0, description="计费因子")
     max_qps: int | None = Field(default=None, description="最大QPS限制")
-    models_path: str = Field(default="/v1/models", description="模型列表路径")
+    models_path: str | None = Field(default=None, description="模型列表路径")
     messages_path: str | None = Field(default=None, description="消息API路径")
-    chat_completions_path: str = Field(default="/v1/chat/completions", description="聊天完成路径")
+    chat_completions_path: str | None = Field(default=None, description="聊天完成路径")
     responses_path: str | None = Field(default=None, description="响应API路径")
     status: str = Field(default="healthy", description="提供商状态")
     visibility: str = Field(

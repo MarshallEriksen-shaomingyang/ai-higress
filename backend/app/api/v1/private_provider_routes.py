@@ -5,8 +5,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.deps import get_db
+try:
+    from redis.asyncio import Redis
+except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is missing
+    Redis = object  # type: ignore[misc,assignment]
+
+from app.deps import get_db, get_redis
 from app.errors import bad_request, forbidden, not_found
+from app.logging_config import logger
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.schemas import (
     ProviderSubmissionRequest,
@@ -94,10 +100,11 @@ def get_user_quota_endpoint(
     response_model=UserProviderResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_private_provider_endpoint(
+async def create_private_provider_endpoint(
     user_id: UUID,
     payload: UserProviderCreateRequest,
     db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
 ) -> UserProviderResponse:
     """为指定用户创建一个私有提供商，仅该用户的 API Key 可选择使用。"""
@@ -118,6 +125,14 @@ def create_private_provider_endpoint(
         provider = create_private_provider(db, user_id, payload)
     except UserProviderServiceError as exc:
         raise bad_request(str(exc))
+
+    # 失效逻辑模型缓存，下次查询时会从数据库回源
+    try:
+        from app.storage.redis_service import invalidate_logical_models_cache
+        deleted = await invalidate_logical_models_cache(redis)
+        logger.info("Invalidated %d logical model cache keys after creating provider %s", deleted, provider.provider_id)
+    except Exception:
+        logger.exception("Failed to invalidate logical models cache")
 
     return UserProviderResponse.model_validate(provider)
 
@@ -142,11 +157,12 @@ def list_private_providers_endpoint(
     "/users/{user_id}/private-providers/{provider_id}",
     response_model=UserProviderResponse,
 )
-def update_private_provider_endpoint(
+async def update_private_provider_endpoint(
     user_id: UUID,
     provider_id: str,
     payload: UserProviderUpdateRequest,
     db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
 ) -> UserProviderResponse:
     """更新用户的私有提供商配置。"""
@@ -159,6 +175,14 @@ def update_private_provider_endpoint(
         raise not_found(f"Private provider '{provider_id}' not found")
     except UserProviderServiceError as exc:
         raise bad_request(str(exc))
+
+    # 失效逻辑模型缓存，下次查询时会从数据库回源
+    try:
+        from app.storage.redis_service import invalidate_logical_models_cache
+        deleted = await invalidate_logical_models_cache(redis)
+        logger.info("Invalidated %d logical model cache keys after updating provider %s", deleted, provider_id)
+    except Exception:
+        logger.exception("Failed to invalidate logical models cache")
 
     return UserProviderResponse.model_validate(provider)
 
