@@ -1712,6 +1712,26 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
 }
 ```
 
+**错误响应**:
+- 404: 提供商不存在
+- 502: 上游模型发现失败（例如上游 `/models` 返回 404/5xx、超时，或 Provider 未配置可用的 `static_models` 回退）
+
+502 错误体示例：
+```json
+{
+  "detail": {
+    "error": "provider_models_discovery_failed",
+    "message": "无法获取该 Provider 的模型列表：上游 /models 返回 404。请检查 base_url/models_path 是否正确，或配置 static_models 以跳过远端发现。",
+    "code": 502,
+    "details": {
+      "provider_id": "provider-models-upstream-404",
+      "upstream_status_code": 404,
+      "upstream_url": "https://upstream.example.com/openai/v1/models"
+    }
+  }
+}
+```
+
 ---
 
 ### 4. 获取提供商健康状态

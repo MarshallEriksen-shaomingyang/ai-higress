@@ -116,12 +116,50 @@ class InMemoryRedis:
     def __init__(self) -> None:
         self._data: dict[str, str] = {}
         self._sets: dict[str, set[str]] = {}
+        self._counters: dict[str, int] = {}
+        self._zsets: dict[str, dict[str, float]] = {}
 
     async def get(self, key: str):
         return self._data.get(key)
 
     async def set(self, key: str, value: str, ex: int | None = None):
         self._data[key] = value
+
+    async def incr(self, key: str) -> int:
+        current = int(self._counters.get(key, 0))
+        current += 1
+        self._counters[key] = current
+        return current
+
+    async def expire(self, key: str, seconds: int) -> bool:
+        """
+        Minimal TTL stub.
+        Tests generally do not depend on key expiry; return True for compatibility.
+        """
+        _ = (key, seconds)
+        return True
+
+    async def zadd(self, key: str, mapping: dict[str, float], nx: bool = False) -> int:
+        z = self._zsets.setdefault(key, {})
+        added = 0
+        for member, score in mapping.items():
+            if nx and member in z:
+                continue
+            z[member] = float(score)
+            added += 1
+        return added
+
+    async def zscore(self, key: str, member: str):
+        z = self._zsets.get(key, {})
+        val = z.get(member)
+        if val is None:
+            return None
+        return float(val)
+
+    async def zincrby(self, key: str, amount: float, member: str) -> float:
+        z = self._zsets.setdefault(key, {})
+        z[member] = float(z.get(member, 0.0)) + float(amount)
+        return float(z[member])
 
     async def exists(self, *keys: str) -> int:
         """返回存在的 key 数量，模拟 Redis exists 行为。"""

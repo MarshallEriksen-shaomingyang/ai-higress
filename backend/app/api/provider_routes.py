@@ -2,7 +2,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,7 +12,7 @@ except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is
     Redis = object  # type: ignore[misc,assignment]
 
 from app.deps import get_db, get_http_client, get_redis
-from app.errors import bad_request, forbidden, not_found
+from app.errors import bad_request, forbidden, http_error, not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.logging_config import logger
 from app.models import Provider, ProviderModel, ProviderSubmission
@@ -194,7 +194,7 @@ async def get_provider(
         allowed = get_accessible_provider_ids(db, UUID(current_user.id))
         if provider_id not in allowed:
             raise forbidden("无权查看该提供商配置")
-    cfg = get_provider_config(provider_id)
+    cfg = get_provider_config(provider_id, session=db)
     if cfg is None:
         raise not_found(f"Provider '{provider_id}' not found")
     sanitized = _sanitize_provider_config(cfg)
@@ -315,11 +315,56 @@ async def get_provider_models(
     """
     Return the list of models for a provider, refreshing from upstream on cache miss.
     """
-    cfg = get_provider_config(provider_id)
+    cfg = get_provider_config(provider_id, session=db)
     if cfg is None:
         raise not_found(f"Provider '{provider_id}' not found")
 
-    items = await ensure_provider_models_cached(client, redis, cfg)
+    try:
+        items = await ensure_provider_models_cached(client, redis, cfg)
+    except Exception as exc:
+        upstream_status_code: int | None = None
+        upstream_url: str | None = None
+
+        if isinstance(exc, httpx.HTTPError):
+            if isinstance(exc, httpx.HTTPStatusError):
+                upstream_status_code = getattr(exc.response, "status_code", None)
+                req = getattr(exc, "request", None)
+                if req is not None and getattr(req, "url", None) is not None:
+                    upstream_url = str(req.url)
+            else:
+                req = getattr(exc, "request", None)
+                if req is not None and getattr(req, "url", None) is not None:
+                    upstream_url = str(req.url)
+
+        if upstream_status_code == 404:
+            message = (
+                "无法获取该 Provider 的模型列表：上游 /models 返回 404。"
+                "请检查 base_url/models_path 是否正确，或配置 static_models 以跳过远端发现。"
+            )
+        else:
+            message = (
+                "无法获取该 Provider 的模型列表：上游模型发现失败。"
+                "请稍后重试，或配置 static_models 以跳过远端发现。"
+            )
+
+        logger.warning(
+            "Provider %s: models discovery failed (status=%s, url=%s): %s",
+            provider_id,
+            upstream_status_code,
+            upstream_url,
+            exc,
+        )
+
+        raise http_error(
+            status.HTTP_502_BAD_GATEWAY,
+            error="provider_models_discovery_failed",
+            message=message,
+            details={
+                "provider_id": provider_id,
+                "upstream_status_code": upstream_status_code,
+                "upstream_url": upstream_url,
+            },
+        )
 
     # 后台异步写库：将发现到的模型信息同步到 provider_models 表中。
     # 若写库失败，仅记录日志，不影响主流程。
@@ -395,6 +440,7 @@ async def get_provider_metrics(
         default=None,
         description="Optional logical model filter",
     ),
+    db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> ProviderMetricsResponse:
     """
@@ -403,7 +449,7 @@ async def get_provider_metrics(
     - 当提供 `logical_model` 参数时，返回该 provider 在指定逻辑模型下的指标（最多一条）
     - 当不提供 `logical_model` 参数时，返回该 provider 在所有逻辑模型下的指标列表
     """
-    cfg = get_provider_config(provider_id)
+    cfg = get_provider_config(provider_id, session=db)
     if cfg is None:
         raise not_found(f"Provider '{provider_id}' not found")
 
