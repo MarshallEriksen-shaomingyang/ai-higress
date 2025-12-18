@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, relationship
 
@@ -33,6 +33,13 @@ class ProviderModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     pricing = Column(JSONBCompat(), nullable=True)
     metadata_json = Column("metadata", JSONBCompat(), nullable=True)
     meta_hash: Mapped[str | None] = Column(String(64), nullable=True)
+    disabled: Mapped[bool] = Column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        doc="是否在该 Provider 下禁用该模型（禁用后不会参与路由与 /models 聚合）",
+    )
 
     provider: Mapped["Provider"] = relationship("Provider", back_populates="models")
 

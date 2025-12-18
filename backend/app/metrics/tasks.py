@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import uuid
 
 from celery import shared_task
 
@@ -14,7 +15,7 @@ from app.models.provider_metrics_history import (
     ProviderRoutingMetricsHourly,
 )
 from app.settings import settings
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import Select, delete, func, select, text
 
 try:
     from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -50,6 +51,58 @@ def _get_effective_metrics_retention_days(session) -> int:
     return _clamp_retention_days(int(settings.dashboard_metrics_retention_days))
 
 
+class _PgAdvisoryLock:
+    def __init__(self, session, lock_id: int) -> None:
+        self._session = session
+        self._lock_id = int(lock_id)
+        self.acquired = False
+
+    def __enter__(self):
+        if self._session.get_bind().dialect.name != "postgresql":
+            return self
+        row = self._session.execute(
+            text("SELECT pg_try_advisory_lock(:lock_id)"),
+            {"lock_id": self._lock_id},
+        ).one()
+        self.acquired = bool(row[0])
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._session.get_bind().dialect.name != "postgresql":
+            return False
+        if self.acquired:
+            self._session.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": self._lock_id},
+            )
+        return False
+
+
+def _batched_delete_before_cutoff(*, session, model, cutoff: dt.datetime) -> int:
+    total_deleted = 0
+    batch_size = int(settings.dashboard_metrics_cleanup_batch_size)
+
+    while True:
+        ids = [
+            row[0]
+            for row in session.execute(
+                select(model.id)
+                .where(model.window_start < cutoff)
+                .order_by(model.window_start.asc())
+                .limit(batch_size)
+            ).all()
+        ]
+        if not ids:
+            break
+        session.execute(delete(model).where(model.id.in_(ids)))
+        session.commit()
+        total_deleted += len(ids)
+        if len(ids) < batch_size:
+            break
+
+    return total_deleted
+
+
 def _utc_floor_hour(ts: dt.datetime) -> dt.datetime:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=dt.timezone.utc)
@@ -69,11 +122,13 @@ def _effective_rollup_end(*, bucket: str) -> dt.datetime:
     return _utc_floor_day(now)
 
 
-def _rollup_select(
+def _rollup_select_from_minute(
     *,
     bucket: str,
     start_at: dt.datetime,
     end_at: dt.datetime,
+    source_model=ProviderRoutingMetricsHistory,
+    requests_col=ProviderRoutingMetricsHistory.total_requests_1m,
 ) -> Select:
     """
     Build an aggregation SELECT over minute-bucket history.
@@ -81,63 +136,63 @@ def _rollup_select(
     Note: percentile rollups are weighted averages (trend-oriented, not exact).
     """
 
-    bucket_start = func.date_trunc(bucket, ProviderRoutingMetricsHistory.window_start).label("bucket_start")
-    weight = func.sum(ProviderRoutingMetricsHistory.total_requests_1m).label("weight_sum")
+    bucket_start = func.date_trunc(bucket, source_model.window_start).label("bucket_start")
+    weight = func.sum(requests_col).label("weight_sum")
 
     return (
         select(
             bucket_start,
-            ProviderRoutingMetricsHistory.provider_id,
-            ProviderRoutingMetricsHistory.logical_model,
-            ProviderRoutingMetricsHistory.transport,
-            ProviderRoutingMetricsHistory.is_stream,
-            ProviderRoutingMetricsHistory.user_id,
-            ProviderRoutingMetricsHistory.api_key_id,
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.total_requests_1m), 0).label("total_requests"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.success_requests), 0).label("success_requests"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.error_requests), 0).label("error_requests"),
+            source_model.provider_id,
+            source_model.logical_model,
+            source_model.transport,
+            source_model.is_stream,
+            source_model.user_id,
+            source_model.api_key_id,
+            func.coalesce(func.sum(requests_col), 0).label("total_requests"),
+            func.coalesce(func.sum(source_model.success_requests), 0).label("success_requests"),
+            func.coalesce(func.sum(source_model.error_requests), 0).label("error_requests"),
             func.coalesce(
-                func.sum(ProviderRoutingMetricsHistory.latency_avg_ms * ProviderRoutingMetricsHistory.total_requests_1m),
+                func.sum(source_model.latency_avg_ms * requests_col),
                 0,
             ).label("lat_avg_sum"),
             func.coalesce(
-                func.sum(ProviderRoutingMetricsHistory.latency_p50_ms * ProviderRoutingMetricsHistory.total_requests_1m),
+                func.sum(source_model.latency_p50_ms * requests_col),
                 0,
             ).label("lat_p50_sum"),
             func.coalesce(
-                func.sum(ProviderRoutingMetricsHistory.latency_p95_ms * ProviderRoutingMetricsHistory.total_requests_1m),
+                func.sum(source_model.latency_p95_ms * requests_col),
                 0,
             ).label("lat_p95_sum"),
             func.coalesce(
-                func.sum(ProviderRoutingMetricsHistory.latency_p99_ms * ProviderRoutingMetricsHistory.total_requests_1m),
+                func.sum(source_model.latency_p99_ms * requests_col),
                 0,
             ).label("lat_p99_sum"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.error_4xx_requests), 0).label("error_4xx_requests"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.error_5xx_requests), 0).label("error_5xx_requests"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.error_429_requests), 0).label("error_429_requests"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.error_timeout_requests), 0).label(
+            func.coalesce(func.sum(source_model.error_4xx_requests), 0).label("error_4xx_requests"),
+            func.coalesce(func.sum(source_model.error_5xx_requests), 0).label("error_5xx_requests"),
+            func.coalesce(func.sum(source_model.error_429_requests), 0).label("error_429_requests"),
+            func.coalesce(func.sum(source_model.error_timeout_requests), 0).label(
                 "error_timeout_requests"
             ),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.input_tokens_sum), 0).label("input_tokens_sum"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.output_tokens_sum), 0).label("output_tokens_sum"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.total_tokens_sum), 0).label("total_tokens_sum"),
-            func.coalesce(func.sum(ProviderRoutingMetricsHistory.token_estimated_requests), 0).label(
+            func.coalesce(func.sum(source_model.input_tokens_sum), 0).label("input_tokens_sum"),
+            func.coalesce(func.sum(source_model.output_tokens_sum), 0).label("output_tokens_sum"),
+            func.coalesce(func.sum(source_model.total_tokens_sum), 0).label("total_tokens_sum"),
+            func.coalesce(func.sum(source_model.token_estimated_requests), 0).label(
                 "token_estimated_requests"
             ),
             weight,
         )
         .where(
-            ProviderRoutingMetricsHistory.window_start >= start_at,
-            ProviderRoutingMetricsHistory.window_start < end_at,
+            source_model.window_start >= start_at,
+            source_model.window_start < end_at,
         )
         .group_by(
             bucket_start,
-            ProviderRoutingMetricsHistory.provider_id,
-            ProviderRoutingMetricsHistory.logical_model,
-            ProviderRoutingMetricsHistory.transport,
-            ProviderRoutingMetricsHistory.is_stream,
-            ProviderRoutingMetricsHistory.user_id,
-            ProviderRoutingMetricsHistory.api_key_id,
+            source_model.provider_id,
+            source_model.logical_model,
+            source_model.transport,
+            source_model.is_stream,
+            source_model.user_id,
+            source_model.api_key_id,
         )
     )
 
@@ -151,6 +206,11 @@ def _upsert_rollup_rows(
 ) -> int:
     if not rows:
         return 0
+
+    # Core insert executemany may not always apply Python-side defaults reliably across dialects.
+    # Generate UUID primary keys explicitly to keep rollup tasks robust.
+    for row in rows:
+        row.setdefault("id", uuid.uuid4())
 
     dialect = session.get_bind().dialect.name
     if dialect == "postgresql" and pg_insert is not None:
@@ -235,23 +295,35 @@ def _rollup_range(
     uq_constraint: str,
     window_seconds: int,
     default_lookback_days: int,
+    source_model=ProviderRoutingMetricsHistory,
+    requests_col=ProviderRoutingMetricsHistory.total_requests_1m,
 ) -> int:
     end_at = _effective_rollup_end(bucket=bucket)
     if bucket == "hour":
+        lookback_start = end_at - dt.timedelta(days=default_lookback_days)
         last = session.execute(select(func.max(target_model.window_start))).scalar_one_or_none()
-        start_at = _utc_floor_hour(last) + dt.timedelta(hours=1) if last else end_at - dt.timedelta(days=default_lookback_days)
-        start_at = _utc_floor_hour(start_at)
+        start_at = _utc_floor_hour(last) + dt.timedelta(hours=1) if last else _utc_floor_hour(lookback_start)
+        start_at = max(start_at, _utc_floor_hour(lookback_start))
     else:
+        lookback_start = end_at - dt.timedelta(days=default_lookback_days)
         last = session.execute(select(func.max(target_model.window_start))).scalar_one_or_none()
-        start_at = _utc_floor_day(last) + dt.timedelta(days=1) if last else end_at - dt.timedelta(days=default_lookback_days)
-        start_at = _utc_floor_day(start_at)
+        start_at = _utc_floor_day(last) + dt.timedelta(days=1) if last else _utc_floor_day(lookback_start)
+        start_at = max(start_at, _utc_floor_day(lookback_start))
 
     if start_at >= end_at:
         return 0
 
     # Postgres: do aggregation in DB.
     if session.get_bind().dialect.name == "postgresql":
-        rows = session.execute(_rollup_select(bucket=bucket, start_at=start_at, end_at=end_at)).all()
+        rows = session.execute(
+            _rollup_select_from_minute(
+                bucket=bucket,
+                start_at=start_at,
+                end_at=end_at,
+                source_model=source_model,
+                requests_col=requests_col,
+            )
+        ).all()
         payloads: list[dict] = []
         for row in rows:
             weight_sum = float(row[-1] or 0)
@@ -296,31 +368,31 @@ def _rollup_range(
     # Non-Postgres: Python aggregation (best-effort).
     minute_rows = session.execute(
         select(
-            ProviderRoutingMetricsHistory.window_start,
-            ProviderRoutingMetricsHistory.provider_id,
-            ProviderRoutingMetricsHistory.logical_model,
-            ProviderRoutingMetricsHistory.transport,
-            ProviderRoutingMetricsHistory.is_stream,
-            ProviderRoutingMetricsHistory.user_id,
-            ProviderRoutingMetricsHistory.api_key_id,
-            ProviderRoutingMetricsHistory.total_requests_1m,
-            ProviderRoutingMetricsHistory.success_requests,
-            ProviderRoutingMetricsHistory.error_requests,
-            ProviderRoutingMetricsHistory.latency_avg_ms,
-            ProviderRoutingMetricsHistory.latency_p50_ms,
-            ProviderRoutingMetricsHistory.latency_p95_ms,
-            ProviderRoutingMetricsHistory.latency_p99_ms,
-            ProviderRoutingMetricsHistory.error_4xx_requests,
-            ProviderRoutingMetricsHistory.error_5xx_requests,
-            ProviderRoutingMetricsHistory.error_429_requests,
-            ProviderRoutingMetricsHistory.error_timeout_requests,
-            ProviderRoutingMetricsHistory.input_tokens_sum,
-            ProviderRoutingMetricsHistory.output_tokens_sum,
-            ProviderRoutingMetricsHistory.total_tokens_sum,
-            ProviderRoutingMetricsHistory.token_estimated_requests,
+            source_model.window_start,
+            source_model.provider_id,
+            source_model.logical_model,
+            source_model.transport,
+            source_model.is_stream,
+            source_model.user_id,
+            source_model.api_key_id,
+            requests_col,
+            source_model.success_requests,
+            source_model.error_requests,
+            source_model.latency_avg_ms,
+            source_model.latency_p50_ms,
+            source_model.latency_p95_ms,
+            source_model.latency_p99_ms,
+            source_model.error_4xx_requests,
+            source_model.error_5xx_requests,
+            source_model.error_429_requests,
+            source_model.error_timeout_requests,
+            source_model.input_tokens_sum,
+            source_model.output_tokens_sum,
+            source_model.total_tokens_sum,
+            source_model.token_estimated_requests,
         ).where(
-            ProviderRoutingMetricsHistory.window_start >= start_at,
-            ProviderRoutingMetricsHistory.window_start < end_at,
+            source_model.window_start >= start_at,
+            source_model.window_start < end_at,
         )
     ).all()
 
@@ -403,9 +475,7 @@ def _rollup_range(
 
 def _cleanup_rollup(*, session, model, retention_days: int) -> int:
     cutoff = _now_utc_minute() - dt.timedelta(days=max(retention_days, 0))
-    result = session.execute(delete(model).where(model.window_start < cutoff))
-    session.commit()
-    return int(result.rowcount or 0)
+    return _batched_delete_before_cutoff(session=session, model=model, cutoff=cutoff)
 
 
 @shared_task(name="tasks.metrics.offline_recalc_recent")
@@ -451,16 +521,13 @@ def cleanup_metrics_history() -> int:
 
     session = SessionLocal()
     try:
-        retention_days = _get_effective_metrics_retention_days(session)
-        cutoff = _now_utc_minute() - dt.timedelta(days=retention_days)
+        with _PgAdvisoryLock(session, lock_id=8102000) as lock:
+            if session.get_bind().dialect.name == "postgresql" and not lock.acquired:
+                return 0
 
-        result = session.execute(
-            delete(ProviderRoutingMetricsHistory).where(
-                ProviderRoutingMetricsHistory.window_start < cutoff
-            )
-        )
-        session.commit()
-        return int(result.rowcount or 0)
+            retention_days = _get_effective_metrics_retention_days(session)
+            cutoff = _now_utc_minute() - dt.timedelta(days=retention_days)
+            return _batched_delete_before_cutoff(session=session, model=ProviderRoutingMetricsHistory, cutoff=cutoff)
     finally:
         session.close()
 
@@ -470,31 +537,41 @@ def rollup_metrics_hourly() -> int:
     """Roll up minute-bucket history into hourly metrics."""
     session = SessionLocal()
     try:
-        return _rollup_range(
-            session=session,
-            bucket="hour",
-            target_model=ProviderRoutingMetricsHourly,
-            uq_constraint="uq_provider_routing_metrics_hourly_bucket",
-            window_seconds=3600,
-            default_lookback_days=7,
-        )
+        with _PgAdvisoryLock(session, lock_id=8102001) as lock:
+            if session.get_bind().dialect.name == "postgresql" and not lock.acquired:
+                return 0
+            return _rollup_range(
+                session=session,
+                bucket="hour",
+                target_model=ProviderRoutingMetricsHourly,
+                uq_constraint="uq_provider_routing_metrics_hourly_bucket",
+                window_seconds=3600,
+                default_lookback_days=7,
+                source_model=ProviderRoutingMetricsHistory,
+                requests_col=ProviderRoutingMetricsHistory.total_requests_1m,
+            )
     finally:
         session.close()
 
 
 @shared_task(name="tasks.metrics.rollup_daily")
 def rollup_metrics_daily() -> int:
-    """Roll up minute-bucket history into daily metrics."""
+    """Roll up hourly metrics into daily metrics."""
     session = SessionLocal()
     try:
-        return _rollup_range(
-            session=session,
-            bucket="day",
-            target_model=ProviderRoutingMetricsDaily,
-            uq_constraint="uq_provider_routing_metrics_daily_bucket",
-            window_seconds=86400,
-            default_lookback_days=30,
-        )
+        with _PgAdvisoryLock(session, lock_id=8102002) as lock:
+            if session.get_bind().dialect.name == "postgresql" and not lock.acquired:
+                return 0
+            return _rollup_range(
+                session=session,
+                bucket="day",
+                target_model=ProviderRoutingMetricsDaily,
+                uq_constraint="uq_provider_routing_metrics_daily_bucket",
+                window_seconds=86400,
+                default_lookback_days=30,
+                source_model=ProviderRoutingMetricsHourly,
+                requests_col=ProviderRoutingMetricsHourly.total_requests,
+            )
     finally:
         session.close()
 
@@ -504,7 +581,14 @@ def cleanup_metrics_hourly() -> int:
     """Clean up hourly rollup history."""
     session = SessionLocal()
     try:
-        return _cleanup_rollup(session=session, model=ProviderRoutingMetricsHourly, retention_days=settings.dashboard_metrics_hourly_retention_days)
+        with _PgAdvisoryLock(session, lock_id=8102003) as lock:
+            if session.get_bind().dialect.name == "postgresql" and not lock.acquired:
+                return 0
+            return _cleanup_rollup(
+                session=session,
+                model=ProviderRoutingMetricsHourly,
+                retention_days=settings.dashboard_metrics_hourly_retention_days,
+            )
     finally:
         session.close()
 
@@ -514,7 +598,14 @@ def cleanup_metrics_daily() -> int:
     """Clean up daily rollup history."""
     session = SessionLocal()
     try:
-        return _cleanup_rollup(session=session, model=ProviderRoutingMetricsDaily, retention_days=settings.dashboard_metrics_daily_retention_days)
+        with _PgAdvisoryLock(session, lock_id=8102004) as lock:
+            if session.get_bind().dialect.name == "postgresql" and not lock.acquired:
+                return 0
+            return _cleanup_rollup(
+                session=session,
+                model=ProviderRoutingMetricsDaily,
+                retention_days=settings.dashboard_metrics_daily_retention_days,
+            )
     finally:
         session.close()
 

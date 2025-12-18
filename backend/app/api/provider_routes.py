@@ -22,6 +22,8 @@ from app.schemas import (
     RoutingMetrics,
     ModelAliasUpdateRequest,
     ProviderModelAliasResponse,
+    ModelDisableUpdateRequest,
+    ProviderModelDisabledResponse,
     ProviderSubmissionStatus,
 )
 from app.schemas.provider_routes import (
@@ -37,6 +39,7 @@ from app.provider.sdk_selector import list_registered_sdk_vendors
 from app.services.provider_health_service import get_health_status_with_fallback
 from app.services.user_provider_service import get_accessible_provider_ids
 from app.storage.redis_service import get_routing_metrics, get_all_provider_metrics
+from app.model_cache import MODELS_CACHE_KEY
 
 router = APIRouter(
     tags=["providers"],
@@ -398,6 +401,11 @@ async def get_provider_models(
                 if isinstance(getattr(row, "alias", None), str)
                 and getattr(row, "alias", "").strip()
             }
+            disabled_by_model_id: dict[str, bool] = {
+                row.model_id: True
+                for row in model_rows
+                if bool(getattr(row, "disabled", False))
+            }
             if pricing_by_model_id:
                 for item in items:
                     model_id = item.get("model_id") or item.get("id")
@@ -408,6 +416,16 @@ async def get_provider_models(
                     model_id = item.get("model_id") or item.get("id")
                     if isinstance(model_id, str) and model_id in alias_by_model_id:
                         item["alias"] = alias_by_model_id[model_id]
+            if disabled_by_model_id:
+                for item in items:
+                    model_id = item.get("model_id") or item.get("id")
+                    if isinstance(model_id, str):
+                        item["disabled"] = bool(disabled_by_model_id.get(model_id, False))
+            else:
+                for item in items:
+                    model_id = item.get("model_id") or item.get("id")
+                    if isinstance(model_id, str):
+                        item["disabled"] = False
     except Exception:
         # 防御性日志：覆盖计费失败不影响主逻辑，仅记录日志以便排查。
         logger.exception(
@@ -592,6 +610,118 @@ def update_provider_model_mapping(
         provider_id=provider_row.provider_id,
         model_id=model_row.model_id,
         alias=model_row.alias,
+    )
+
+
+@router.get(
+    "/providers/{provider_id}/models/{model_id:path}/disabled",
+    response_model=ProviderModelDisabledResponse,
+)
+def get_provider_model_disabled(
+    provider_id: str,
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderModelDisabledResponse:
+    """
+    查询指定 provider+model 的禁用状态。
+
+    仅允许超级管理员或该私有/受限 Provider 的所有者访问。
+    """
+    provider_row = _ensure_can_edit_provider_models(db, provider_id, current_user)
+    model_row = (
+        db.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider_row.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    return ProviderModelDisabledResponse(
+        provider_id=provider_row.provider_id,
+        model_id=model_id,
+        disabled=bool(getattr(model_row, "disabled", False)) if model_row else False,
+    )
+
+
+@router.put(
+    "/providers/{provider_id}/models/{model_id:path}/disabled",
+    response_model=ProviderModelDisabledResponse,
+)
+async def update_provider_model_disabled(
+    provider_id: str,
+    model_id: str,
+    payload: ModelDisableUpdateRequest,
+    db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderModelDisabledResponse:
+    """
+    更新指定 provider+model 的禁用状态。
+
+    - disabled=true：禁用该模型（不参与 /models 聚合与路由）
+    - disabled=false：恢复启用
+    """
+    provider_row = _ensure_can_edit_provider_models(db, provider_id, current_user)
+
+    model_row = (
+        db.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider_row.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if model_row is None:
+        # 若 provider_models 中尚无该模型行，则以保守默认值创建一行，方便后续管理。
+        model_row = ProviderModel(
+            provider_id=provider_row.id,
+            model_id=model_id,
+            family=model_id[:50],
+            display_name=model_id[:100],
+            context_length=8192,
+            capabilities=["chat"],
+            pricing=None,
+            metadata_json=None,
+            meta_hash=None,
+            disabled=bool(payload.disabled),
+        )
+        db.add(model_row)
+        db.flush()
+    else:
+        model_row.disabled = bool(payload.disabled)
+        db.add(model_row)
+
+    db.commit()
+    db.refresh(model_row)
+
+    # 缓存失效：/models 聚合缓存 + 逻辑模型缓存（llm:logical:*）增量刷新
+    if redis is not object:
+        try:
+            await redis.delete(MODELS_CACHE_KEY)  # type: ignore[attr-defined]
+        except Exception:
+            logger.warning("Failed to invalidate MODELS cache key", exc_info=True)
+
+        try:
+            from app.services.logical_model_sync import sync_logical_models
+
+            await sync_logical_models(redis, session=db, provider_ids=[provider_id])
+        except Exception:
+            logger.warning(
+                "Failed to sync logical models after toggling disabled for %s/%s",
+                provider_id,
+                model_id,
+                exc_info=True,
+            )
+
+    return ProviderModelDisabledResponse(
+        provider_id=provider_row.provider_id,
+        model_id=model_row.model_id,
+        disabled=bool(model_row.disabled),
     )
 
 

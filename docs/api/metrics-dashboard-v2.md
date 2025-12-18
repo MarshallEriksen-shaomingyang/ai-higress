@@ -33,10 +33,15 @@ Dashboard v2 在 `time_range != today` 时会**优先查询 rollup 表**，若 r
 - `tasks.metrics.cleanup_history`（分钟桶清理）
 - `tasks.metrics.cleanup_hourly` / `tasks.metrics.cleanup_daily`（rollup 清理）
 
+并发说明（Postgres）：
+- 任务内部使用 `pg_try_advisory_lock` 做互斥，避免多实例/多 beat 重复跑同一类任务导致 IO 浪费；
+- 清理任务采用“分批删除”，降低单次大事务带来的锁与膨胀风险。
+
 可通过环境变量调优（见 `app/settings.py`）：
 - `DASHBOARD_METRICS_ROLLUP_ENABLED`
 - `DASHBOARD_METRICS_ROLLUP_HOURLY_INTERVAL_SECONDS` / `DASHBOARD_METRICS_ROLLUP_DAILY_INTERVAL_SECONDS`
 - `DASHBOARD_METRICS_HOURLY_RETENTION_DAYS` / `DASHBOARD_METRICS_DAILY_RETENTION_DAYS`
+- `DASHBOARD_METRICS_CLEANUP_BATCH_SIZE`
 
 ---
 

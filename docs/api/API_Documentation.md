@@ -1720,7 +1720,8 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
       "object": "string",
       "created": 1234567890,
       "owned_by": "string",
-      "alias": "string (optional, logical alias such as \"claude-sonnet-4-5\")"
+      "alias": "string (optional, logical alias such as \"claude-sonnet-4-5\")",
+      "disabled": "boolean (optional, true 表示该 Provider 下该模型已被禁用)"
     }
   ],
   "total": 1
@@ -1815,6 +1816,43 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
 
 **错误响应**:
 - 400: 别名与同一 Provider 下其它模型冲突；
+- 403: 当前用户无权修改该 Provider 的模型配置；
+- 404: Provider 不存在。
+
+---
+
+### 3.2 管理单个模型的禁用状态
+
+> 仅限：超级管理员或该私有/受限 Provider 的所有者。
+
+当某个 provider+model 被禁用后：
+- 该模型不会参与聊天路由选择；
+- 网关的 `/models` 聚合列表也不会包含该模型；
+- 若调用方仍请求该模型，且在当前可用 provider 范围内已无任何可路由的候选，上游会返回 `400`，并提示“该模型已被禁用”。
+
+**接口（获取）**: `GET /providers/{provider_id}/models/{model_id}/disabled`  
+**认证**: JWT 令牌  
+
+**响应示例**:
+```json
+{
+  "provider_id": "my-private-provider",
+  "model_id": "gpt-4o",
+  "disabled": true
+}
+```
+
+**接口（更新）**: `PUT /providers/{provider_id}/models/{model_id}/disabled`  
+**认证**: JWT 令牌  
+
+**请求体**:
+```json
+{
+  "disabled": true
+}
+```
+
+**错误响应**:
 - 403: 当前用户无权修改该 Provider 的模型配置；
 - 404: Provider 不存在。
 

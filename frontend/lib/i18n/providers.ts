@@ -171,6 +171,12 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.model_pricing_not_configured": "Not configured",
     "providers.model_edit_pricing": "Edit Pricing",
     "providers.model_edit_alias": "Edit Alias",
+    "providers.model_disabled_badge": "Disabled",
+    "providers.model_disable_toggle_label": "Disable",
+    "providers.model_disable_success": "Model disabled",
+    "providers.model_disable_error": "Failed to disable model",
+    "providers.model_enable_success": "Model enabled",
+    "providers.model_enable_error": "Failed to enable model",
 
     // Private sharing
     "providers.sharing_title": "Private sharing",
@@ -467,6 +473,12 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.model_pricing_not_configured": "未配置",
     "providers.model_edit_pricing": "编辑计费",
     "providers.model_edit_alias": "编辑别名",
+    "providers.model_disabled_badge": "已禁用",
+    "providers.model_disable_toggle_label": "禁用模型",
+    "providers.model_disable_success": "模型已禁用",
+    "providers.model_disable_error": "禁用模型失败",
+    "providers.model_enable_success": "模型已启用",
+    "providers.model_enable_error": "启用模型失败",
 
     // 私有分享
     "providers.sharing_title": "私有分享",

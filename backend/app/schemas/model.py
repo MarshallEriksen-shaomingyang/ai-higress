@@ -101,11 +101,37 @@ class ProviderModelAliasResponse(BaseModel):
     )
 
 
+class ModelDisableUpdateRequest(BaseModel):
+    """
+    更新单个物理模型「禁用状态」的请求体。
+
+    - disabled=true：禁用该 Provider 下的该模型（不参与 /models 聚合与路由）。
+    - disabled=false：恢复启用。
+    """
+
+    disabled: bool = Field(
+        ...,
+        description="是否禁用该 Provider 下的该模型",
+    )
+
+
+class ProviderModelDisabledResponse(BaseModel):
+    """
+    返回 provider+model 维度的禁用状态。
+    """
+
+    provider_id: str = Field(..., description="Provider 的短 ID（例如 moonshot-xxx）")
+    model_id: str = Field(..., description="上游模型 ID")
+    disabled: bool = Field(..., description="当前是否已禁用该模型")
+
+
 __all__ = [
     "Model",
     "ModelCapability",
+    "ModelDisableUpdateRequest",
     "ModelPricingUpdateRequest",
     "ProviderModelPricingResponse",
     "ModelAliasUpdateRequest",
     "ProviderModelAliasResponse",
+    "ProviderModelDisabledResponse",
 ]

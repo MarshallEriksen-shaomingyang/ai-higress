@@ -481,6 +481,13 @@ class Settings(BaseSettings):
         description="Dashboard 指标清理任务的调度间隔（秒）",
         ge=60,
     )
+    dashboard_metrics_cleanup_batch_size: int = Field(
+        5000,
+        alias="DASHBOARD_METRICS_CLEANUP_BATCH_SIZE",
+        description="清理任务每批删除的最大行数（避免单次大事务造成锁与膨胀）",
+        ge=100,
+        le=50000,
+    )
     dashboard_metrics_rollup_enabled: bool = Field(
         True,
         alias="DASHBOARD_METRICS_ROLLUP_ENABLED",

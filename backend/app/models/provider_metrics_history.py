@@ -37,6 +37,16 @@ class ProviderRoutingMetricsHistory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "is_stream",
             "window_start",
         ),
+        Index(
+            "ix_provider_routing_metrics_history_user_window",
+            "user_id",
+            "window_start",
+        ),
+        Index(
+            "ix_provider_routing_metrics_history_api_key_window",
+            "api_key_id",
+            "window_start",
+        ),
     )
 
     provider_id: Mapped[str] = Column(String(50), nullable=False, index=True)

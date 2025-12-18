@@ -16,6 +16,7 @@ from uuid import UUID
 import httpx
 from fastapi import HTTPException, status
 
+from sqlalchemy import select
 try:
     from redis.asyncio import Redis
 except ModuleNotFoundError:  # pragma: no cover
@@ -25,6 +26,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.errors import forbidden
 from app.logging_config import logger
+from app.models import Provider, ProviderModel
 from app.routing.mapper import select_candidate_upstreams
 from app.routing.scheduler import CandidateScore, choose_upstream
 from app.routing.session_manager import get_session
@@ -64,6 +66,65 @@ class ProviderSelector:
         self.db = db
         self.routing_state = routing_state or RoutingStateService(redis=redis)
 
+    def _is_any_model_disabled(
+        self,
+        *,
+        model_ids: list[str],
+        provider_ids: set[str],
+    ) -> bool:
+        if not model_ids or not provider_ids:
+            return False
+        try:
+            rows = (
+                self.db.execute(
+                    select(ProviderModel.model_id)
+                    .join(Provider, ProviderModel.provider_id == Provider.id)
+                    .where(Provider.provider_id.in_(list(provider_ids)))
+                    .where(ProviderModel.model_id.in_(model_ids))
+                    .where(ProviderModel.disabled.is_(True))
+                    .limit(1)
+                )
+                .scalars()
+                .all()
+            )
+            return bool(rows)
+        except Exception:
+            logger.exception(
+                "provider_selector: failed to check model disabled state for model_ids=%s providers=%s",
+                model_ids,
+                sorted(provider_ids),
+            )
+            return False
+
+    def _load_disabled_pairs(
+        self,
+        *,
+        provider_ids: set[str],
+        model_ids: set[str],
+    ) -> set[tuple[str, str]]:
+        if not provider_ids or not model_ids:
+            return set()
+        try:
+            rows = self.db.execute(
+                select(Provider.provider_id, ProviderModel.model_id)
+                .select_from(ProviderModel)
+                .join(Provider, ProviderModel.provider_id == Provider.id)
+                .where(Provider.provider_id.in_(list(provider_ids)))
+                .where(ProviderModel.model_id.in_(list(model_ids)))
+                .where(ProviderModel.disabled.is_(True))
+            ).all()
+        except Exception:
+            logger.exception(
+                "provider_selector: failed to load disabled model pairs for providers=%s",
+                sorted(provider_ids),
+            )
+            return set()
+        disabled: set[tuple[str, str]] = set()
+        for provider_id, model_id in rows:
+            if isinstance(provider_id, str) and isinstance(model_id, str):
+                disabled.add((provider_id, model_id))
+        return disabled
+
     async def select(
         self,
         *,
@@ -97,6 +158,21 @@ class ProviderSelector:
         )
         candidates = [c for c in candidates if c.provider_id in effective_provider_ids]
 
+        if not candidates:
+            requested_model_str = (
+                str(requested_model) if isinstance(requested_model, str) else None
+            )
+            model_ids_to_check: list[str] = [lookup_model_id]
+            if requested_model_str and requested_model_str not in model_ids_to_check:
+                model_ids_to_check.append(requested_model_str)
+            if self._is_any_model_disabled(
+                model_ids=model_ids_to_check, provider_ids=effective_provider_ids
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"message": "该模型已被禁用"},
+                )
+
         # 与 endpoint 选择逻辑保持一致：openai/claude 请求不应路由到 responses-only 上游。
         # 若所有候选都只能走 responses，则提示调用方切换到 /responses 入口。
         if api_style in ("openai", "claude"):
@@ -116,8 +192,22 @@ class ProviderSelector:
                         "available_upstream_styles": ["responses"],
                     },
                 )
+
+        # Provider owner 的“模型禁用”过滤：禁用的 provider+model 不参与路由。
+        disabled_pairs = self._load_disabled_pairs(
+            provider_ids={c.provider_id for c in candidates},
+            model_ids={c.model_id for c in candidates},
+        )
+        if disabled_pairs:
+            candidates = [
+                c for c in candidates if (c.provider_id, c.model_id) not in disabled_pairs
+            ]
+
         if not candidates:
-            raise forbidden("当前用户无权访问该模型的任何可用 Provider")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "该模型已被禁用"},
+            )
 
         # Optional: drop obvious down providers based on cached health.
         health_by_provider: dict[str, Any] = {}
@@ -221,6 +311,19 @@ class ProviderSelector:
             is_superuser=is_superuser,
         )
         if built is None:
+            requested_model_str = (
+                str(requested_model) if isinstance(requested_model, str) else None
+            )
+            model_ids_to_check: list[str] = [lookup_model_id]
+            if requested_model_str and requested_model_str not in model_ids_to_check:
+                model_ids_to_check.append(requested_model_str)
+            if self._is_any_model_disabled(
+                model_ids=model_ids_to_check, provider_ids=allowed_provider_ids
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"message": "该模型已被禁用"},
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={

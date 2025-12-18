@@ -6,10 +6,12 @@ import type { ModelsResponse } from "@/http/provider";
 import { ModelCard } from "./model-card";
 
 interface ProviderModelsTabProps {
+  providerId: string;
   models?: ModelsResponse;
   canEdit: boolean;
   onEditPricing: (modelId: string) => void;
   onEditAlias: (modelId: string) => void;
+  onRefresh: () => Promise<void>;
   translations: {
     title: string;
     description: string;
@@ -18,10 +20,12 @@ interface ProviderModelsTabProps {
 }
 
 export const ProviderModelsTab = ({
+  providerId,
   models,
   canEdit,
   onEditPricing,
   onEditAlias,
+  onRefresh,
   translations
 }: ProviderModelsTabProps) => {
   const modelCount = models?.models?.length || 0;
@@ -65,10 +69,12 @@ export const ProviderModelsTab = ({
           {models.models.map((model) => (
             <ModelCard
               key={model.model_id}
+              providerId={providerId}
               model={model}
               canEdit={canEdit}
               onEditPricing={() => onEditPricing(model.model_id)}
               onEditAlias={() => onEditAlias(model.model_id)}
+              onRefresh={onRefresh}
             />
           ))}
         </div>

@@ -1291,7 +1291,11 @@ async def _get_or_fetch_models(
             return ModelsResponse(**cached)
 
         try:
-            stmt = select(ProviderModel.model_id).order_by(ProviderModel.model_id)
+            stmt = (
+                select(ProviderModel.model_id)
+                .where(ProviderModel.disabled.is_(False))
+                .order_by(ProviderModel.model_id)
+            )
             rows = db.execute(stmt).scalars().all()
         except Exception:  # pragma: no cover - 防御性日志
             logger.exception("Failed to load provider models from database")
@@ -1313,6 +1317,7 @@ async def _get_or_fetch_models(
             select(ProviderModel.model_id)
             .join(Provider, ProviderModel.provider_id == Provider.id)
             .where(Provider.provider_id.in_(allowed))
+            .where(ProviderModel.disabled.is_(False))
             .order_by(ProviderModel.model_id)
         )
         rows = db.execute(stmt).scalars().all()
@@ -1410,6 +1415,8 @@ def _build_model_alias_map(
     for provider_row, cfg in providers_with_configs:
         alias_map: dict[str, str] = {}
         for model in getattr(provider_row, "models", []) or []:
+            if bool(getattr(model, "disabled", False)):
+                continue
             alias_value = getattr(model, "alias", None)
             if not isinstance(alias_value, str):
                 continue

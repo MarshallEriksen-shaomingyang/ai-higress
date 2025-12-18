@@ -121,6 +121,8 @@ def collect_logical_models(
     now = time.time()
 
     for provider_model, provider in rows:
+        if bool(getattr(provider_model, "disabled", False)):
+            continue
         caps = _normalize_capabilities(provider_model.capabilities)
         caps_by_logical[provider_model.model_id].update(caps)
         display_by_logical.setdefault(

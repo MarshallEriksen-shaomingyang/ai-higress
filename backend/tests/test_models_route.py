@@ -74,3 +74,49 @@ def test_models_route_falls_back_to_database():
 
     cached_payload = asyncio.run(fake_redis.get(MODELS_CACHE_KEY))
     assert cached_payload is not None
+
+
+def test_models_route_excludes_disabled_models_from_database():
+    app, session_factory, _fake_redis = _setup_app()
+
+    with session_factory() as session:
+        provider = Provider(
+            provider_id="openai",
+            name="OpenAI",
+            base_url="https://api.example.com",
+            transport="http",
+            weight=1.0,
+        )
+        session.add(provider)
+        session.flush()
+        session.add_all(
+            [
+                ProviderModel(
+                    provider_id=provider.id,
+                    model_id="gpt-enabled",
+                    family="gpt",
+                    display_name="GPT Enabled",
+                    context_length=8192,
+                    capabilities=["chat"],
+                    disabled=False,
+                ),
+                ProviderModel(
+                    provider_id=provider.id,
+                    model_id="gpt-disabled",
+                    family="gpt",
+                    display_name="GPT Disabled",
+                    context_length=8192,
+                    capabilities=["chat"],
+                    disabled=True,
+                ),
+            ]
+        )
+        session.commit()
+
+    with TestClient(app, base_url="http://test") as client:
+        resp = client.get("/models", headers=auth_headers())
+        assert resp.status_code == 200
+        body = resp.json()
+        ids = [item["id"] for item in body.get("data", [])]
+        assert "gpt-enabled" in ids
+        assert "gpt-disabled" not in ids

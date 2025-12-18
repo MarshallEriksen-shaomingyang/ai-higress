@@ -667,10 +667,12 @@ export function ProviderDetailMain({ providerId, currentUserId, translations }: 
         {/* 模型标签页 */}
         <TabsContent value="models">
           <ProviderModelsTab
+            providerId={providerId}
             models={models}
             canEdit={!!permissions.canEditModelMapping}
             onEditPricing={openPricingEditor}
             onEditAlias={openAliasEditor}
+            onRefresh={refresh}
             translations={translations.models}
           />
         </TabsContent>

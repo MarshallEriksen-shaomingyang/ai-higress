@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import {
   DollarSign,
   Calendar,
@@ -13,13 +15,18 @@ import {
   Sparkles
 } from "lucide-react";
 import type { Model } from "@/http/provider";
+import { providerService } from "@/http/provider";
 import { useI18n } from "@/lib/i18n-context";
+import { useErrorDisplay } from "@/lib/errors";
+import { toast } from "sonner";
 
 interface ModelCardProps {
+  providerId: string;
   model: Model;
   canEdit: boolean;
   onEditPricing: () => void;
   onEditAlias: () => void;
+  onRefresh: () => Promise<void>;
 }
 
 /**
@@ -80,8 +87,48 @@ function formatDate(timestamp?: number): string {
  * - 更清晰的信息层次
  * - 流畅的动画过渡
  */
-export function ModelCard({ model, canEdit, onEditPricing, onEditAlias }: ModelCardProps) {
+export function ModelCard({
+  providerId,
+  model,
+  canEdit,
+  onEditPricing,
+  onEditAlias,
+  onRefresh,
+}: ModelCardProps) {
   const { t } = useI18n();
+  const { showError } = useErrorDisplay();
+  const [toggling, setToggling] = useState(false);
+  const disabled = Boolean(model.disabled);
+  const [localDisabled, setLocalDisabled] = useState(disabled);
+
+  useEffect(() => {
+    setLocalDisabled(Boolean(model.disabled));
+  }, [model.disabled, model.model_id]);
+
+  const toggleDisabled = async (nextDisabled: boolean) => {
+    if (toggling) return;
+    setToggling(true);
+    const prev = localDisabled;
+    setLocalDisabled(nextDisabled);
+    try {
+      await providerService.updateProviderModelDisabled(
+        providerId,
+        model.model_id,
+        { disabled: nextDisabled }
+      );
+      toast.success(
+        nextDisabled ? t("providers.model_disable_success") : t("providers.model_enable_success")
+      );
+      await onRefresh();
+    } catch (err: any) {
+      setLocalDisabled(prev);
+      showError(err, {
+        context: nextDisabled ? t("providers.model_disable_error") : t("providers.model_enable_error"),
+      });
+    } finally {
+      setToggling(false);
+    }
+  };
 
   return (
     <Card
@@ -107,7 +154,14 @@ export function ModelCard({ model, canEdit, onEditPricing, onEditAlias }: ModelC
               </code>
             </div>
           </div>
-          <PricingBadge model={model} />
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            <PricingBadge model={model} />
+            {localDisabled && (
+              <Badge variant="destructive" className="text-xs font-normal">
+                {t("providers.model_disabled_badge")}
+              </Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
 
@@ -144,6 +198,19 @@ export function ModelCard({ model, canEdit, onEditPricing, onEditAlias }: ModelC
                   <span>{model.model_id}</span>
                 </p>
               </div>
+            </div>
+          )}
+
+          {canEdit && (
+            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+              <span className="text-xs text-muted-foreground">
+                {t("providers.model_disable_toggle_label")}
+              </span>
+              <Switch
+                checked={localDisabled}
+                onCheckedChange={(checked) => void toggleDisabled(Boolean(checked))}
+                disabled={toggling}
+              />
             </div>
           )}
         </div>

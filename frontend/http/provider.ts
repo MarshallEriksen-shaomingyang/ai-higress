@@ -200,6 +200,8 @@ export interface Model {
   pricing: Record<string, number> | null;
    // 可选的模型别名，用于将长版本 ID 映射为更易记的短名称
   alias?: string | null;
+  // Provider owner 可禁用单个模型；禁用后不会参与路由与 /models 聚合
+  disabled?: boolean;
   metadata?: ModelMetadata | null;
   meta_hash?: string | null;
 }
@@ -216,6 +218,13 @@ export interface ProviderModelAlias {
   provider_id: string;
   model_id: string;
   alias: string | null;
+}
+
+// provider+model 维度的禁用状态
+export interface ProviderModelDisabled {
+  provider_id: string;
+  model_id: string;
+  disabled: boolean;
 }
 
 export interface ProviderSharedUsersResponse {
@@ -444,6 +453,34 @@ export const providerService = {
   ): Promise<ProviderModelAlias> => {
     const response = await httpClient.put(
       `/providers/${providerId}/models/${encodeURIComponent(modelId)}/mapping`,
+      data
+    );
+    return response.data;
+  },
+
+  /**
+   * 查询指定 provider+model 的禁用状态
+   */
+  getProviderModelDisabled: async (
+    providerId: string,
+    modelId: string
+  ): Promise<ProviderModelDisabled> => {
+    const response = await httpClient.get(
+      `/providers/${providerId}/models/${encodeURIComponent(modelId)}/disabled`
+    );
+    return response.data;
+  },
+
+  /**
+   * 更新指定 provider+model 的禁用状态
+   */
+  updateProviderModelDisabled: async (
+    providerId: string,
+    modelId: string,
+    data: { disabled: boolean }
+  ): Promise<ProviderModelDisabled> => {
+    const response = await httpClient.put(
+      `/providers/${providerId}/models/${encodeURIComponent(modelId)}/disabled`,
       data
     );
     return response.data;
