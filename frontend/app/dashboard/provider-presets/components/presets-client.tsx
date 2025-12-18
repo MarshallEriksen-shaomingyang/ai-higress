@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  VisuallyHidden,
 } from "@/components/ui/dialog";
 import dynamic from "next/dynamic";
 import { useI18n } from "@/lib/i18n-context";
@@ -35,6 +36,11 @@ export function PresetsClient() {
       loading: () => (
         <Dialog open={true}>
           <DialogContent>
+            <DialogHeader>
+              <VisuallyHidden>
+                <DialogTitle>{t("provider_presets.loading")}</DialogTitle>
+              </VisuallyHidden>
+            </DialogHeader>
             <div className="p-8 text-center text-muted-foreground">{t("provider_presets.loading")}</div>
           </DialogContent>
         </Dialog>
@@ -48,6 +54,11 @@ export function PresetsClient() {
       loading: () => (
         <Dialog open={true}>
           <DialogContent>
+            <DialogHeader>
+              <VisuallyHidden>
+                <DialogTitle>{t("provider_presets.loading")}</DialogTitle>
+              </VisuallyHidden>
+            </DialogHeader>
             <div className="p-8 text-center text-muted-foreground">{t("provider_presets.loading")}</div>
           </DialogContent>
         </Dialog>

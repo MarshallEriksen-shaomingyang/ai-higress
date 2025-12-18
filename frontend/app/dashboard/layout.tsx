@@ -15,10 +15,10 @@ export default function DashboardLayout({
                 
                 {/* 主内容区 */}
                 <div className="flex-1 flex flex-col overflow-hidden">
-                    <TopNav />
-                    <main className="flex-1 overflow-y-auto p-4 lg:p-6 glass-card">
+                    <TopNav /><main className="flex-1 overflow-y-auto p-4 lg:p-6 glass-card">
                         {children}
                     </main>
+                    
                 </div>
             </div>
         </SidebarProvider>

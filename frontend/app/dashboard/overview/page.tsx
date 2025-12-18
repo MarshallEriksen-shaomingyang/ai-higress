@@ -1,4 +1,4 @@
-import { OverviewClient } from "./_components/overview-client";
+import { OverviewWrapper } from "./_components/overview-wrapper";
 import type { Metadata } from "next";
 
 /**
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
  * 
  * 职责：
  * - 提供页面布局和容器
- * - 渲染客户端容器组件
+ * - 渲染客户端容器组件（仅客户端渲染，避免 hydration 错误）
  * - 设置页面元数据
  * 
  * 验证需求：1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 export default function DashboardOverviewPage() {
   return (
     <div className="container mx-auto p-6">
-      <OverviewClient />
+      <OverviewWrapper />
     </div>
   );
 }

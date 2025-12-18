@@ -11,6 +11,7 @@ import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { PWARegister } from "@/components/pwa-register";
 import { PerformanceMonitor } from "@/components/performance-monitor";
 import { generateJsonLd } from "@/lib/seo";
+import { ThemeBackground } from "@/components/theme-background";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://ai-higress.example.com'),
@@ -117,24 +118,27 @@ export default function RootLayout({
           themes={['light', 'dark', 'christmas', 'ocean', 'spring']}
           disableTransitionOnChange
         >
-          <I18nProvider>
-            <SWRProvider>
-              <AuthProvider>
-                {children}
-                {/* 全局登录对话框 - 由 Zustand 状态控制显示 */}
-                <Suspense fallback={null}>
-                  <AuthDialog />
-                </Suspense>
-                {/* PWA 注册 Service Worker */}
-                <PWARegister />
-                {/* PWA 安装提示 */}
-                <PWAInstallPrompt />
-                {/* 性能监控 */}
-                <PerformanceMonitor />
-              </AuthProvider>
-            </SWRProvider>
-          </I18nProvider>
-          <Toaster richColors closeButton />
+          <ThemeBackground />
+          <main className="relative z-10">
+            <I18nProvider>
+              <SWRProvider>
+                <AuthProvider>
+                  {children}
+                  {/* 全局登录对话框 - 由 Zustand 状态控制显示 */}
+                  <Suspense fallback={null}>
+                    <AuthDialog />
+                  </Suspense>
+                  {/* PWA 注册 Service Worker */}
+                  <PWARegister />
+                  {/* PWA 安装提示 */}
+                  <PWAInstallPrompt />
+                  {/* 性能监控 */}
+                  <PerformanceMonitor />
+                </AuthProvider>
+              </SWRProvider>
+            </I18nProvider>
+            <Toaster richColors closeButton />
+          </main>
         </ThemeProvider>
       </body>
     </html>

@@ -153,7 +153,7 @@ const LazyChart = lazy(() => import('./chart'));
 考虑在后端 API 中直接返回聚合后的数据，减少前端计算：
 ```python
 # 后端返回已经按需采样的数据
-GET /metrics/v2/user-dashboard/pulse?sample_rate=200
+GET /metrics/user-dashboard/pulse?sample_rate=200
 ```
 
 ## 测试建议

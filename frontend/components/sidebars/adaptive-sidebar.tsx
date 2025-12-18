@@ -183,7 +183,7 @@ function DecoratedMenuItem({
         {/* 花环图片 */}
         <div className="absolute top-0 left-0 right-0 h-10">
           <img
-            src="/theme/chrismas/dashboard.png"
+            src="/theme/christmas/dashboard.png"
             alt="Christmas garland"
             className="absolute top-0 left-0 w-full h-auto object-contain"
             style={{

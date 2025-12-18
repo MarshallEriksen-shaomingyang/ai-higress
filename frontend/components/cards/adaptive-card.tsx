@@ -67,7 +67,7 @@ export function AdaptiveCard({
         {showDecor && (
           <div className="christmas-card-decor absolute top-0 right-0 z-30 w-48 h-32 pointer-events-none">
             <img
-              src="/theme/chrismas/card.png"
+              src="/theme/christmas/card.png"
               alt="Christmas decoration"
               className="w-full h-full object-contain object-right-top"
               style={{
