@@ -152,6 +152,7 @@ from .upstream_proxy import (
 )
 from .session import Session
 from .user import (
+    AdminUserResponse,
     UserCreateRequest,
     UserLookupResponse,
     UserResponse,
@@ -275,6 +276,7 @@ __all__ = [
     "UserProviderUpdateRequest",
     "UserQuotaResponse",
     "UserCreateRequest",
+    "AdminUserResponse",
     "UserResponse",
     "UserStatusUpdateRequest",
     "UserUpdateRequest",

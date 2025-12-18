@@ -1,5 +1,5 @@
 import { httpClient } from './client';
-import { UserInfo } from './auth';
+import type { UserInfo } from '@/lib/api-types';
 
 // 权限定义
 export interface Permission {

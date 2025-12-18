@@ -618,6 +618,9 @@
 
 **认证**: JWT 令牌 (仅限超级用户)
 
+**说明**:
+- `credit_auto_topup`：该用户的自动充值规则（结构同 `GET /v1/credits/admin/users/{user_id}/auto-topup` 的成功响应）；未配置时为 `null`。
+
 **响应**:
 ```json
 [
@@ -640,6 +643,15 @@
         "value": false
       }
     ],
+    "credit_auto_topup": {
+      "id": "uuid",
+      "user_id": "uuid",
+      "min_balance_threshold": 100,
+      "target_balance": 200,
+      "is_active": true,
+      "created_at": "datetime",
+      "updated_at": "datetime"
+    },
     "created_at": "datetime",
     "updated_at": "datetime"
   }
@@ -1147,6 +1159,9 @@
 > 额外说明：若某个逻辑模型的上游仅配置为 `responses` 风格（即仅支持 Responses API），
 > 则通过 `POST /v1/chat/completions` 调用该模型可能返回 `400 Bad Request`，
 > 提示“该模型仅支持 Responses API，请使用 /responses 入口调用”。此时请改用 `POST /v1/responses`。
+>
+> 说明：当 `stream=true` 或请求头 `Accept: text/event-stream` 触发流式响应时，若在开始推流前发生可预判错误
+> （例如模型不可用、或仅支持 `/responses` 入口），网关仍会返回常规的 `4xx` JSON 错误体（而不是 SSE）。
 
 ### 计费规则
 

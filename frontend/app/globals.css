@@ -133,6 +133,45 @@
   --sidebar-ring: #3b82f6;
 }
 
+/* 圣诞主题 - Christmas Theme */
+.christmas {
+  color-scheme: light;
+  --background: #fef8f8;
+  --foreground: #1a0505;
+  --card: #ffffff;
+  --card-foreground: #1a0505;
+  --popover: #ffffff;
+  --popover-foreground: #1a0505;
+  --primary: #dc2626; /* 圣诞红 */
+  --primary-foreground: #ffffff;
+  --secondary: #16a34a; /* 圣诞绿 */
+  --secondary-foreground: #ffffff;
+  --muted: #fef2f2;
+  --muted-foreground: #991b1b;
+  --accent: #fbbf24; /* 金色 */
+  --accent-foreground: #78350f;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #fecaca;
+  --input: #fecaca;
+  --ring: #dc2626;
+  --chart-1: #dc2626;
+  --chart-2: #16a34a;
+  --chart-3: #fbbf24;
+  --chart-4: #ef4444;
+  --chart-5: #22c55e;
+  --sidebar: #fef2f2;
+  --sidebar-foreground: #1a0505;
+  --sidebar-primary: #dc2626;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fee2e2;
+  --sidebar-accent-foreground: #991b1b;
+  --sidebar-border: #fecaca;
+  --sidebar-ring: #dc2626;
+}
+
+
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -150,4 +189,57 @@
   .min-shadow {
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
+
+  /* 玻璃拟态效果增强 - 用于特殊主题 */
+  .glass-card {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .dark .glass-card {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* 圣诞主题特殊效果 */
+  .christmas .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(220, 38, 38, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(220, 38, 38, 0.15);
+  }
+
+
 }
+
+  /* 霓虹卡片精致字体样式 - 香槟金 */
+  .neon-card-number {
+    font-weight: 300;
+    color: #e0c38c; /* 香槟金 */
+    text-shadow: 0 0 10px rgba(224, 195, 140, 0.3);
+    font-family: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  /* 更细的字体变体 */
+  .neon-card-number-thin {
+    font-weight: 200;
+    color: #e0c38c;
+    text-shadow: 0 0 12px rgba(224, 195, 140, 0.4), 0 0 24px rgba(224, 195, 140, 0.2);
+    font-family: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.03em;
+  }
+
+  /* 金属质感文字 */
+  .neon-card-metallic {
+    font-weight: 300;
+    background: linear-gradient(180deg, #f5e6c8 0%, #e0c38c 50%, #c9a961 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 2px 8px rgba(224, 195, 140, 0.3);
+    font-family: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+

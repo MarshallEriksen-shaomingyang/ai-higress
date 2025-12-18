@@ -307,6 +307,29 @@ def test_admin_can_list_all_users(client_with_db):
     assert isinstance(sample["role_codes"], list)
     assert "permission_flags" in sample
     assert isinstance(sample["permission_flags"], list)
+    assert "credit_auto_topup" in sample
+    assert sample["credit_auto_topup"] is None
+
+    # 配置自动充值后，列表应能直接返回该用户的规则信息（用于前端标记已配置/已启用/已停用）
+    resp_config = client.put(
+        f"/v1/credits/admin/users/{created_user_id}/auto-topup",
+        json={
+            "min_balance_threshold": 100,
+            "target_balance": 200,
+            "is_active": True,
+        },
+        headers=_jwt_auth_headers(admin_id),
+    )
+    assert resp_config.status_code == 200
+
+    resp_list_after = client.get("/admin/users", headers=_jwt_auth_headers(admin_id))
+    assert resp_list_after.status_code == 200
+    data_after = resp_list_after.json()
+    sample_after = next(item for item in data_after if item["id"] == created_user_id)
+    assert sample_after["credit_auto_topup"] is not None
+    assert sample_after["credit_auto_topup"]["min_balance_threshold"] == 100
+    assert sample_after["credit_auto_topup"]["target_balance"] == 200
+    assert sample_after["credit_auto_topup"]["is_active"] is True
 
 
 def test_non_superuser_cannot_list_users(client_with_db):

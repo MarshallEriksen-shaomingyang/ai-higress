@@ -15,6 +15,10 @@ export interface UserInfo {
     key: string;
     value: boolean;
   }>;
+  /**
+   * 自动充值规则（管理员列表接口返回）；未配置时为 null。
+   */
+  credit_auto_topup?: CreditAutoTopupConfig | null;
   created_at: string;
   updated_at: string;
 }

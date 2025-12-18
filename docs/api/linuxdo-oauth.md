@@ -19,7 +19,8 @@
 1. 前端请求 `GET /auth/oauth/linuxdo/authorize`，服务端生成 `state` 并重定向到 LinuxDo 授权页面。
 2. 用户完成授权后回到前端 `/callback` 页面，前端将 `code` 和 `state` POST 到 `/auth/oauth/callback`。
 3. 后端校验 `state`、用授权码交换 access token，并从 LinuxDo 拉取用户信息。
-4. 若用户首次登录则自动创建账号并关联 `Identity` 记录，随后签发本地 JWT。
+4. 若用户首次登录则会视为“注册”，必须处于管理员配置的注册窗口内才能创建账号并关联 `Identity` 记录；若窗口为人工审核模式（`auto_activate=false`），账号会创建成功但不签发 JWT，需要管理员激活后才能登录。
+5. 若用户已存在（已有 `Identity` 绑定），则不受注册窗口限制，直接签发本地 JWT。
 
 ## API 详情
 
@@ -67,6 +68,7 @@
 
 - **错误**：
   - `400 Bad Request`：`state` 缺失或无效、授权码为空等。
+  - `403 Forbidden`：当前未开放注册窗口/注册时间已结束/名额耗尽（首次登录）；或账号已创建但需要管理员激活（人工审核窗口）。
   - `502 Bad Gateway`：LinuxDo token / 用户信息接口返回异常。
   - `503 Service Unavailable`：OAuth 未启用或配置缺失。
 

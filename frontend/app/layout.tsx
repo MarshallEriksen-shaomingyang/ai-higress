@@ -114,6 +114,7 @@ export default function RootLayout({
           attribute="class"
           defaultTheme="system"
           enableSystem
+          themes={['light', 'dark', 'christmas', 'ocean', 'spring']}
           disableTransitionOnChange
         >
           <I18nProvider>

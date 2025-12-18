@@ -23,6 +23,7 @@ import { profileTranslations } from "./profile";
 import { logicalModelsTranslations } from "./logical-models";
 import { notificationsTranslations } from "./notifications";
 import { cliConfigTranslations } from "./cli-config";
+import { themeTranslations } from "./theme";
 
 // Function to merge translation objects
 const mergeTranslations = (
@@ -67,7 +68,8 @@ export const allTranslations = mergeTranslations(
   profileTranslations,
   logicalModelsTranslations,
   notificationsTranslations,
-  cliConfigTranslations
+  cliConfigTranslations,
+  themeTranslations
 );
 
 // Export individual translation modules for dynamic loading
@@ -96,4 +98,5 @@ export {
   logicalModelsTranslations,
   notificationsTranslations,
   cliConfigTranslations,
+  themeTranslations,
 };

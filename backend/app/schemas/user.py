@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from .credit import CreditAutoTopupConfigResponse
+
 
 class UserCreateRequest(BaseModel):
     username: str | None = Field(
@@ -71,6 +73,19 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AdminUserResponse(UserResponse):
+    """
+    管理员视角的用户信息。
+
+    在 UserResponse 的基础上补充后台管理页面需要的扩展字段。
+    """
+
+    credit_auto_topup: CreditAutoTopupConfigResponse | None = Field(
+        default=None,
+        description="该用户的自动充值配置；未配置时为 null",
+    )
+
+
 class UserLookupResponse(BaseModel):
     """用于前端搜索/选择用户时的精简信息。"""
 
@@ -83,6 +98,7 @@ class UserLookupResponse(BaseModel):
 
 
 __all__ = [
+    "AdminUserResponse",
     "UserCreateRequest",
     "UserPermissionFlag",
     "UserResponse",

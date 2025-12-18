@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from app.deps import get_http_client, get_redis
 from app.models import Identity, User
 from app.services.linuxdo_oauth_service import STATE_STORAGE_KEY
+from app.services.registration_window_service import create_registration_window
 from app.settings import settings
 from tests.utils import InMemoryRedis
 
@@ -86,6 +88,18 @@ def test_linuxdo_callback_creates_user_and_returns_tokens(app_with_inmemory_db, 
     app.dependency_overrides[get_redis] = override_get_redis
     app.dependency_overrides[get_http_client] = override_get_http_client
     _configure_linuxdo(monkeypatch)
+
+    start = datetime.now(timezone.utc) - timedelta(minutes=1)
+    end = datetime.now(timezone.utc) + timedelta(minutes=5)
+    with SessionLocal() as session:
+        create_registration_window(
+            session,
+            start_time=start,
+            end_time=end,
+            max_registrations=10,
+            auto_activate=True,
+        )
+
     headers = {
         "User-Agent": "pytest",
         "X-Forwarded-For": "203.0.113.5",
@@ -116,3 +130,203 @@ def test_linuxdo_callback_creates_user_and_returns_tokens(app_with_inmemory_db, 
             select(Identity).where(Identity.user_id == user.id)
         ).scalar_one()
         assert identity.provider == "linuxdo"
+
+
+def test_linuxdo_callback_blocked_without_registration_window(app_with_inmemory_db, monkeypatch):
+    app, SessionLocal = app_with_inmemory_db
+    fake_redis = InMemoryRedis()
+
+    async def override_get_redis():
+        return fake_redis
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/oauth2/token"):
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": "linuxdo-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+        if request.url.path.endswith("/api/user"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": 928374,
+                    "username": "linuxdo-user",
+                    "name": "LinuxDo 昵称",
+                    "avatar_template": "https://cdn.example.com/avatar/{size}.png",
+                    "active": True,
+                },
+            )
+        return httpx.Response(404)
+
+    async def override_get_http_client():
+        transport = httpx.MockTransport(mock_handler)
+        async with httpx.AsyncClient(transport=transport) as mock_client:
+            yield mock_client
+
+    app.dependency_overrides[get_redis] = override_get_redis
+    app.dependency_overrides[get_http_client] = override_get_http_client
+    _configure_linuxdo(monkeypatch)
+
+    with TestClient(app) as client:
+        authorize_resp = client.get("/auth/oauth/linuxdo/authorize", follow_redirects=False)
+        state = parse_qs(urlparse(authorize_resp.headers["location"]).query)["state"][0]
+        callback_resp = client.post(
+            "/auth/oauth/callback",
+            json={"code": "auth-code", "state": state},
+        )
+
+    assert callback_resp.status_code == 403, callback_resp.text
+    assert "当前未开放注册窗口" in callback_resp.text
+
+    with SessionLocal() as session:
+        user = session.execute(
+            select(User).where(User.email == "928374@linux.do")
+        ).scalars().first()
+        assert user is None
+
+
+def test_linuxdo_callback_manual_activation_window_requires_admin_activation(
+    app_with_inmemory_db, monkeypatch
+):
+    app, SessionLocal = app_with_inmemory_db
+    fake_redis = InMemoryRedis()
+
+    async def override_get_redis():
+        return fake_redis
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/oauth2/token"):
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": "linuxdo-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+        if request.url.path.endswith("/api/user"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": 928374,
+                    "username": "linuxdo-user",
+                    "name": "LinuxDo 昵称",
+                    "avatar_template": "https://cdn.example.com/avatar/{size}.png",
+                    "active": True,
+                },
+            )
+        return httpx.Response(404)
+
+    async def override_get_http_client():
+        transport = httpx.MockTransport(mock_handler)
+        async with httpx.AsyncClient(transport=transport) as mock_client:
+            yield mock_client
+
+    app.dependency_overrides[get_redis] = override_get_redis
+    app.dependency_overrides[get_http_client] = override_get_http_client
+    _configure_linuxdo(monkeypatch)
+
+    start = datetime.now(timezone.utc) - timedelta(minutes=1)
+    end = datetime.now(timezone.utc) + timedelta(minutes=5)
+    with SessionLocal() as session:
+        create_registration_window(
+            session,
+            start_time=start,
+            end_time=end,
+            max_registrations=10,
+            auto_activate=False,
+        )
+
+    with TestClient(app) as client:
+        authorize_resp = client.get("/auth/oauth/linuxdo/authorize", follow_redirects=False)
+        state = parse_qs(urlparse(authorize_resp.headers["location"]).query)["state"][0]
+        callback_resp = client.post(
+            "/auth/oauth/callback",
+            json={"code": "auth-code", "state": state},
+        )
+
+    assert callback_resp.status_code == 403, callback_resp.text
+    assert "等待管理员激活" in callback_resp.text
+
+    with SessionLocal() as session:
+        user = session.execute(
+            select(User).where(User.email == "928374@linux.do")
+        ).scalar_one()
+        assert user.is_active is False
+        identity = session.execute(
+            select(Identity).where(Identity.user_id == user.id)
+        ).scalar_one()
+        assert identity.provider == "linuxdo"
+
+
+def test_linuxdo_callback_existing_user_not_blocked_by_closed_window(app_with_inmemory_db, monkeypatch):
+    app, SessionLocal = app_with_inmemory_db
+    fake_redis = InMemoryRedis()
+
+    async def override_get_redis():
+        return fake_redis
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/oauth2/token"):
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": "linuxdo-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+        if request.url.path.endswith("/api/user"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": 928374,
+                    "username": "linuxdo-user",
+                    "name": "LinuxDo 昵称",
+                    "avatar_template": "https://cdn.example.com/avatar/{size}.png",
+                    "active": True,
+                },
+            )
+        return httpx.Response(404)
+
+    async def override_get_http_client():
+        transport = httpx.MockTransport(mock_handler)
+        async with httpx.AsyncClient(transport=transport) as mock_client:
+            yield mock_client
+
+    app.dependency_overrides[get_redis] = override_get_redis
+    app.dependency_overrides[get_http_client] = override_get_http_client
+    _configure_linuxdo(monkeypatch)
+
+    start = datetime.now(timezone.utc) - timedelta(minutes=1)
+    end = datetime.now(timezone.utc) + timedelta(minutes=5)
+    with SessionLocal() as session:
+        create_registration_window(
+            session,
+            start_time=start,
+            end_time=end,
+            max_registrations=1,
+            auto_activate=True,
+        )
+
+    with TestClient(app) as client:
+        authorize_resp = client.get("/auth/oauth/linuxdo/authorize", follow_redirects=False)
+        state = parse_qs(urlparse(authorize_resp.headers["location"]).query)["state"][0]
+        first_resp = client.post(
+            "/auth/oauth/callback",
+            json={"code": "auth-code", "state": state},
+        )
+        assert first_resp.status_code == 200, first_resp.text
+
+        authorize_resp_2 = client.get("/auth/oauth/linuxdo/authorize", follow_redirects=False)
+        state_2 = parse_qs(urlparse(authorize_resp_2.headers["location"]).query)["state"][0]
+        second_resp = client.post(
+            "/auth/oauth/callback",
+            json={"code": "auth-code-2", "state": state_2},
+        )
+
+    assert second_resp.status_code == 200, second_resp.text

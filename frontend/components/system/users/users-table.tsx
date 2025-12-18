@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UserCircle, Plus, Shield, Key, Ban, RotateCcw, Zap } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
-import { UserInfo } from "@/http/auth";
+import type { UserInfo } from "@/lib/api-types";
 
 interface UsersTableProps {
     users: UserInfo[];
@@ -42,13 +42,39 @@ export function UsersTable({
     const getStatusBadge = (isActive: boolean) => {
         return isActive ? (
             <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                Active
+                {t("common.active")}
             </span>
         ) : (
             <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                Inactive
+                {t("common.inactive")}
             </span>
         );
+    };
+
+    const getAutoTopupBadge = (user: UserInfo) => {
+        const config = user.credit_auto_topup;
+        if (!config) {
+            return (
+                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                    {t("credits.auto_topup_not_configured")}
+                </span>
+            );
+        }
+        return config.is_active ? (
+            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+                {t("credits.auto_topup_status_active")}
+            </span>
+        ) : (
+            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                {t("credits.auto_topup_status_inactive")}
+            </span>
+        );
+    };
+
+    const getAutoTopupIconClassName = (user: UserInfo) => {
+        const config = user.credit_auto_topup;
+        if (!config) return "text-muted-foreground";
+        return config.is_active ? "text-emerald-500" : "text-amber-500";
     };
 
     return (
@@ -78,6 +104,7 @@ export function UsersTable({
                             <TableHead>{t("users.table_column_email")}</TableHead>
                             <TableHead>{t("users.table_column_roles")}</TableHead>
                             <TableHead>{t("users.table_column_status")}</TableHead>
+                            <TableHead>{t("users.table_column_auto_topup")}</TableHead>
                             <TableHead className="text-right">{t("providers.table_column_actions")}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -116,11 +143,12 @@ export function UsersTable({
                                                 </span>
                                             ))
                                         ) : (
-                                            <span className="text-xs text-muted-foreground">No roles</span>
+                                            <span className="text-xs text-muted-foreground">{t("users.table_value_no_roles")}</span>
                                         )}
                                     </div>
                                 </TableCell>
                                 <TableCell>{getStatusBadge(user.is_active)}</TableCell>
+                                <TableCell>{getAutoTopupBadge(user)}</TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end space-x-2">
                                         <Tooltip>
@@ -154,7 +182,7 @@ export function UsersTable({
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Button variant="ghost" size="sm" onClick={() => onOpenAutoTopup(user)}>
-                                                            <Zap className="w-4 h-4 text-amber-500" />
+                                                            <Zap className={`w-4 h-4 ${getAutoTopupIconClassName(user)}`} />
                                                         </Button>
                                                     </TooltipTrigger>
                                                     <TooltipContent>{t("credits.auto_topup_manage")}</TooltipContent>
@@ -183,8 +211,8 @@ export function UsersTable({
                         ))}
                         {!loading && users.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                    No users found
+                                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                    {t("users.table_no_users")}
                                 </TableCell>
                             </TableRow>
                         )}

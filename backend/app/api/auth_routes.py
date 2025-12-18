@@ -307,7 +307,7 @@ async def linuxdo_oauth_callback(
     """
 
     try:
-        user = await complete_linuxdo_oauth_flow(
+        user, requires_manual_activation = await complete_linuxdo_oauth_flow(
             db,
             redis,
             client,
@@ -316,6 +316,17 @@ async def linuxdo_oauth_callback(
         )
     except LinuxDoOAuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc))
+
+    if requires_manual_activation:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账号已创建，等待管理员激活",
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账户已被禁用",
+        )
 
     device_info = _build_device_info(user_agent, x_forwarded_for)
     token_pair = await _issue_token_pair(user, redis, device_info)

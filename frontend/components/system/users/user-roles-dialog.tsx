@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useI18n } from "@/lib/i18n-context";
 import { adminService, Role } from "@/http/admin";
-import { UserInfo } from "@/http/auth";
+import type { UserInfo } from "@/lib/api-types";
 import { toast } from "sonner";
 
 interface UserRolesDialogProps {

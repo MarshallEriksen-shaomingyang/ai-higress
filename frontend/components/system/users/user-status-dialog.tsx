@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useI18n } from "@/lib/i18n-context";
 import { userService } from "@/http/user";
-import { UserInfo } from "@/http/auth";
+import type { UserInfo } from "@/lib/api-types";
 import { toast } from "sonner";
 
 interface UserStatusDialogProps {

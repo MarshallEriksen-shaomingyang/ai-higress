@@ -164,6 +164,19 @@ async def chat_completions(
                 fallback_path_override=fallback_path_override,
             )
 
+        # 关键点：流式响应一旦开始发送 headers，后续在生成器里抛出的 HTTPException
+        # 将无法走 FastAPI 的异常处理流程，只会在服务端日志里表现为 TaskGroup/ExceptionGroup。
+        # 因此把“可预判的选择/发现错误”（如模型不可用）前置到构建 StreamingResponse 之前。
+        selection = await handler.provider_selector.select(
+            requested_model=requested_model,
+            lookup_model_id=lookup_model_id,
+            api_style=api_style,
+            effective_provider_ids=effective_provider_ids,
+            session_id=x_session_id,
+            user_id=uuid.UUID(str(current_key.user_id)),
+            is_superuser=bool(current_key.is_superuser),
+        )
+
         provider_holder: dict[str, str | None] = {"provider_id": None}
 
         def _set_provider(provider_id: str) -> None:
@@ -176,6 +189,7 @@ async def chat_completions(
                 lookup_model_id=lookup_model_id,
                 api_style=api_style,
                 effective_provider_ids=effective_provider_ids,
+                selection=selection,
                 session_id=x_session_id,
                 idempotency_key=billing_precharge_key,
                 messages_path_override=messages_path_override,
@@ -281,4 +295,3 @@ async def claude_messages_endpoint(
 
 
 __all__ = ["router"]
-

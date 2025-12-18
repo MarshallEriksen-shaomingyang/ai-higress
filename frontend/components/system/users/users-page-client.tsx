@@ -6,7 +6,7 @@ import { Plus, RotateCcw } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { adminService, Role, Permission } from "@/http/admin";
-import { UserInfo } from "@/http/auth";
+import type { UserInfo } from "@/lib/api-types";
 import type { UserPermission } from "@/lib/api-types";
 import { toast } from "sonner";
 import { useActiveRegistrationWindow } from "@/lib/swr/use-registration-windows";

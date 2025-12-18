@@ -28,6 +28,13 @@ from app.services.user_service import (
     assign_default_role,
     create_user,
 )
+from app.services.registration_window_service import (
+    RegistrationQuotaExceededError,
+    RegistrationWindowClosedError,
+    RegistrationWindowNotFoundError,
+    claim_registration_slot,
+    rollback_registration_slot,
+)
 from app.settings import settings
 
 LINUXDO_PROVIDER = "linuxdo"
@@ -116,7 +123,7 @@ async def complete_linuxdo_oauth_flow(
     *,
     code: str,
     state: str | None,
-) -> User:
+) -> tuple[User, bool]:
     """
     校验 state、换取 LinuxDo 用户信息，并与本地用户同步。
     """
@@ -274,7 +281,7 @@ def _build_avatar_url(template: Any) -> str | None:
     return url
 
 
-def _sync_user_from_profile(db: Session, profile: LinuxDoUserProfile) -> User:
+def _sync_user_from_profile(db: Session, profile: LinuxDoUserProfile) -> tuple[User, bool]:
     """
     根据 LinuxDo profile 获取已有用户或创建新用户。
     """
@@ -301,11 +308,11 @@ def _sync_user_from_profile(db: Session, profile: LinuxDoUserProfile) -> User:
             db.commit()
         else:
             _apply_profile_updates(db, user, identity, profile)
-            return user
+            return user, False
 
-    user = _create_user_from_profile(db, profile)
+    user, requires_manual_activation = _create_user_from_profile(db, profile)
     _attach_identity(db, user, profile)
-    return user
+    return user, requires_manual_activation
 
 
 def _apply_profile_updates(
@@ -338,11 +345,21 @@ def _apply_profile_updates(
         db.refresh(user)
 
 
-def _create_user_from_profile(db: Session, profile: LinuxDoUserProfile) -> User:
+def _create_user_from_profile(db: Session, profile: LinuxDoUserProfile) -> tuple[User, bool]:
+    try:
+        window = claim_registration_slot(db)
+    except (
+        RegistrationWindowNotFoundError,
+        RegistrationWindowClosedError,
+        RegistrationQuotaExceededError,
+    ) as exc:
+        raise LinuxDoOAuthError(str(exc), status.HTTP_403_FORBIDDEN) from exc
+
     email = f"{profile.external_id}@linux.do"
     display_name = profile.display_name or profile.username or f"LinuxDo 用户 {profile.external_id}"
     avatar = profile.avatar_url
     password = generate_secure_random_password(24)
+    is_active = bool(profile.is_active and window.auto_activate)
 
     from app.schemas.user import UserCreateRequest
 
@@ -355,18 +372,27 @@ def _create_user_from_profile(db: Session, profile: LinuxDoUserProfile) -> User:
     )
 
     try:
-        user = create_user(db, payload, is_active=profile.is_active)
-    except UsernameAlreadyExistsError:
-        fallback = payload.model_copy(update={"username": None})
-        user = create_user(db, fallback, is_active=profile.is_active)
-    except EmailAlreadyExistsError:
-        fallback_email = f"{profile.external_id}+{uuid.uuid4().hex[:6]}@linux.do"
-        fallback = payload.model_copy(update={"email": fallback_email, "username": None})
-        user = create_user(db, fallback, is_active=profile.is_active)
+        try:
+            user = create_user(db, payload, is_active=is_active)
+        except UsernameAlreadyExistsError:
+            fallback = payload.model_copy(update={"username": None})
+            user = create_user(db, fallback, is_active=is_active)
+        except EmailAlreadyExistsError:
+            fallback_email = f"{profile.external_id}+{uuid.uuid4().hex[:6]}@linux.do"
+            fallback = payload.model_copy(update={"email": fallback_email, "username": None})
+            user = create_user(db, fallback, is_active=is_active)
+    except Exception:
+        rollback_registration_slot(db, window.id)
+        raise
 
-    get_or_create_account_for_user(db, user.id)
-    assign_default_role(db, user.id)
-    return user
+    try:
+        get_or_create_account_for_user(db, user.id)
+        assign_default_role(db, user.id)
+    except Exception:
+        rollback_registration_slot(db, window.id)
+        raise
+
+    return user, not window.auto_activate
 
 
 def _attach_identity(db: Session, user: User, profile: LinuxDoUserProfile) -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
@@ -7,8 +9,9 @@ from sqlalchemy.orm import Session
 from app.deps import get_db
 from app.errors import forbidden
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
-from app.models import User
-from app.schemas.user import UserPermissionFlag, UserResponse
+from app.models import CreditAutoTopupRule, User
+from app.schemas.credit import CreditAutoTopupConfigResponse
+from app.schemas.user import AdminUserResponse, UserPermissionFlag
 from app.services.avatar_service import build_avatar_url
 from app.services.role_service import RoleService
 from app.services.user_permission_service import UserPermissionService
@@ -28,8 +31,9 @@ def _build_admin_user_response(
     role_service: RoleService,
     perm_service: UserPermissionService,
     user: User,
+    auto_topup_rule: CreditAutoTopupRule | None = None,
     request_base_url: str | None = None,
-) -> UserResponse:
+) -> AdminUserResponse:
     """构造用于管理员视角的 UserResponse。"""
 
     roles = role_service.get_user_roles(user.id)
@@ -53,7 +57,13 @@ def _build_admin_user_response(
         ),
     ]
 
-    return UserResponse(
+    credit_auto_topup = (
+        CreditAutoTopupConfigResponse.model_validate(auto_topup_rule)
+        if auto_topup_rule is not None
+        else None
+    )
+
+    return AdminUserResponse(
         id=user.id,
         username=user.username,
         email=user.email,
@@ -66,6 +76,7 @@ def _build_admin_user_response(
         is_superuser=user.is_superuser,
         role_codes=role_codes,
         permission_flags=permission_flags,
+        credit_auto_topup=credit_auto_topup,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
@@ -73,13 +84,13 @@ def _build_admin_user_response(
 
 @router.get(
     "/admin/users",
-    response_model=list[UserResponse],
+    response_model=list[AdminUserResponse],
 )
 def list_users_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
-) -> list[UserResponse]:
+) -> list[AdminUserResponse]:
     """
     管理员获取系统中所有用户的概要信息。
 
@@ -91,6 +102,15 @@ def list_users_endpoint(
     stmt: Select[tuple[User]] = select(User).order_by(User.created_at)
     users = list(db.execute(stmt).scalars().all())
 
+    user_ids = [user.id for user in users]
+    auto_topup_rules_by_user_id: dict[UUID, CreditAutoTopupRule] = {}
+    if user_ids:
+        rule_stmt: Select[tuple[CreditAutoTopupRule]] = select(CreditAutoTopupRule).where(
+            CreditAutoTopupRule.user_id.in_(user_ids)
+        )
+        auto_topup_rules = list(db.execute(rule_stmt).scalars().all())
+        auto_topup_rules_by_user_id = {rule.user_id: rule for rule in auto_topup_rules}
+
     role_service = RoleService(db)
     perm_service = UserPermissionService(db)
     request_base_url = str(request.base_url).rstrip("/")
@@ -100,6 +120,7 @@ def list_users_endpoint(
             role_service,
             perm_service,
             user,
+            auto_topup_rule=auto_topup_rules_by_user_id.get(user.id),
             request_base_url=request_base_url,
         )
         for user in users

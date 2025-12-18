@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.api.v1.chat.billing import record_completion_usage, record_stream_usage
 from app.api.v1.chat.candidate_retry import try_candidates_non_stream, try_candidates_stream
 from app.api.v1.chat.middleware import apply_response_moderation
-from app.api.v1.chat.provider_selector import ProviderSelector
+from app.api.v1.chat.provider_selector import ProviderSelectionResult, ProviderSelector
 from app.api.v1.chat.routing_state import RoutingStateService
 from app.api.v1.chat.session_manager import SessionManager
 from app.auth import AuthenticatedAPIKey
@@ -178,6 +178,7 @@ class RequestHandler:
         lookup_model_id: str,
         api_style: str,
         effective_provider_ids: set[str],
+        selection: ProviderSelectionResult | None = None,
         session_id: str | None = None,
         idempotency_key: str | None = None,
         messages_path_override: str | None = None,
@@ -192,15 +193,16 @@ class RequestHandler:
             session_id,
         )
 
-        selection = await self.provider_selector.select(
-            requested_model=requested_model,
-            lookup_model_id=lookup_model_id,
-            api_style=api_style,
-            effective_provider_ids=effective_provider_ids,
-            session_id=session_id,
-            user_id=UUID(str(self.api_key.user_id)),
-            is_superuser=bool(self.api_key.is_superuser),
-        )
+        if selection is None:
+            selection = await self.provider_selector.select(
+                requested_model=requested_model,
+                lookup_model_id=lookup_model_id,
+                api_style=api_style,
+                effective_provider_ids=effective_provider_ids,
+                session_id=session_id,
+                user_id=UUID(str(self.api_key.user_id)),
+                is_superuser=bool(self.api_key.is_superuser),
+            )
 
         # 预扣费：尽量使用首选候选 provider/model（与 v1 行为对齐）
         try:
