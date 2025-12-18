@@ -15,13 +15,14 @@ import {
 } from "@/components/ui/drawer";
 import { Plus, Search, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { ProvidersTableEnhanced } from "@/components/dashboard/providers/providers-table-enhanced";
 import { Provider, providerService } from "@/http/provider";
 import { useI18n } from "@/lib/i18n-context";
 import { useErrorDisplay } from "@/lib/errors";
 import { usePrivateProviderQuota } from "@/lib/swr/use-private-providers";
+import { useUserDashboardProvidersMetrics } from "@/lib/swr/use-dashboard-v2";
 import { QuotaCard } from "./quota-card";
 import { HealthStats } from "./health-stats";
+import { ProviderCard } from "@/app/dashboard/providers/_components/card/provider-card";
 
 const ProviderFormEnhanced = dynamic(() => import("@/components/dashboard/providers/provider-form").then(mod => ({ default: mod.ProviderFormEnhanced })), { ssr: false });
 const ProviderModelsDialog = dynamic(() => import("@/components/dashboard/providers/provider-models-dialog").then(mod => ({ default: mod.ProviderModelsDialog })), { ssr: false });
@@ -51,6 +52,31 @@ export function MyProvidersPageClient({
   const [modelsDialogOpen, setModelsDialogOpen] = useState(false);
   const [viewingModelsProviderId, setViewingModelsProviderId] = useState<string | null>(null);
   const [modelsPathByProvider, setModelsPathByProvider] = useState<Record<string, string>>({});
+
+  const providerIdsParam = useMemo(() => {
+    const ids = providers
+      .map((p) => p.provider_id)
+      .filter((id) => !!id)
+      .join(",");
+    return ids || undefined;
+  }, [providers]);
+
+  const {
+    items: providerMetricItems,
+    loading: isMetricsLoading,
+  } = useUserDashboardProvidersMetrics(providerIdsParam, {
+    timeRange: "7d",
+    transport: "all",
+    isStream: "all",
+  });
+
+  const metricsByProviderId = useMemo(() => {
+    const map: Record<string, (typeof providerMetricItems)[number]> = {};
+    for (const item of providerMetricItems) {
+      map[item.provider_id] = item;
+    }
+    return map;
+  }, [providerMetricItems]);
 
   // 私有 Provider 配额信息
   const {
@@ -150,6 +176,13 @@ export function MyProvidersPageClient({
     setModelsDialogOpen(true);
   }, []);
 
+  const handleManageKeys = useCallback(
+    (providerInternalId: string) => {
+      router.push(`/dashboard/providers/${providerInternalId}/keys`);
+    },
+    [router]
+  );
+
   // 更新模型路径
   const handleModelsPathChange = useCallback((providerId: string, path: string) => {
     setModelsPathByProvider((prev) => ({
@@ -229,17 +262,23 @@ export function MyProvidersPageClient({
           </div>
         </div>
       ) : (
-        <ProvidersTableEnhanced
-          privateProviders={filteredProviders}
-          sharedProviders={[]}
-          publicProviders={[]}
-          isLoading={isRefreshing}
-          onEdit={handleEdit}
-          onDelete={handleDeleteClick}
-          onViewDetails={handleViewDetails}
-          onViewModels={handleViewModels}
-          currentUserId={userId}
-        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filteredProviders.map((provider) => (
+            <ProviderCard
+              key={provider.id}
+              provider={provider}
+              metrics={metricsByProviderId[provider.provider_id]}
+              isMetricsLoading={isMetricsLoading}
+              onConfigure={handleEdit}
+              onDelete={handleDeleteClick}
+              onViewDetails={handleViewDetails}
+              onViewModels={handleViewModels}
+              onManageKeys={handleManageKeys}
+              canModify
+              canManageKeys
+            />
+          ))}
+        </div>
       )}
 
       {/* 创建/编辑表单抽屉 */}

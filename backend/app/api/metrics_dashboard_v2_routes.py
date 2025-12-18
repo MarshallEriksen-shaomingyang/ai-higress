@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 from typing import Literal
 from uuid import UUID
 
@@ -30,6 +31,9 @@ from app.schemas.dashboard_v2 import (
     DashboardCostByProviderItem,
     DashboardProviderStatus,
     DashboardProviderStatusItem,
+    DashboardProviderMetricPoint,
+    DashboardProviderMetrics,
+    DashboardProviderMetricsItem,
     DashboardPulse,
     DashboardPulsePoint,
     DashboardTokenPoint,
@@ -640,6 +644,220 @@ async def user_dashboard_cost_by_provider(
         for row in db.execute(stmt).all()
     ]
     payload = DashboardCostByProvider(items=items)
+    await redis_set_json(redis, cache_key, payload.model_dump(mode="json"), ttl_seconds=V2_CACHE_TTL_SECONDS)
+    return payload
+
+
+def _parse_csv_provider_ids(value: str | None) -> list[str] | None:
+    if not value:
+        return None
+    items = [item.strip() for item in value.split(",")]
+    provider_ids = [item for item in items if item]
+    return provider_ids or None
+
+
+def _cache_key_for_provider_ids(provider_ids: list[str] | None) -> str:
+    if not provider_ids:
+        return "all"
+    joined = ",".join(sorted(provider_ids))
+    return hashlib.sha1(joined.encode("utf-8")).hexdigest()
+
+
+def _parse_bucket_start(value: dt.datetime | str) -> dt.datetime:
+    if isinstance(value, dt.datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=dt.timezone.utc)
+    # sqlite: emit ISO8601 with 'Z'
+    raw = value.replace("Z", "+00:00")
+    return dt.datetime.fromisoformat(raw)
+
+
+def _floor_to_step(ts: dt.datetime, step_seconds: int) -> dt.datetime:
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=dt.timezone.utc)
+    epoch = int(ts.timestamp())
+    bucket = epoch - (epoch % step_seconds)
+    return dt.datetime.fromtimestamp(bucket, tz=dt.timezone.utc)
+
+
+@router.get(
+    "/user-dashboard/providers",
+    response_model=DashboardProviderMetrics,
+    summary="用户 Dashboard v2 Provider 指标（用于 Provider 卡片）",
+)
+async def user_dashboard_providers(
+    time_range: Literal["today", "7d", "30d"] = Query("7d"),
+    bucket: Literal["hour"] = Query(
+        "hour",
+        description="时间桶粒度：目前仅支持 hour（用于 Provider 卡片的小图）",
+    ),
+    provider_ids: str | None = Query(
+        None,
+        description="逗号分隔的 provider_id 列表；不传则返回该用户最活跃的 providers（最多 limit 个）",
+    ),
+    limit: int = Query(12, ge=1, le=50),
+    transport: Literal["http", "sdk", "claude_cli", "all"] = Query("all"),
+    is_stream: Literal["true", "false", "all"] = Query("all"),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+    db: Session = Depends(get_db_session),
+    redis: Redis = Depends(get_redis),
+) -> DashboardProviderMetrics:
+    requested_provider_ids = _parse_csv_provider_ids(provider_ids)
+    if requested_provider_ids and len(requested_provider_ids) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="provider_ids too long (max 50)",
+        )
+
+    cache_key = (
+        "metrics:v2:user-dashboard:providers:"
+        f"{current_user.id}:{time_range}:{bucket}:{transport}:{is_stream}:{limit}:"
+        f"{_cache_key_for_provider_ids(requested_provider_ids)}"
+    )
+    cached = await redis_get_json(redis, cache_key)
+    if isinstance(cached, dict):
+        try:
+            return DashboardProviderMetrics.model_validate(cached)
+        except Exception:
+            logger.info("metrics v2 cache malformed (key=%s)", cache_key)
+
+    user_uuid = UUID(str(current_user.id))
+
+    start_at, end_at = _resolve_time_range(time_range)
+    model, requests_col = _resolve_rollup_model(time_range)
+
+    def _summary_stmt(model_, requests_col_):
+        stmt = (
+            select(
+                model_.provider_id.label("provider_id"),
+                func.coalesce(func.sum(requests_col_), 0).label("total_requests"),
+                func.coalesce(func.sum(model_.error_requests), 0).label("error_requests"),
+                func.sum(model_.latency_p95_ms * requests_col_).label("lat_p95_sum"),
+                func.sum(requests_col_).label("weight_sum"),
+            )
+            .where(model_.window_start >= start_at, model_.window_start < end_at)
+            .group_by(model_.provider_id)
+            .order_by(func.sum(requests_col_).desc())
+        )
+        stmt = _apply_common_filters(
+            stmt,
+            model=model_,
+            scope_user_id=user_uuid,
+            transport=transport,
+            is_stream=is_stream,
+        )
+        if requested_provider_ids:
+            stmt = stmt.where(model_.provider_id.in_(requested_provider_ids))
+        else:
+            stmt = stmt.limit(limit)
+        return stmt
+
+    rows = db.execute(_summary_stmt(model, requests_col)).all()
+    if time_range != "today" and not rows:
+        rows = db.execute(
+            _summary_stmt(
+                ProviderRoutingMetricsHistory,
+                ProviderRoutingMetricsHistory.total_requests_1m,
+            )
+        ).all()
+
+    summary_by_provider: dict[str, tuple[int, int, float]] = {}
+    for row in rows:
+        provider_id_value = str(row.provider_id)
+        total_requests = int(row.total_requests or 0)
+        error_requests = int(row.error_requests or 0)
+        weight_sum = row.weight_sum or 0
+        latency_p95_ms = _weighted_latency(row.lat_p95_sum, weight_sum)
+        error_rate = (error_requests / total_requests) if total_requests else 0.0
+        summary_by_provider[provider_id_value] = (
+            total_requests,
+            error_requests,
+            float(latency_p95_ms),
+        )
+
+    pulse_start, pulse_end = _pulse_window()
+    step_seconds = 3600
+    start_bucket = _floor_to_step(pulse_start, step_seconds)
+    end_bucket = _floor_to_step(pulse_end, step_seconds)
+    bucket_starts: list[dt.datetime] = []
+    cur = start_bucket
+    while cur <= end_bucket:
+        bucket_starts.append(cur)
+        cur = cur + dt.timedelta(seconds=step_seconds)
+
+    trunc = _bucket_trunc_expr(db, "hour", ProviderRoutingMetricsHistory.window_start).label("bucket_start")
+    spark_stmt = (
+        select(
+            ProviderRoutingMetricsHistory.provider_id.label("provider_id"),
+            trunc,
+            func.coalesce(func.sum(ProviderRoutingMetricsHistory.total_requests_1m), 0).label("total_requests"),
+            func.coalesce(func.sum(ProviderRoutingMetricsHistory.error_requests), 0).label("error_requests"),
+        )
+        .where(
+            ProviderRoutingMetricsHistory.window_start >= pulse_start,
+            ProviderRoutingMetricsHistory.window_start < pulse_end,
+        )
+        .group_by(ProviderRoutingMetricsHistory.provider_id, trunc)
+        .order_by(ProviderRoutingMetricsHistory.provider_id.asc(), trunc.asc())
+    )
+    spark_stmt = _apply_common_filters(
+        spark_stmt,
+        model=ProviderRoutingMetricsHistory,
+        scope_user_id=user_uuid,
+        transport=transport,
+        is_stream=is_stream,
+    )
+    if requested_provider_ids:
+        spark_stmt = spark_stmt.where(ProviderRoutingMetricsHistory.provider_id.in_(requested_provider_ids))
+
+    spark_rows = db.execute(spark_stmt).all()
+    spark_by_provider: dict[str, dict[dt.datetime, DashboardProviderMetricPoint]] = {}
+    for row in spark_rows:
+        pid = str(row.provider_id)
+        bucket_start_value = _parse_bucket_start(row.bucket_start)
+        total_requests = int(row.total_requests or 0)
+        error_requests = int(row.error_requests or 0)
+        qps = float(total_requests / step_seconds) if total_requests else 0.0
+        error_rate = float(error_requests / total_requests) if total_requests else 0.0
+        spark_by_provider.setdefault(pid, {})[bucket_start_value] = DashboardProviderMetricPoint(
+            window_start=bucket_start_value,
+            qps=qps,
+            error_rate=error_rate,
+        )
+
+    target_provider_ids = requested_provider_ids or list(summary_by_provider.keys())
+    items: list[DashboardProviderMetricsItem] = []
+    for pid in target_provider_ids:
+        summary = summary_by_provider.get(pid)
+        if summary:
+            total_requests, error_requests, latency_p95_ms = summary
+            error_rate_value = float(error_requests / total_requests) if total_requests else 0.0
+        else:
+            total_requests = 0
+            error_rate_value = 0.0
+            latency_p95_ms = 0.0
+
+        series_map = spark_by_provider.get(pid, {})
+        points = [
+            series_map.get(
+                ts,
+                DashboardProviderMetricPoint(window_start=ts, qps=0.0, error_rate=0.0),
+            )
+            for ts in bucket_starts
+        ]
+        current_qps = float(points[-1].qps) if points else 0.0
+
+        items.append(
+            DashboardProviderMetricsItem(
+                provider_id=pid,
+                total_requests=total_requests,
+                error_rate=error_rate_value,
+                latency_p95_ms=float(latency_p95_ms),
+                qps=current_qps,
+                points=points,
+            )
+        )
+
+    payload = DashboardProviderMetrics(time_range=time_range, bucket=bucket, items=items)
     await redis_set_json(redis, cache_key, payload.model_dump(mode="json"), ttl_seconds=V2_CACHE_TTL_SECONDS)
     return payload
 

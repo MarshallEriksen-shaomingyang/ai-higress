@@ -5,6 +5,7 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     // Page title
     "dashboard_v2.title": "Dashboard Overview",
     "dashboard_v2.subtitle": "Real-time monitoring and analytics",
+    "dashboardV2.title": "Dashboard Overview",
 
     // Filter bar
     "dashboard_v2.filter.time_range.label": "Time Range",
@@ -50,12 +51,32 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboard_v2.chart.latency_percentiles.subtitle": "Last 24 hours",
     "dashboard_v2.chart.latency.title": "Latency Percentiles",
     "dashboard_v2.chart.latency.subtitle": "Last 24 hours",
+    "dashboard_v2.chart.token_usage.title": "Token Usage",
+    "dashboard_v2.chart.token_usage.subtitle": "Input vs Output",
+    "dashboard_v2.chart.token_usage.input_tokens": "Input Tokens",
+    "dashboard_v2.chart.token_usage.output_tokens": "Output Tokens",
+    "dashboard_v2.chart.token_usage.estimated_tooltip": "{count} requests have estimated token counts",
     "dashboard_v2.chart.tokens.title": "Token Usage",
     "dashboard_v2.chart.tokens.subtitle": "Input vs Output",
     "dashboard_v2.chart.cost.title": "Cost by Provider",
     "dashboard_v2.chart.cost.subtitle": "Distribution",
     "dashboard_v2.chart.top_models.title": "Top Models",
     "dashboard_v2.chart.top_models.subtitle": "Most used models",
+
+    // Error labels for charts
+    "dashboard_v2.chart.error.4xx": "4xx Errors",
+    "dashboard_v2.chart.error.5xx": "5xx Errors",
+    "dashboard_v2.chart.error.429": "429 Errors",
+    "dashboard_v2.chart.error.timeout": "Timeout Errors",
+
+    // Latency labels
+    "dashboard_v2.chart.latency.p50": "P50",
+    "dashboard_v2.chart.latency.p95": "P95",
+    "dashboard_v2.chart.latency.p99": "P99",
+
+    // Cost chart labels
+    "dashboard_v2.chart.cost.credits_label": "Credits",
+    "dashboard_v2.chart.cost.percentage_label": "Percentage",
 
     // Loading & Error states
     "dashboard_v2.loading": "Loading...",
@@ -65,11 +86,25 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
 
     // Tooltips
     "dashboard_v2.tooltip.estimated_requests": "Some tokens are estimated",
+
+    // Top Models Table
+    "dashboardV2.topModels.title": "Top Models",
+    "dashboardV2.topModels.modelName": "Model Name",
+    "dashboardV2.topModels.requests": "Requests",
+    "dashboardV2.topModels.totalTokens": "Total Tokens",
+
+    // Error states
+    "dashboardV2.error.loadFailed": "Failed to load data",
+    "dashboardV2.error.noData": "No data available",
+    "dashboardV2.errors.loadFailed": "Failed to load data",
+    "dashboardV2.errors.noData": "No data available",
+    "dashboardV2.errors.retry": "Retry",
   },
   zh: {
     // Page title
     "dashboard_v2.title": "仪表盘概览",
     "dashboard_v2.subtitle": "实时监控与分析",
+    "dashboardV2.title": "仪表盘概览",
 
     // Filter bar
     "dashboard_v2.filter.time_range.label": "时间范围",
@@ -115,12 +150,32 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboard_v2.chart.latency_percentiles.subtitle": "近 24 小时",
     "dashboard_v2.chart.latency.title": "延迟分位数",
     "dashboard_v2.chart.latency.subtitle": "近 24 小时",
+    "dashboard_v2.chart.token_usage.title": "Token 使用趋势",
+    "dashboard_v2.chart.token_usage.subtitle": "输入 vs 输出",
+    "dashboard_v2.chart.token_usage.input_tokens": "输入 Token",
+    "dashboard_v2.chart.token_usage.output_tokens": "输出 Token",
+    "dashboard_v2.chart.token_usage.estimated_tooltip": "{count} 个请求的 Token 来自估算",
     "dashboard_v2.chart.tokens.title": "Token 使用",
     "dashboard_v2.chart.tokens.subtitle": "输入 vs 输出",
     "dashboard_v2.chart.cost.title": "按 Provider 成本",
     "dashboard_v2.chart.cost.subtitle": "分布情况",
     "dashboard_v2.chart.top_models.title": "热门模型",
     "dashboard_v2.chart.top_models.subtitle": "使用最多的模型",
+
+    // Error labels for charts
+    "dashboard_v2.chart.error.4xx": "4xx 错误",
+    "dashboard_v2.chart.error.5xx": "5xx 错误",
+    "dashboard_v2.chart.error.429": "429 错误",
+    "dashboard_v2.chart.error.timeout": "超时错误",
+
+    // Latency labels
+    "dashboard_v2.chart.latency.p50": "P50",
+    "dashboard_v2.chart.latency.p95": "P95",
+    "dashboard_v2.chart.latency.p99": "P99",
+
+    // Cost chart labels
+    "dashboard_v2.chart.cost.credits_label": "Credits",
+    "dashboard_v2.chart.cost.percentage_label": "占比",
 
     // Loading & Error states
     "dashboard_v2.loading": "加载中...",
@@ -130,5 +185,18 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
 
     // Tooltips
     "dashboard_v2.tooltip.estimated_requests": "部分 Token 来自估算",
+
+    // Top Models Table
+    "dashboardV2.topModels.title": "热门模型",
+    "dashboardV2.topModels.modelName": "模型名称",
+    "dashboardV2.topModels.requests": "请求量",
+    "dashboardV2.topModels.totalTokens": "Token 总量",
+
+    // Error states
+    "dashboardV2.error.loadFailed": "加载数据失败",
+    "dashboardV2.error.noData": "暂无数据",
+    "dashboardV2.errors.loadFailed": "加载数据失败",
+    "dashboardV2.errors.noData": "暂无数据",
+    "dashboardV2.errors.retry": "重试",
   },
 };

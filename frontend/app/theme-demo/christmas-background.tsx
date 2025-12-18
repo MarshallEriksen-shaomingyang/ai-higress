@@ -23,11 +23,9 @@ export function ChristmasBackground() {
           }}
           loading="eager"
           onLoad={() => {
-            console.log("Christmas background loaded successfully");
             setImageLoaded(true);
           }}
-          onError={(e) => {
-            console.error("Failed to load Christmas background");
+          onError={() => {
             setImageError(true);
           }}
         />

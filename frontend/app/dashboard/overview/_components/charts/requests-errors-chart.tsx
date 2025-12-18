@@ -126,19 +126,19 @@ export function RequestsErrorsChart({ data, isLoading, error }: RequestsErrorsCh
       color: "hsl(var(--chart-1))",
     },
     error_4xx: {
-      label: "4xx Errors",
+      label: t("dashboard_v2.chart.error.4xx"),
       color: "hsl(var(--chart-4))",
     },
     error_5xx: {
-      label: "5xx Errors",
+      label: t("dashboard_v2.chart.error.5xx"),
       color: "hsl(var(--destructive))",
     },
     error_429: {
-      label: "429 Errors",
+      label: t("dashboard_v2.chart.error.429"),
       color: "hsl(var(--warning))",
     },
     error_timeout: {
-      label: "Timeout Errors",
+      label: t("dashboard_v2.chart.error.timeout"),
       color: "hsl(var(--chart-5))",
     },
   };

@@ -4,12 +4,6 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import {
   Card,
-  CardHeader,
-  CardFooter,
-  CardTitle,
-  CardAction,
-  CardDescription,
-  CardContent,
 } from "@/components/ui/card";
 
 interface AdaptiveCardProps extends React.ComponentProps<typeof Card> {

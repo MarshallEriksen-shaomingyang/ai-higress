@@ -118,6 +118,10 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "my_providers.empty_description": "Click 'Create Provider' to add your first private provider",
     "my_providers.refresh": "Refresh",
     "my_providers.batch_health_check": "Batch Health Check",
+    "my_providers.card_requests_qps": "Requests (QPS)",
+    "my_providers.card_error_rate": "Error Rate",
+    "my_providers.card_latency_p95": "Latency",
+    "my_providers.card_configure": "Configure",
 
     // Provider models dialog (models path + static models)
     "providers.models_path_label": "Models Path",
@@ -442,6 +446,10 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "my_providers.empty_description": "点击\"创建 Provider\"按钮添加您的第一个私有提供商",
     "my_providers.refresh": "刷新",
     "my_providers.batch_health_check": "批量健康检查",
+    "my_providers.card_requests_qps": "请求（QPS）",
+    "my_providers.card_error_rate": "错误率",
+    "my_providers.card_latency_p95": "延迟",
+    "my_providers.card_configure": "配置",
     
     // 每模型计费配置（管理员）
     "providers.pricing_label": "计费：按模型单独配置",

@@ -149,3 +149,88 @@ def test_system_dashboard_v2_providers(client: TestClient, db_session: Session) 
     payload = resp.json()
     assert any(item["provider_id"] == "openai" for item in payload["items"])
 
+
+def test_user_dashboard_v2_providers_metrics(client: TestClient, db_session: Session) -> None:
+    user = _get_admin_user(db_session)
+    _seed_provider(db_session, provider_id="openai", transport="http")
+    _seed_provider(db_session, provider_id="anthropic", transport="http")
+
+    now = dt.datetime.now(dt.timezone.utc)
+    window_start = (now - dt.timedelta(minutes=10)).replace(second=0, microsecond=0)
+
+    db_session.add_all(
+        [
+            ProviderRoutingMetricsHistory(
+                provider_id="openai",
+                logical_model="gpt-4o",
+                transport="http",
+                is_stream=False,
+                user_id=user.id,
+                api_key_id=None,
+                window_start=window_start,
+                window_duration=60,
+                total_requests_1m=60,
+                success_requests=57,
+                error_requests=3,
+                latency_avg_ms=120.0,
+                latency_p50_ms=100.0,
+                latency_p95_ms=250.0,
+                latency_p99_ms=300.0,
+                error_rate=0.05,
+                success_qps_1m=0.95,
+                status="healthy",
+                input_tokens_sum=0,
+                output_tokens_sum=0,
+                total_tokens_sum=0,
+                token_estimated_requests=0,
+                error_4xx_requests=0,
+                error_5xx_requests=3,
+                error_429_requests=0,
+                error_timeout_requests=0,
+            ),
+            ProviderRoutingMetricsHistory(
+                provider_id="anthropic",
+                logical_model="claude-3-5-sonnet",
+                transport="http",
+                is_stream=False,
+                user_id=user.id,
+                api_key_id=None,
+                window_start=window_start,
+                window_duration=60,
+                total_requests_1m=10,
+                success_requests=10,
+                error_requests=0,
+                latency_avg_ms=80.0,
+                latency_p50_ms=70.0,
+                latency_p95_ms=150.0,
+                latency_p99_ms=200.0,
+                error_rate=0.0,
+                success_qps_1m=0.16,
+                status="healthy",
+                input_tokens_sum=0,
+                output_tokens_sum=0,
+                total_tokens_sum=0,
+                token_estimated_requests=0,
+                error_4xx_requests=0,
+                error_5xx_requests=0,
+                error_429_requests=0,
+                error_timeout_requests=0,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    resp = client.get(
+        "/metrics/v2/user-dashboard/providers?time_range=today&provider_ids=openai",
+        headers=jwt_auth_headers(str(user.id)),
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["time_range"] == "today"
+    assert payload["bucket"] == "hour"
+    assert payload["items"][0]["provider_id"] == "openai"
+    assert payload["items"][0]["total_requests"] >= 60
+    assert payload["items"][0]["error_rate"] > 0
+    assert payload["items"][0]["latency_p95_ms"] > 0
+    assert payload["items"][0]["qps"] >= 0
+    assert payload["items"][0]["points"]

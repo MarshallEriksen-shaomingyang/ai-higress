@@ -119,15 +119,15 @@ export function LatencyPercentilesChart({ data, isLoading, error }: LatencyPerce
   // 图表配置
   const chartConfig = {
     p50: {
-      label: "P50",
+      label: t("dashboard_v2.chart.latency.p50"),
       color: "hsl(var(--chart-2))",
     },
     p95: {
-      label: "P95",
+      label: t("dashboard_v2.chart.latency.p95"),
       color: "hsl(var(--chart-3))",
     },
     p99: {
-      label: "P99",
+      label: t("dashboard_v2.chart.latency.p99"),
       color: "hsl(var(--chart-4))",
     },
   };

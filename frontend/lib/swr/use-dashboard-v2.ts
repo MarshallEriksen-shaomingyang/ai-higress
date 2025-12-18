@@ -8,6 +8,7 @@ import type {
   DashboardV2TokensResponse,
   DashboardV2TopModelsResponse,
   DashboardV2CostByProviderResponse,
+  DashboardV2ProvidersMetricsResponse,
 } from '@/lib/api-types';
 
 /**
@@ -237,6 +238,63 @@ export const useUserDashboardCostByProvider = (
     refresh,
   } = useApiGet<DashboardV2CostByProviderResponse>(
     '/metrics/v2/user-dashboard/cost-by-provider',
+    {
+      ...dashboardV2CacheConfig,
+      params,
+    }
+  );
+
+  return {
+    data,
+    items: data?.items || [],
+    error,
+    loading,
+    validating,
+    refresh,
+  };
+};
+
+/**
+ * 获取用户 Provider 卡片用的指标（按 Provider 聚合）
+ *
+ * @param providerIds 逗号分隔的 provider_id 列表（推荐传入：只查用户私有 provider）
+ * @param filters 筛选器参数
+ * @param limit 未传 providerIds 时的返回数量限制
+ */
+export const useUserDashboardProvidersMetrics = (
+  providerIds: string | undefined,
+  filters: DashboardV2FilterParams = {},
+  limit: number = 12
+) => {
+  const {
+    timeRange = '7d',
+    transport = 'all',
+    isStream = 'all',
+  } = filters;
+
+  const params = useMemo(() => {
+    const base: Record<string, string> = {
+      time_range: timeRange,
+      bucket: 'hour',
+      transport,
+      is_stream: isStream,
+    };
+    if (providerIds && providerIds.trim()) {
+      base.provider_ids = providerIds;
+      return base;
+    }
+    base.limit = limit.toString();
+    return base;
+  }, [timeRange, transport, isStream, providerIds, limit]);
+
+  const {
+    data,
+    error,
+    loading,
+    validating,
+    refresh,
+  } = useApiGet<DashboardV2ProvidersMetricsResponse>(
+    '/metrics/v2/user-dashboard/providers',
     {
       ...dashboardV2CacheConfig,
       params,

@@ -62,17 +62,11 @@ export function ProviderKeyDialog({
           .trim()
           .min(1, t("provider_keys.form_label_required"))
           .max(100, t("provider_keys.form_label_invalid")),
-        weight: z.preprocess(
-          (val) => (typeof val === "number" && Number.isNaN(val) ? 1.0 : val),
-          z
-            .number()
-            .min(0, t("provider_keys.form_weight_invalid"))
-            .max(100, t("provider_keys.form_weight_invalid"))
-        ),
-        max_qps: z.preprocess(
-          (val) => (typeof val === "number" && Number.isNaN(val) ? 0 : val),
-          z.number().min(0, t("provider_keys.form_qps_invalid")).optional()
-        ),
+        weight: z
+          .number()
+          .min(0, t("provider_keys.form_weight_invalid"))
+          .max(100, t("provider_keys.form_weight_invalid")),
+        max_qps: z.number().min(0, t("provider_keys.form_qps_invalid")).optional(),
         status: z.enum(["active", "inactive"]),
       }),
     [t]
@@ -87,13 +81,13 @@ export function ProviderKeyDialog({
     control,
   } = useForm<ProviderKeyFormData>({
     resolver: zodResolver(providerKeySchema),
-    defaultValues: {
-      key: "",
-      label: "",
-      weight: 1.0,
-      max_qps: 0,
-      status: 'active',
-    },
+      defaultValues: {
+        key: "",
+        label: "",
+        weight: 1.0,
+        max_qps: 0,
+        status: 'active',
+      },
   });
 
   // 当编辑密钥变化时，更新表单
@@ -119,8 +113,7 @@ export function ProviderKeyDialog({
   const handleFormSubmit = async (data: ProviderKeyFormData) => {
     setIsSubmitting(true);
     try {
-      // 如果 max_qps 为 0，转换为 null
-      const submitData = {
+      const submitData: ProviderKeyFormData = {
         ...data,
         max_qps: data.max_qps && data.max_qps > 0 ? data.max_qps : undefined,
       };
@@ -189,7 +182,14 @@ export function ProviderKeyDialog({
                 id="weight"
                 type="number"
                 step="0.1"
-                {...register("weight", { valueAsNumber: true })}
+                {...register("weight", {
+                  setValueAs: (value) => {
+                    const text = String(value ?? "").trim();
+                    if (!text) return 1.0;
+                    const parsed = Number(text);
+                    return Number.isFinite(parsed) ? parsed : 1.0;
+                  },
+                })}
               />
               <p className="text-xs text-muted-foreground">
                 {t("provider_keys.form_weight_description")}
@@ -205,7 +205,14 @@ export function ProviderKeyDialog({
                 id="max_qps"
                 type="number"
                 placeholder={t("provider_keys.form_qps_placeholder")}
-                {...register("max_qps", { valueAsNumber: true })}
+                {...register("max_qps", {
+                  setValueAs: (value) => {
+                    const text = String(value ?? "").trim();
+                    if (!text) return 0;
+                    const parsed = Number(text);
+                    return Number.isFinite(parsed) ? parsed : 0;
+                  },
+                })}
               />
               <p className="text-xs text-muted-foreground">
                 {t("provider_keys.form_qps_description")}

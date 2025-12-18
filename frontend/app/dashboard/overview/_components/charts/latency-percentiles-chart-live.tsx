@@ -17,15 +17,15 @@ export function LatencyPercentilesChartLive({
   transport = "all",
   isStream = "all",
 }: LatencyPercentilesChartLiveProps) {
-  const { data, isLoading, error } = useUserDashboardPulse({
+  const { points, loading, error } = useUserDashboardPulse({
     transport,
-    is_stream: isStream,
+    isStream,
   });
 
   return (
     <LatencyPercentilesChart
-      data={data?.data || []}
-      isLoading={isLoading}
+      data={points}
+      isLoading={loading}
       error={error}
     />
   );

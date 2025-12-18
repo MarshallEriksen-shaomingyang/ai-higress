@@ -1,22 +1,28 @@
-import { KPICardsDemo } from "./_components/kpi-cards-demo";
+import { OverviewV2Client } from "./_components/overview-v2-client";
+import type { Metadata } from "next";
 
 /**
- * Dashboard v2 用户页 - 概览页面
+ * 页面元数据
+ */
+export const metadata: Metadata = {
+  title: "Dashboard v2 - 概览",
+  description: "查看系统健康状况、Token 使用情况和成本花费",
+};
+
+/**
+ * Dashboard v2 用户页 - 概览页面（服务端组件）
  * 
- * 这是一个临时的演示页面，用于测试 KPI 卡片组件。
- * 后续会被完整的 Dashboard v2 页面替换。
+ * 职责：
+ * - 提供页面布局和容器
+ * - 渲染客户端容器组件
+ * - 设置页面元数据
+ * 
+ * 验证需求：1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1
  */
 export default function DashboardOverviewPage() {
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Dashboard v2 - KPI Cards Demo</h1>
-        <p className="text-muted-foreground mt-2">
-          测试 5 张 KPI 卡片组件的不同状态
-        </p>
-      </div>
-
-      <KPICardsDemo />
+    <div className="container mx-auto p-6">
+      <OverviewV2Client />
     </div>
   );
 }

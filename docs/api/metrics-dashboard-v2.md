@@ -197,7 +197,47 @@ Query：
 
 ---
 
-## 6) 系统页 KPI（管理员）
+## 6) 用户页 Provider 指标（用于 Provider 卡片）
+
+`GET /metrics/v2/user-dashboard/providers`
+
+Query：
+- `time_range`: `today|7d|30d`（默认 `7d`）
+- `bucket`: `hour`（默认 `hour`，目前仅支持该值）
+- `provider_ids`: 逗号分隔的 `provider_id` 列表（可选；不传则返回该用户最活跃的 providers，最多 `limit` 个）
+- `limit`: `1..50`（默认 `12`；仅在未传 `provider_ids` 时生效）
+- `transport`: `http|sdk|claude_cli|all`（默认 `all`）
+- `is_stream`: `true|false|all`（默认 `all`）
+
+响应（示例）：
+
+```jsonc
+{
+  "time_range": "7d",
+  "bucket": "hour",
+  "items": [
+    {
+      "provider_id": "openai",
+      "total_requests": 12000,
+      "error_rate": 0.0123,
+      "latency_p95_ms": 850.2,
+      "qps": 0.42,
+      "points": [
+        { "window_start": "2025-12-18T01:00:00Z", "qps": 0.30, "error_rate": 0.01 }
+      ]
+    }
+  ]
+}
+```
+
+说明：
+- `points` 固定为近 24h 的小时桶（用于卡片小图），缺失时间桶会补零，避免折线“断裂”；
+- `qps` 为 `points` 的最后一个时间桶的平均 QPS（该小时总请求数 / 3600）；
+- `error_rate / latency_p95_ms` 为 `time_range` 窗口内聚合指标（按请求量加权）。
+
+---
+
+## 7) 系统页 KPI（管理员）
 
 `GET /metrics/v2/system-dashboard/kpis`
 
@@ -210,7 +250,7 @@ Query：
 
 ---
 
-## 7) 系统页 Pulse（管理员）
+## 8) 系统页 Pulse（管理员）
 
 `GET /metrics/v2/system-dashboard/pulse`
 
@@ -218,7 +258,7 @@ Query：
 
 ---
 
-## 8) 系统页 Token 趋势（管理员）
+## 9) 系统页 Token 趋势（管理员）
 
 `GET /metrics/v2/system-dashboard/tokens`
 
@@ -226,7 +266,7 @@ Query：
 
 ---
 
-## 9) 系统页 Top Models（管理员）
+## 10) 系统页 Top Models（管理员）
 
 `GET /metrics/v2/system-dashboard/top-models`
 
@@ -234,7 +274,7 @@ Query：
 
 ---
 
-## 10) 系统页 Provider 状态（管理员）
+## 11) 系统页 Provider 状态（管理员）
 
 `GET /metrics/v2/system-dashboard/providers`
 

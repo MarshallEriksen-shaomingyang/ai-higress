@@ -727,6 +727,36 @@ export interface DashboardV2ProviderCostItem {
 }
 
 /**
+ * Dashboard v2 Provider 指标点（用于卡片小图）
+ */
+export interface DashboardV2ProviderMetricPoint {
+  window_start: string;
+  qps: number;
+  error_rate: number;
+}
+
+/**
+ * Dashboard v2 Provider 指标项（用于用户 Provider 卡片）
+ */
+export interface DashboardV2ProviderMetricsItem {
+  provider_id: string;
+  total_requests: number;
+  error_rate: number;
+  latency_p95_ms: number;
+  qps: number;
+  points: DashboardV2ProviderMetricPoint[];
+}
+
+/**
+ * Dashboard v2 Provider 指标响应（用于用户 Provider 卡片）
+ */
+export interface DashboardV2ProvidersMetricsResponse {
+  time_range: string;
+  bucket: string;
+  items: DashboardV2ProviderMetricsItem[];
+}
+
+/**
  * Dashboard v2 成本结构响应
  */
 export interface DashboardV2CostByProviderResponse {

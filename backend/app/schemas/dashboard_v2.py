@@ -97,9 +97,33 @@ class DashboardProviderStatus(BaseModel):
     items: list[DashboardProviderStatusItem] = Field(default_factory=list)
 
 
+class DashboardProviderMetricPoint(BaseModel):
+    window_start: dt.datetime
+    qps: float = 0.0
+    error_rate: float = 0.0
+
+
+class DashboardProviderMetricsItem(BaseModel):
+    provider_id: str
+    total_requests: int = 0
+    error_rate: float = 0.0
+    latency_p95_ms: float = 0.0
+    qps: float = 0.0
+    points: list[DashboardProviderMetricPoint] = Field(default_factory=list)
+
+
+class DashboardProviderMetrics(BaseModel):
+    time_range: str
+    bucket: str
+    items: list[DashboardProviderMetricsItem] = Field(default_factory=list)
+
+
 __all__ = [
     "DashboardCostByProvider",
     "DashboardCostByProviderItem",
+    "DashboardProviderMetricPoint",
+    "DashboardProviderMetrics",
+    "DashboardProviderMetricsItem",
     "DashboardProviderStatus",
     "DashboardProviderStatusItem",
     "DashboardPulse",
@@ -113,4 +137,3 @@ __all__ = [
     "SystemDashboardKpis",
     "UserDashboardKpis",
 ]
-
