@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  Card,
+  AdaptiveCard,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card";
+} from "@/components/cards/adaptive-card";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n-context";
 
@@ -14,7 +14,7 @@ export function DangerZoneCard() {
   const { t } = useI18n();
 
   return (
-    <Card className="border-destructive/50">
+    <AdaptiveCard showDecor={false} className="border-destructive/50">
       <CardHeader>
         <CardTitle className="text-destructive">
           {t("profile.danger_zone_title")}
@@ -38,6 +38,6 @@ export function DangerZoneCard() {
           </Button>
         </div>
       </CardContent>
-    </Card>
+    </AdaptiveCard>
   );
 }

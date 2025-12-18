@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import {
-  Card,
+  AdaptiveCard,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card";
+} from "@/components/cards/adaptive-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Lock } from "lucide-react";
@@ -60,7 +60,7 @@ export function PasswordChangeCard() {
   if (!authUser) return null;
 
   return (
-    <Card>
+    <AdaptiveCard showDecor={false}>
       <CardHeader>
         <CardTitle>{t("profile.security_title")}</CardTitle>
         <CardDescription>
@@ -116,6 +116,6 @@ export function PasswordChangeCard() {
           </Button>
         </div>
       </CardContent>
-    </Card>
+    </AdaptiveCard>
   );
 }

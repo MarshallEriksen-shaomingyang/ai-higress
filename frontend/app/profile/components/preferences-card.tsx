@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  Card,
+  AdaptiveCard,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card";
+} from "@/components/cards/adaptive-card";
 import { Button } from "@/components/ui/button";
 import { Bell, Globe } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
@@ -20,7 +20,7 @@ export function PreferencesCard() {
       : t("profile.language_english");
 
   return (
-    <Card>
+    <AdaptiveCard showDecor={false}>
       <CardHeader>
         <CardTitle>{t("profile.preferences_title")}</CardTitle>
         <CardDescription>
@@ -60,6 +60,6 @@ export function PreferencesCard() {
           </Button>
         </div>
       </CardContent>
-    </Card>
+    </AdaptiveCard>
   );
 }

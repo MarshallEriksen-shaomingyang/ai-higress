@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import {
-  Card,
+  AdaptiveCard,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card";
+} from "@/components/cards/adaptive-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { User, Mail } from "lucide-react";
@@ -96,7 +96,7 @@ export function ProfileInfoCard() {
       : t("profile.role_no_roles");
 
   return (
-    <Card>
+    <AdaptiveCard showDecor={false}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -186,6 +186,6 @@ export function ProfileInfoCard() {
           </div>
         )}
       </CardContent>
-    </Card>
+    </AdaptiveCard>
   );
 }

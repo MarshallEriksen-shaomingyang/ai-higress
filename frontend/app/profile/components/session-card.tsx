@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardContent } from '@/components/ui/card';
+import { AdaptiveCard, CardContent } from '@/components/cards/adaptive-card';
 import { Button } from '@/components/ui/button';
 import { Monitor, Smartphone, Tablet, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,8 @@ export function SessionCard({ session, onRevoke }: SessionCardProps) {
   const DeviceIcon = iconMap[parsed.icon];
 
   return (
-    <Card
+    <AdaptiveCard
+      showDecor={false}
       className={cn(
         'relative',
         session.is_current && 'bg-muted/30 border-green-500/20'
@@ -75,6 +76,6 @@ export function SessionCard({ session, onRevoke }: SessionCardProps) {
           )}
         </div>
       </CardContent>
-    </Card>
+    </AdaptiveCard>
   );
 }

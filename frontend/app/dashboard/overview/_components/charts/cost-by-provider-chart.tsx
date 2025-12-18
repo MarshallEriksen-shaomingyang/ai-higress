@@ -175,8 +175,7 @@ export function CostByProviderChart({
                   innerRadius="50%"
                   outerRadius="70%"
                   paddingAngle={2}
-                  isAnimationActive={true}
-                  animationDuration={800}
+                  isAnimationActive={false}
                 >
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />

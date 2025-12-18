@@ -36,11 +36,18 @@ function formatTime(isoString: string): string {
 }
 
 /**
- * 补零：确保数据连续，缺失的分钟补零
+ * 补零：确保数据连续，缺失的分钟补零（优化版：减少不必要的补零）
  */
 function fillMissingMinutes(data: DashboardV2PulseDataPoint[]): DashboardV2PulseDataPoint[] {
   if (!data || data.length === 0) {
     return [];
+  }
+
+  // 如果数据点少于 10 个，直接返回排序后的数据，不补零
+  if (data.length < 10) {
+    return [...data].sort(
+      (a, b) => new Date(a.window_start).getTime() - new Date(b.window_start).getTime()
+    );
   }
 
   // 按时间排序
@@ -48,48 +55,46 @@ function fillMissingMinutes(data: DashboardV2PulseDataPoint[]): DashboardV2Pulse
     (a, b) => new Date(a.window_start).getTime() - new Date(b.window_start).getTime()
   );
 
-  const filled: DashboardV2PulseDataPoint[] = [];
+  // 只在数据点之间有较大间隙时才补零（超过 5 分钟）
   const firstPoint = sorted[0];
-  const lastPoint = sorted[sorted.length - 1];
-  
-  if (!firstPoint || !lastPoint) {
-    return sorted;
+  if (!firstPoint) {
+    return [];
   }
   
-  const startTime = new Date(firstPoint.window_start);
-  const endTime = new Date(lastPoint.window_start);
-
-  // 创建一个 Map 用于快速查找
-  const dataMap = new Map<string, DashboardV2PulseDataPoint>();
-  sorted.forEach((point) => {
-    dataMap.set(point.window_start, point);
-  });
-
-  // 遍历每一分钟
-  let currentTime = new Date(startTime);
-  while (currentTime <= endTime) {
-    const timeKey = currentTime.toISOString();
-    const existingData = dataMap.get(timeKey);
-
-    if (existingData) {
-      filled.push(existingData);
-    } else {
-      // 补零
-      filled.push({
-        window_start: timeKey,
-        total_requests: 0,
-        error_4xx_requests: 0,
-        error_5xx_requests: 0,
-        error_429_requests: 0,
-        error_timeout_requests: 0,
-        latency_p50_ms: 0,
-        latency_p95_ms: 0,
-        latency_p99_ms: 0,
-      });
+  const filled: DashboardV2PulseDataPoint[] = [firstPoint];
+  
+  for (let i = 1; i < sorted.length; i++) {
+    const prevPoint = sorted[i - 1];
+    const currPoint = sorted[i];
+    
+    if (!prevPoint || !currPoint) {
+      continue;
     }
-
-    // 增加一分钟
-    currentTime = new Date(currentTime.getTime() + 60 * 1000);
+    
+    const prevTime = new Date(prevPoint.window_start).getTime();
+    const currTime = new Date(currPoint.window_start).getTime();
+    const gap = (currTime - prevTime) / (60 * 1000); // 分钟数
+    
+    // 只有间隙超过 5 分钟才补零
+    if (gap > 5) {
+      let fillTime = prevTime + 60 * 1000;
+      while (fillTime < currTime) {
+        filled.push({
+          window_start: new Date(fillTime).toISOString(),
+          total_requests: 0,
+          error_4xx_requests: 0,
+          error_5xx_requests: 0,
+          error_429_requests: 0,
+          error_timeout_requests: 0,
+          latency_p50_ms: 0,
+          latency_p95_ms: 0,
+          latency_p99_ms: 0,
+        });
+        fillTime += 60 * 1000;
+      }
+    }
+    
+    filled.push(currPoint);
   }
 
   return filled;
@@ -103,18 +108,21 @@ export function RequestsErrorsChart({ data, isLoading, error }: RequestsErrorsCh
       return [];
     }
 
-    // 补零处理
+    // 补零处理（优化后减少了计算量）
     const filledData = fillMissingMinutes(data);
 
-    // 转换为图表数据格式
-    return filledData.map((point) => ({
-      time: formatTime(point.window_start),
-      total_requests: point.total_requests,
-      error_4xx: point.error_4xx_requests,
-      error_5xx: point.error_5xx_requests,
-      error_429: point.error_429_requests,
-      error_timeout: point.error_timeout_requests,
-    }));
+    // 转换为图表数据格式，并限制数据点数量（最多 200 个点）
+    const step = Math.max(1, Math.floor(filledData.length / 200));
+    return filledData
+      .filter((_, index) => index % step === 0)
+      .map((point) => ({
+        time: formatTime(point.window_start),
+        total_requests: point.total_requests,
+        error_4xx: point.error_4xx_requests,
+        error_5xx: point.error_5xx_requests,
+        error_429: point.error_429_requests,
+        error_timeout: point.error_timeout_requests,
+      }));
   }, [data]);
 
   const hasData = chartData.length > 0;
@@ -248,8 +256,7 @@ export function RequestsErrorsChart({ data, isLoading, error }: RequestsErrorsCh
                 stroke="var(--color-total_requests)"
                 strokeWidth={2}
                 dot={false}
-                isAnimationActive={true}
-                animationDuration={800}
+                isAnimationActive={false}
               />
             </ComposedChart>
           </ChartContainer>

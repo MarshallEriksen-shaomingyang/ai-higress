@@ -72,13 +72,16 @@ export function TokenUsageChart({
       return [];
     }
 
-    // 转换为图表数据格式
-    return data.map((point) => ({
-      time: formatTime(point.window_start, bucket),
-      input_tokens: point.input_tokens,
-      output_tokens: point.output_tokens,
-      total_tokens: point.total_tokens,
-    }));
+    // 转换为图表数据格式，并限制数据点数量（最多 200 个点）
+    const step = Math.max(1, Math.floor(data.length / 200));
+    return data
+      .filter((_, index) => index % step === 0)
+      .map((point) => ({
+        time: formatTime(point.window_start, bucket),
+        input_tokens: point.input_tokens,
+        output_tokens: point.output_tokens,
+        total_tokens: point.total_tokens,
+      }));
   }, [data, bucket]);
 
   const hasData = chartData.length > 0;
@@ -194,8 +197,7 @@ export function TokenUsageChart({
                 fill="var(--color-input_tokens)"
                 stackId="tokens"
                 radius={[0, 0, 0, 0]}
-                isAnimationActive={true}
-                animationDuration={800}
+                isAnimationActive={false}
               />
 
               {/* 堆叠柱状图 - Output Tokens */}
@@ -205,8 +207,7 @@ export function TokenUsageChart({
                 fill="var(--color-output_tokens)"
                 stackId="tokens"
                 radius={[4, 4, 0, 0]}
-                isAnimationActive={true}
-                animationDuration={800}
+                isAnimationActive={false}
               />
             </BarChart>
           </ChartContainer>

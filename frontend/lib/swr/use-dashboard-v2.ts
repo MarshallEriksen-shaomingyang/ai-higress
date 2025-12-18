@@ -24,13 +24,13 @@ export interface DashboardV2FilterParams {
 
 /**
  * Dashboard v2 自定义缓存策略
- * 使用 frequent 策略，但将刷新间隔设置为 60s 以匹配后端 Redis TTL
+ * 优化：减少不必要的重新验证，提升性能
  */
 const dashboardV2CacheConfig = {
-  revalidateOnFocus: true,
+  revalidateOnFocus: false, // 关闭焦点时重新验证，减少请求
   revalidateOnReconnect: true,
   refreshInterval: 60000, // 60s TTL
-  dedupingInterval: 1000,
+  dedupingInterval: 5000, // 增加去重间隔到 5s，减少重复请求
 };
 
 /**
@@ -59,7 +59,7 @@ export const useUserDashboardKPIs = (filters: DashboardV2FilterParams = {}) => {
     validating,
     refresh,
   } = useApiGet<DashboardV2KPIData>(
-    '/metrics/v2/user-dashboard/kpis',
+    '/metrics/user-dashboard/kpis',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -99,7 +99,7 @@ export const useUserDashboardPulse = (filters: Omit<DashboardV2FilterParams, 'ti
     validating,
     refresh,
   } = useApiGet<DashboardV2PulseResponse>(
-    '/metrics/v2/user-dashboard/pulse',
+    '/metrics/user-dashboard/pulse',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -147,7 +147,7 @@ export const useUserDashboardTokens = (
     validating,
     refresh,
   } = useApiGet<DashboardV2TokensResponse>(
-    '/metrics/v2/user-dashboard/tokens',
+    '/metrics/user-dashboard/tokens',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -195,7 +195,7 @@ export const useUserDashboardTopModels = (
     validating,
     refresh,
   } = useApiGet<DashboardV2TopModelsResponse>(
-    '/metrics/v2/user-dashboard/top-models',
+    '/metrics/user-dashboard/top-models',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -239,7 +239,7 @@ export const useUserDashboardCostByProvider = (
     validating,
     refresh,
   } = useApiGet<DashboardV2CostByProviderResponse>(
-    '/metrics/v2/user-dashboard/cost-by-provider',
+    '/metrics/user-dashboard/cost-by-provider',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -296,7 +296,7 @@ export const useUserDashboardProvidersMetrics = (
     validating,
     refresh,
   } = useApiGet<DashboardV2ProvidersMetricsResponse>(
-    '/metrics/v2/user-dashboard/providers',
+    '/metrics/user-dashboard/providers',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -341,7 +341,7 @@ export const useSystemDashboardKPIs = (filters: DashboardV2FilterParams = {}) =>
     validating,
     refresh,
   } = useApiGet<SystemKPIData>(
-    '/metrics/v2/system-dashboard/kpis',
+    '/metrics/system-dashboard/kpis',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -381,7 +381,7 @@ export const useSystemDashboardPulse = (filters: Omit<DashboardV2FilterParams, '
     validating,
     refresh,
   } = useApiGet<DashboardV2PulseResponse>(
-    '/metrics/v2/system-dashboard/pulse',
+    '/metrics/system-dashboard/pulse',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -429,7 +429,7 @@ export const useSystemDashboardTokens = (
     validating,
     refresh,
   } = useApiGet<DashboardV2TokensResponse>(
-    '/metrics/v2/system-dashboard/tokens',
+    '/metrics/system-dashboard/tokens',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -477,7 +477,7 @@ export const useSystemDashboardTopModels = (
     validating,
     refresh,
   } = useApiGet<DashboardV2TopModelsResponse>(
-    '/metrics/v2/system-dashboard/top-models',
+    '/metrics/system-dashboard/top-models',
     {
       ...dashboardV2CacheConfig,
       params,
@@ -507,7 +507,7 @@ export const useSystemDashboardProviders = () => {
     validating,
     refresh,
   } = useApiGet<SystemDashboardProvidersResponse>(
-    '/metrics/v2/system-dashboard/providers',
+    '/metrics/system-dashboard/providers',
     {
       ...dashboardV2CacheConfig,
     }

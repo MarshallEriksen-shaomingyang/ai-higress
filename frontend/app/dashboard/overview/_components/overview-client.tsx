@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo } from "react";
 import { FilterBar, type TimeRange, type Transport, type StreamFilter } from "./filters/filter-bar";
 import { HealthBadge } from "./badge/health-badge";
 import { KPICardsGrid } from "./kpis/kpi-cards-grid";
@@ -21,6 +21,13 @@ import {
   useUserDashboardCostByProvider,
 } from "@/lib/swr/use-dashboard-v2";
 import { useI18n } from "@/lib/i18n-context";
+
+// 使用 memo 优化图表组件，避免不必要的重渲染
+const MemoizedRequestsErrorsChart = memo(RequestsErrorsChart);
+const MemoizedLatencyPercentilesChart = memo(LatencyPercentilesChart);
+const MemoizedTokenUsageChart = memo(TokenUsageChart);
+const MemoizedCostByProviderChart = memo(CostByProviderChart);
+const MemoizedTopModelsTable = memo(TopModelsTable);
 
 /**
  * Dashboard 用户页 - 客户端容器组件
@@ -131,7 +138,7 @@ export function OverviewClient() {
           ) : pulseResult.points.length === 0 && !pulseResult.loading ? (
             <EmptyState message={t("dashboard.errors.noData")} />
           ) : (
-            <RequestsErrorsChart
+            <MemoizedRequestsErrorsChart
               data={pulseResult.points}
               isLoading={pulseResult.loading}
             />
@@ -147,7 +154,7 @@ export function OverviewClient() {
           ) : pulseResult.points.length === 0 && !pulseResult.loading ? (
             <EmptyState message={t("dashboard.errors.noData")} />
           ) : (
-            <LatencyPercentilesChart
+            <MemoizedLatencyPercentilesChart
               data={pulseResult.points}
               isLoading={pulseResult.loading}
             />
@@ -167,7 +174,7 @@ export function OverviewClient() {
           ) : costResult.items.length === 0 && !costResult.loading ? (
             <EmptyState message={t("dashboard.errors.noData")} />
           ) : (
-            <CostByProviderChart
+            <MemoizedCostByProviderChart
               data={costResult.items}
               isLoading={costResult.loading}
             />
@@ -183,7 +190,7 @@ export function OverviewClient() {
           ) : tokensResult.points.length === 0 && !tokensResult.loading ? (
             <EmptyState message={t("dashboard.errors.noData")} />
           ) : (
-            <TokenUsageChart
+            <MemoizedTokenUsageChart
               data={tokensResult.points}
               bucket="hour"
               isLoading={tokensResult.loading}
@@ -204,7 +211,7 @@ export function OverviewClient() {
         ) : topModelsResult.items.length === 0 && !topModelsResult.loading ? (
           <EmptyState message={t("dashboard.errors.noData")} />
         ) : (
-          <TopModelsTable
+          <MemoizedTopModelsTable
             data={topModelsResult.items}
             isLoading={topModelsResult.loading}
           />

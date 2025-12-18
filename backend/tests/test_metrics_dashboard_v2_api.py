@@ -97,7 +97,7 @@ def test_user_dashboard_v2_kpis(client: TestClient, db_session: Session) -> None
     db_session.commit()
 
     resp = client.get(
-        "/metrics/v2/user-dashboard/kpis?time_range=today",
+        "/metrics/user-dashboard/kpis?time_range=today",
         headers=jwt_auth_headers(str(user.id)),
     )
     assert resp.status_code == 200
@@ -125,13 +125,13 @@ def test_system_dashboard_v2_requires_superuser(client: TestClient, db_session: 
     db_session.refresh(normal)
 
     denied = client.get(
-        "/metrics/v2/system-dashboard/kpis",
+        "/metrics/system-dashboard/kpis",
         headers=jwt_auth_headers(str(normal.id)),
     )
     assert denied.status_code == 403
 
     allowed = client.get(
-        "/metrics/v2/system-dashboard/kpis",
+        "/metrics/system-dashboard/kpis",
         headers=jwt_auth_headers(str(admin.id)),
     )
     assert allowed.status_code == 200
@@ -142,7 +142,7 @@ def test_system_dashboard_v2_providers(client: TestClient, db_session: Session) 
     _seed_provider(db_session, provider_id="openai", transport="http")
 
     resp = client.get(
-        "/metrics/v2/system-dashboard/providers",
+        "/metrics/system-dashboard/providers",
         headers=jwt_auth_headers(str(admin.id)),
     )
     assert resp.status_code == 200
@@ -221,7 +221,7 @@ def test_user_dashboard_v2_providers_metrics(client: TestClient, db_session: Ses
     db_session.commit()
 
     resp = client.get(
-        "/metrics/v2/user-dashboard/providers?time_range=today&provider_ids=openai",
+        "/metrics/user-dashboard/providers?time_range=today&provider_ids=openai",
         headers=jwt_auth_headers(str(user.id)),
     )
     assert resp.status_code == 200

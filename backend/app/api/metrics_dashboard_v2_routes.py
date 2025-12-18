@@ -46,7 +46,7 @@ from app.schemas.dashboard_v2 import (
 )
 
 router = APIRouter(
-    prefix="/metrics/v2",
+    prefix="/metrics",
     tags=["metrics"],
     dependencies=[Depends(require_jwt_token)],
 )

@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import {
   TotalRequestsCard,
   CreditsSpentCard,
@@ -7,6 +8,13 @@ import {
   ErrorRateCard,
   TotalTokensCard,
 } from "../cards";
+
+// 使用 memo 优化 KPI 卡片，避免不必要的重渲染
+const MemoizedTotalRequestsCard = memo(TotalRequestsCard);
+const MemoizedCreditsSpentCard = memo(CreditsSpentCard);
+const MemoizedLatencyP95Card = memo(LatencyP95Card);
+const MemoizedErrorRateCard = memo(ErrorRateCard);
+const MemoizedTotalTokensCard = memo(TotalTokensCard);
 
 interface KPICardsGridProps {
   data?: {
@@ -37,30 +45,30 @@ interface KPICardsGridProps {
  * 
  * 验证需求：1.1, 9.1, 9.2, 9.3
  */
-export function KPICardsGrid({ data, isLoading, error }: KPICardsGridProps) {
+export const KPICardsGrid = memo(function KPICardsGrid({ data, isLoading, error }: KPICardsGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <TotalRequestsCard
+      <MemoizedTotalRequestsCard
         value={data?.total_requests ?? 0}
         isLoading={isLoading}
         error={error}
       />
-      <CreditsSpentCard
+      <MemoizedCreditsSpentCard
         value={data?.credits_spent ?? 0}
         isLoading={isLoading}
         error={error}
       />
-      <LatencyP95Card
+      <MemoizedLatencyP95Card
         value={data?.latency_p95_ms ?? 0}
         isLoading={isLoading}
         error={error}
       />
-      <ErrorRateCard
+      <MemoizedErrorRateCard
         value={data?.error_rate ?? 0}
         isLoading={isLoading}
         error={error}
       />
-      <TotalTokensCard
+      <MemoizedTotalTokensCard
         inputTokens={data?.tokens.input ?? 0}
         outputTokens={data?.tokens.output ?? 0}
         totalTokens={data?.tokens.total ?? 0}
@@ -69,4 +77,4 @@ export function KPICardsGrid({ data, isLoading, error }: KPICardsGridProps) {
       />
     </div>
   );
-}
+});

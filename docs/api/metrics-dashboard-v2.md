@@ -1,4 +1,4 @@
-# Dashboard v2 指标接口（/metrics/v2/*）
+# Dashboard 指标接口（/metrics/*）
 
 > 本文档描述“Dashboard v2（用户页 + 系统页）”使用的指标接口。
 >
@@ -11,7 +11,7 @@
 ## 鉴权
 
 - 全部接口需要登录用户（JWT）。
-- `/metrics/v2/system-dashboard/*` 仅管理员（`is_superuser=true`）可访问，非管理员返回 `403 Forbidden`。
+- `/metrics/system-dashboard/*` 仅管理员（`is_superuser=true`）可访问，非管理员返回 `403 Forbidden`。
 
 ## 缓存
 
@@ -60,7 +60,7 @@ Dashboard v2 在 `time_range != today` 时会**优先查询 rollup 表**，若 r
 
 ## 1) 用户页 KPI
 
-`GET /metrics/v2/user-dashboard/kpis`
+`GET /metrics/user-dashboard/kpis`
 
 Query：
 - `time_range`: `today|7d|30d`（默认 `7d`）
@@ -93,7 +93,7 @@ Query：
 
 ## 2) 用户页 Pulse（近 24h，分钟）
 
-`GET /metrics/v2/user-dashboard/pulse`
+`GET /metrics/user-dashboard/pulse`
 
 Query：
 - `transport`: `http|sdk|claude_cli|all`
@@ -127,7 +127,7 @@ Query：
 
 ## 3) 用户页 Token 趋势（hour/day）
 
-`GET /metrics/v2/user-dashboard/tokens`
+`GET /metrics/user-dashboard/tokens`
 
 Query：
 - `time_range`: `today|7d|30d`（默认 `7d`）
@@ -157,7 +157,7 @@ Query：
 
 ## 4) 用户页 Top Models
 
-`GET /metrics/v2/user-dashboard/top-models`
+`GET /metrics/user-dashboard/top-models`
 
 Query：
 - `time_range`: `today|7d|30d`（默认 `7d`）
@@ -179,7 +179,7 @@ Query：
 
 ## 5) 用户页 成本结构（credits by provider）
 
-`GET /metrics/v2/user-dashboard/cost-by-provider`
+`GET /metrics/user-dashboard/cost-by-provider`
 
 Query：
 - `time_range`: `today|7d|30d`（默认 `7d`）
@@ -199,7 +199,7 @@ Query：
 
 ## 6) 用户页 Provider 指标（用于 Provider 卡片）
 
-`GET /metrics/v2/user-dashboard/providers`
+`GET /metrics/user-dashboard/providers`
 
 Query：
 - `time_range`: `today|7d|30d`（默认 `7d`）
@@ -239,7 +239,7 @@ Query：
 
 ## 7) 系统页 KPI（管理员）
 
-`GET /metrics/v2/system-dashboard/kpis`
+`GET /metrics/system-dashboard/kpis`
 
 Query：
 - `time_range`: `today|7d|30d`（默认 `7d`）
@@ -252,7 +252,7 @@ Query：
 
 ## 8) 系统页 Pulse（管理员）
 
-`GET /metrics/v2/system-dashboard/pulse`
+`GET /metrics/system-dashboard/pulse`
 
 同用户版，但为全局聚合。
 
@@ -260,7 +260,7 @@ Query：
 
 ## 9) 系统页 Token 趋势（管理员）
 
-`GET /metrics/v2/system-dashboard/tokens`
+`GET /metrics/system-dashboard/tokens`
 
 同用户版，但为全局聚合。
 
@@ -268,7 +268,7 @@ Query：
 
 ## 10) 系统页 Top Models（管理员）
 
-`GET /metrics/v2/system-dashboard/top-models`
+`GET /metrics/system-dashboard/top-models`
 
 同用户版，但为全局聚合。
 
@@ -276,7 +276,7 @@ Query：
 
 ## 11) 系统页 Provider 状态（管理员）
 
-`GET /metrics/v2/system-dashboard/providers`
+`GET /metrics/system-dashboard/providers`
 
 响应：
 

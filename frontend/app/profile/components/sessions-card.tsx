@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import {
-  Card,
+  AdaptiveCard,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card";
+} from "@/components/cards/adaptive-card";
 import { Button } from "@/components/ui/button";
 import { SessionCard } from "./session-card";
 import {
@@ -73,7 +73,7 @@ export function SessionsCard() {
 
   return (
     <>
-      <Card>
+      <AdaptiveCard showDecor={false}>
         <CardHeader>
           <CardTitle>{t("sessions.title")}</CardTitle>
           <CardDescription>{t("sessions.description")}</CardDescription>
@@ -112,7 +112,7 @@ export function SessionsCard() {
             </>
           )}
         </CardContent>
-      </Card>
+      </AdaptiveCard>
 
       <RevokeSessionDialog
         open={showRevokeDialog}

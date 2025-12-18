@@ -17,6 +17,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
+      url: `${baseUrl}/dashboard`,
+      lastModified: currentDate,
+      changeFrequency: 'daily',
+      priority: 0.95,
+    },
+    {
       url: `${baseUrl}/dashboard/overview`,
       lastModified: currentDate,
       changeFrequency: 'daily',
@@ -24,6 +30,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${baseUrl}/dashboard/my-providers`,
+      lastModified: currentDate,
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/dashboard/providers`,
       lastModified: currentDate,
       changeFrequency: 'weekly',
       priority: 0.8,
@@ -47,12 +59,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/dashboard/metrics`,
-      lastModified: currentDate,
-      changeFrequency: 'daily',
-      priority: 0.7,
-    },
-    {
       url: `${baseUrl}/dashboard/notifications`,
       lastModified: currentDate,
       changeFrequency: 'daily',
@@ -60,6 +66,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${baseUrl}/dashboard/my-submissions`,
+      lastModified: currentDate,
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    },
+    {
+      url: `${baseUrl}/dashboard/system`,
       lastModified: currentDate,
       changeFrequency: 'weekly',
       priority: 0.6,
@@ -93,6 +105,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.5,
     },
     {
+      url: `${baseUrl}/system/admin/upstream-proxy`,
+      lastModified: currentDate,
+      changeFrequency: 'monthly',
+      priority: 0.4,
+    },
+    {
       url: `${baseUrl}/system/users`,
       lastModified: currentDate,
       changeFrequency: 'weekly',
@@ -102,6 +120,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: `${baseUrl}/system/roles`,
       lastModified: currentDate,
       changeFrequency: 'monthly',
+      priority: 0.5,
+    },
+    {
+      url: `${baseUrl}/system/notifications`,
+      lastModified: currentDate,
+      changeFrequency: 'weekly',
+      priority: 0.5,
+    },
+    {
+      url: `${baseUrl}/system/performance`,
+      lastModified: currentDate,
+      changeFrequency: 'daily',
+      priority: 0.5,
+    },
+    {
+      url: `${baseUrl}/system/provider-submissions`,
+      lastModified: currentDate,
+      changeFrequency: 'weekly',
       priority: 0.5,
     },
   ];
