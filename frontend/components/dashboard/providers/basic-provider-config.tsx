@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { FormField, FormLabel } from "@/components/ui/form";
@@ -28,6 +29,8 @@ export function BasicProviderConfig({
     sdkVendorsLoading,
 }: BasicProviderConfigProps) {
     const { t } = useI18n();
+    const sdkVendor = form.watch("sdkVendor");
+    const isVertexAiSdk = isSdkTransport && sdkVendor === "vertexai";
     
     return (
         <div className="space-y-4">
@@ -197,13 +200,23 @@ export function BasicProviderConfig({
                         <FormLabel>
                             {t("providers.form_field_api_key")} <span className="text-destructive">*</span>
                         </FormLabel>
-                        <Input
-                            {...field}
-                            type="password"
-                            placeholder={t("providers.form_field_api_key_placeholder")}
-                        />
+                        {isVertexAiSdk ? (
+                            <Textarea
+                                {...field}
+                                placeholder={t("providers.form_field_api_key_placeholder_vertexai")}
+                                className="min-h-[120px] font-mono"
+                            />
+                        ) : (
+                            <Input
+                                {...field}
+                                type="password"
+                                placeholder={t("providers.form_field_api_key_placeholder")}
+                            />
+                        )}
                         <p className="text-xs text-muted-foreground">
-                            {t("providers.form_field_api_key_help")}
+                            {isVertexAiSdk
+                                ? t("providers.form_field_api_key_help_vertexai")
+                                : t("providers.form_field_api_key_help")}
                         </p>
                     </div>
                 )}

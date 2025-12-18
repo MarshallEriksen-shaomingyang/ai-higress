@@ -525,8 +525,8 @@ export function ProviderFormEnhanced({
     };
 
     return (
-        <Drawer open={open} onOpenChange={onOpenChange}>
-            <DrawerContent className="mx-auto w-full max-w-4xl">
+        <Drawer open={open} onOpenChange={onOpenChange} direction="right">
+            <DrawerContent className="h-full w-full data-[vaul-drawer-direction=right]:sm:max-w-3xl data-[vaul-drawer-direction=right]:lg:max-w-4xl">
                 <DrawerHeader>
                     <DrawerTitle className="flex items-center justify-center gap-2 md:justify-start">
                         <Sparkles className="h-5 w-5 text-primary" />

@@ -2,10 +2,18 @@ import type { Language } from "../i18n-context";
 
 export const dashboardV2Translations: Record<Language, Record<string, string>> = {
   en: {
-    // Page title
+    // Page title (通用键)
+    "dashboard.title": "Dashboard Overview",
+    "dashboard.subtitle": "Real-time monitoring and analytics",
+    
+    // Page title (v2 兼容键)
     "dashboard_v2.title": "Dashboard Overview",
     "dashboard_v2.subtitle": "Real-time monitoring and analytics",
     "dashboardV2.title": "Dashboard Overview",
+    
+    // System Dashboard title
+    "dashboardV2.system.title": "System Dashboard",
+    "dashboardV2.system.subtitle": "Global monitoring and analytics",
 
     // Filter bar
     "dashboard_v2.filter.time_range.label": "Time Range",
@@ -93,7 +101,39 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboardV2.topModels.requests": "Requests",
     "dashboardV2.topModels.totalTokens": "Total Tokens",
 
-    // Error states
+    // Provider Status
+    "dashboardV2.provider.title": "Provider Status",
+    "dashboardV2.provider.totalCount": "{count} Providers",
+    "dashboardV2.provider.noData": "No Providers",
+    "dashboardV2.provider.noDataDescription": "No provider data available at the moment",
+    
+    "dashboardV2.provider.operationStatus": "Operation Status",
+    "dashboardV2.provider.operationStatus.active": "Active",
+    "dashboardV2.provider.operationStatus.inactive": "Inactive",
+    "dashboardV2.provider.operationStatus.maintenance": "Maintenance",
+    
+    "dashboardV2.provider.healthStatus": "Health Status",
+    "dashboardV2.provider.healthStatus.healthy": "Healthy",
+    "dashboardV2.provider.healthStatus.degraded": "Degraded",
+    "dashboardV2.provider.healthStatus.unhealthy": "Unhealthy",
+    
+    "dashboardV2.provider.auditStatus": "Audit Status",
+    "dashboardV2.provider.auditStatus.approved": "Approved",
+    "dashboardV2.provider.auditStatus.pending": "Pending",
+    "dashboardV2.provider.auditStatus.rejected": "Rejected",
+    
+    "dashboardV2.provider.lastCheck.label": "Last Check",
+    "dashboardV2.provider.lastCheck.justNow": "Just now",
+    "dashboardV2.provider.lastCheck.minutesAgo": "{count} minutes ago",
+    "dashboardV2.provider.lastCheck.hoursAgo": "{count} hours ago",
+    "dashboardV2.provider.lastCheck.daysAgo": "{count} days ago",
+
+    // Error states (通用键)
+    "dashboard.errors.loadFailed": "Failed to load data",
+    "dashboard.errors.noData": "No data available",
+    "dashboard.errors.retry": "Retry",
+    
+    // Error states (v2 兼容键)
     "dashboardV2.error.loadFailed": "Failed to load data",
     "dashboardV2.error.noData": "No data available",
     "dashboardV2.errors.loadFailed": "Failed to load data",
@@ -101,10 +141,18 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboardV2.errors.retry": "Retry",
   },
   zh: {
-    // Page title
+    // Page title (通用键)
+    "dashboard.title": "仪表盘概览",
+    "dashboard.subtitle": "实时监控与分析",
+    
+    // Page title (v2 兼容键)
     "dashboard_v2.title": "仪表盘概览",
     "dashboard_v2.subtitle": "实时监控与分析",
     "dashboardV2.title": "仪表盘概览",
+    
+    // System Dashboard title
+    "dashboardV2.system.title": "系统仪表盘",
+    "dashboardV2.system.subtitle": "全局监控与分析",
 
     // Filter bar
     "dashboard_v2.filter.time_range.label": "时间范围",
@@ -192,7 +240,39 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboardV2.topModels.requests": "请求量",
     "dashboardV2.topModels.totalTokens": "Token 总量",
 
-    // Error states
+    // Provider Status
+    "dashboardV2.provider.title": "Provider 状态",
+    "dashboardV2.provider.totalCount": "共 {count} 个 Provider",
+    "dashboardV2.provider.noData": "暂无 Provider",
+    "dashboardV2.provider.noDataDescription": "当前没有可用的 Provider 数据",
+    
+    "dashboardV2.provider.operationStatus": "运行状态",
+    "dashboardV2.provider.operationStatus.active": "运行中",
+    "dashboardV2.provider.operationStatus.inactive": "未运行",
+    "dashboardV2.provider.operationStatus.maintenance": "维护中",
+    
+    "dashboardV2.provider.healthStatus": "健康状态",
+    "dashboardV2.provider.healthStatus.healthy": "健康",
+    "dashboardV2.provider.healthStatus.degraded": "降级",
+    "dashboardV2.provider.healthStatus.unhealthy": "不健康",
+    
+    "dashboardV2.provider.auditStatus": "审核状态",
+    "dashboardV2.provider.auditStatus.approved": "已批准",
+    "dashboardV2.provider.auditStatus.pending": "待审核",
+    "dashboardV2.provider.auditStatus.rejected": "已拒绝",
+    
+    "dashboardV2.provider.lastCheck.label": "最后检查",
+    "dashboardV2.provider.lastCheck.justNow": "刚刚",
+    "dashboardV2.provider.lastCheck.minutesAgo": "{count} 分钟前",
+    "dashboardV2.provider.lastCheck.hoursAgo": "{count} 小时前",
+    "dashboardV2.provider.lastCheck.daysAgo": "{count} 天前",
+
+    // Error states (通用键)
+    "dashboard.errors.loadFailed": "加载数据失败",
+    "dashboard.errors.noData": "暂无数据",
+    "dashboard.errors.retry": "重试",
+    
+    // Error states (v2 兼容键)
     "dashboardV2.error.loadFailed": "加载数据失败",
     "dashboardV2.error.noData": "暂无数据",
     "dashboardV2.errors.loadFailed": "加载数据失败",

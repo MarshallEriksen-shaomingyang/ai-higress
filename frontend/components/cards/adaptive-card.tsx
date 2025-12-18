@@ -72,25 +72,7 @@ export function AdaptiveCard({
           </div>
         )}
 
-        {/* 圣诞装饰 - 左侧冰霜（通过 CSS 类自动控制） */}
-        {showDecor && (
-          <div className="christmas-card-decor absolute top-0 left-0 bottom-0 z-30 w-48 pointer-events-none overflow-visible">
-            <img
-              src="/theme/chrismas/frost-left.png"
-              alt="Frost decoration"
-              className="absolute top-0 left-0 h-full w-auto object-contain object-left-top"
-              style={{
-                filter: "drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2))",
-                opacity: 0.9,
-              }}
-              loading="lazy"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          </div>
-        )}
-
+      
         {/* 卡片内容 */}
         <div className="relative z-20">
           {children}

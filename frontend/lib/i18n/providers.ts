@@ -122,6 +122,7 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "my_providers.card_error_rate": "Error Rate",
     "my_providers.card_latency_p95": "Latency",
     "my_providers.card_configure": "Configure",
+    "my_providers.login_required": "Please sign in to manage your private providers.",
 
     // Provider models dialog (models path + static models)
     "providers.models_path_label": "Models Path",
@@ -273,6 +274,8 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_field_api_key": "API Key",
     "providers.form_field_api_key_placeholder": "sk-...",
     "providers.form_field_api_key_help": "Upstream vendor's API key, will be stored in encrypted form",
+    "providers.form_field_api_key_placeholder_vertexai": "Paste GCP service account JSON (recommended) or OAuth access token",
+    "providers.form_field_api_key_help_vertexai": "Vertex AI uses Google Cloud credentials (service account JSON recommended). This secret is stored encrypted.",
     "providers.form_field_overridden": "Overridden",
     "providers.form_field_optional": "(optional)",
     "providers.form_field_required": "*",
@@ -450,6 +453,7 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "my_providers.card_error_rate": "错误率",
     "my_providers.card_latency_p95": "延迟",
     "my_providers.card_configure": "配置",
+    "my_providers.login_required": "请先登录以管理您的私有 Provider。",
     
     // 每模型计费配置（管理员）
     "providers.pricing_label": "计费：按模型单独配置",
@@ -599,6 +603,8 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_field_api_key": "API Key",
     "providers.form_field_api_key_placeholder": "sk-...",
     "providers.form_field_api_key_help": "上游厂商的 API 密钥，将以加密形式存储",
+    "providers.form_field_api_key_placeholder_vertexai": "粘贴 GCP 服务账号 JSON（推荐）或 OAuth access token",
+    "providers.form_field_api_key_help_vertexai": "Vertex AI 需要 Google Cloud 凭证（推荐使用服务账号 JSON）。该密钥会加密存储。",
     "providers.form_field_overridden": "已覆盖",
     "providers.form_field_optional": "（可选）",
     "providers.form_field_required": "*",

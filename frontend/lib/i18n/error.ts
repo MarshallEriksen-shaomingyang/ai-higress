@@ -2,6 +2,10 @@ import type { Language } from "../i18n-context";
 
 export const errorTranslations: Record<Language, Record<string, string>> = {
   en: {
+    // Common error messages
+    "error.loadFailed": "Failed to load data",
+    "error.unknownError": "An unknown error occurred",
+    
     // Error pages
     "error.404.title": "404",
     "error.404.heading": "Page Not Found",
@@ -17,6 +21,14 @@ export const errorTranslations: Record<Language, Record<string, string>> = {
     "error.404.link_docs_desc": "Read the docs",
     "error.404.link_support": "Support",
     "error.404.link_support_desc": "Get help",
+    "error.403.title": "403",
+    "error.403.heading": "Access Denied",
+    "error.403.description": "You don't have permission to access this page. This page requires administrator privileges.",
+    "error.403.required_permission": "Required Permission",
+    "error.403.permission_superuser": "Administrator (Superuser)",
+    "error.403.contact_admin": "Please contact your system administrator if you believe you should have access.",
+    "error.403.btn_back": "Go Back",
+    "error.403.btn_home": "Back to Home",
     "error.500.title": "500",
     "error.500.heading": "Server Error",
     "error.500.description": "Oops! Something went wrong on our end. We're working to fix the issue. Please try again later.",
@@ -29,6 +41,10 @@ export const errorTranslations: Record<Language, Record<string, string>> = {
     "error.500.copied": "Error ID copied to clipboard",
   },
   zh: {
+    // Common error messages
+    "error.loadFailed": "加载数据失败",
+    "error.unknownError": "发生未知错误",
+    
     // Error pages
     "error.404.title": "404",
     "error.404.heading": "页面未找到",
@@ -44,6 +60,14 @@ export const errorTranslations: Record<Language, Record<string, string>> = {
     "error.404.link_docs_desc": "阅读文档",
     "error.404.link_support": "支持",
     "error.404.link_support_desc": "获取帮助",
+    "error.403.title": "403",
+    "error.403.heading": "访问被拒绝",
+    "error.403.description": "您没有权限访问此页面。此页面需要管理员权限。",
+    "error.403.required_permission": "所需权限",
+    "error.403.permission_superuser": "管理员（超级用户）",
+    "error.403.contact_admin": "如果您认为应该拥有访问权限，请联系系统管理员。",
+    "error.403.btn_back": "返回上一页",
+    "error.403.btn_home": "返回首页",
     "error.500.title": "500",
     "error.500.heading": "服务器错误",
     "error.500.description": "抱歉！服务器出现了问题。我们正在努力修复。请稍后再试。",

@@ -1,8 +1,8 @@
-# Dashboard v2 用户页 - 概览页面
+# Dashboard 用户页 - 概览页面
 
 ## 概述
 
-Dashboard v2 用户页是一个完整的监控仪表盘，让用户在 5 秒内了解系统健康状况、Token 使用情况和成本花费。
+Dashboard 用户页是一个完整的监控仪表盘，让用户在 5 秒内了解系统健康状况、Token 使用情况和成本花费。
 
 ## 页面结构
 
@@ -10,7 +10,7 @@ Dashboard v2 用户页是一个完整的监控仪表盘，让用户在 5 秒内�
 /dashboard/overview
 ├── page.tsx                          # 服务端页面组件
 └── _components/
-    ├── overview-v2-client.tsx        # 客户端容器组件（主要逻辑）
+    ├── overview-client.tsx           # 客户端容器组件（主要逻辑）
     ├── index.ts                      # 组件导出
     ├── badge/                        # 健康徽章
     │   └── health-badge.tsx

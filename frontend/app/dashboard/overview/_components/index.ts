@@ -1,9 +1,9 @@
 /**
- * Dashboard v2 组件导出
+ * Dashboard 组件导出
  */
 
 // 主容器组件
-export { OverviewV2Client } from "./overview-v2-client";
+export { OverviewClient } from "./overview-client";
 
 // 筛选器组件
 export { FilterBar } from "./filters/filter-bar";

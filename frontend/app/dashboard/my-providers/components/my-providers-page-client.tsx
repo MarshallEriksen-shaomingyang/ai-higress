@@ -1,47 +1,49 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
-import { Plus, Search, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Provider, providerService } from "@/http/provider";
 import { useI18n } from "@/lib/i18n-context";
 import { useErrorDisplay } from "@/lib/errors";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { usePrivateProviderQuota } from "@/lib/swr/use-private-providers";
 import { useUserDashboardProvidersMetrics } from "@/lib/swr/use-dashboard-v2";
-import { QuotaCard } from "./quota-card";
-import { HealthStats } from "./health-stats";
-import { ProviderCard } from "@/app/dashboard/providers/_components/card/provider-card";
+import { DeleteProviderDialog } from "./delete-provider-dialog";
+import { PrivateProvidersCards } from "./private-providers-cards";
+import { MyProvidersHeader } from "./my-providers-header";
+import { MyProvidersSummary } from "./my-providers-summary";
+import { MyProvidersToolbar } from "./my-providers-toolbar";
 
 const ProviderFormEnhanced = dynamic(() => import("@/components/dashboard/providers/provider-form").then(mod => ({ default: mod.ProviderFormEnhanced })), { ssr: false });
 const ProviderModelsDialog = dynamic(() => import("@/components/dashboard/providers/provider-models-dialog").then(mod => ({ default: mod.ProviderModelsDialog })), { ssr: false });
 
-interface MyProvidersPageClientProps {
-  initialProviders: Provider[];
-  userId: string;
-}
-
-export function MyProvidersPageClient({
-  initialProviders,
-  userId,
-}: MyProvidersPageClientProps) {
+/**
+ * 私有 Provider 页面客户端组件
+ *
+ * - 使用前端 auth store 判断登录态
+ * - 登录后在客户端拉取当前用户的私有 Provider 列表
+ * - 未登录时展示登录提示，并唤起全局登录对话框
+ * - 处理所有业务逻辑：搜索、刷新、创建、编辑、删除
+ */
+export function MyProvidersPageClient() {
   const { t } = useI18n();
   const router = useRouter();
   const { showError } = useErrorDisplay();
 
+  // 认证状态
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authLoading = useAuthStore((state) => state.isLoading);
+  const openAuthDialog = useAuthStore((state) => state.openAuthDialog);
+
+  const userId = user?.id ?? null;
+
   // 状态管理
-  const [providers, setProviders] = useState<Provider[]>(initialProviders);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [isLoadingProviders, setIsLoadingProviders] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -52,6 +54,26 @@ export function MyProvidersPageClient({
   const [modelsDialogOpen, setModelsDialogOpen] = useState(false);
   const [viewingModelsProviderId, setViewingModelsProviderId] = useState<string | null>(null);
   const [modelsPathByProvider, setModelsPathByProvider] = useState<Record<string, string>>({});
+
+  // 初始加载私有 Provider 列表
+  useEffect(() => {
+    // 未登录时不拉取数据
+    if (!isAuthenticated || !userId) return;
+
+    setIsLoadingProviders(true);
+
+    providerService
+      .getUserPrivateProviders(userId)
+      .then((data) => {
+        setProviders(data);
+      })
+      .catch((error) => {
+        console.error("Failed to load private providers on client:", error);
+      })
+      .finally(() => {
+        setIsLoadingProviders(false);
+      });
+  }, [isAuthenticated, userId]);
 
   const providerIdsParam = useMemo(() => {
     const ids = providers
@@ -87,6 +109,8 @@ export function MyProvidersPageClient({
 
   // 刷新提供商列表
   const refresh = useCallback(async () => {
+    if (!userId) return;
+
     setIsRefreshing(true);
     try {
       const data = await providerService.getUserPrivateProviders(userId);
@@ -145,7 +169,7 @@ export function MyProvidersPageClient({
 
   // 确认删除
   const handleDeleteConfirm = useCallback(async () => {
-    if (!deletingProviderId) return;
+    if (!deletingProviderId || !userId) return;
 
     setIsDeleting(true);
     try {
@@ -166,7 +190,6 @@ export function MyProvidersPageClient({
 
   // 查看详情
   const handleViewDetails = useCallback((providerId: string) => {
-    // 使用Next.js原生导航
     router.push(`/dashboard/providers/${providerId}`);
   }, [router]);
 
@@ -191,95 +214,62 @@ export function MyProvidersPageClient({
     }));
   }, []);
 
+  // 加载中状态
+  if (authLoading || isLoadingProviders) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <p className="text-muted-foreground">{t("common.loading")}</p>
+      </div>
+    );
+  }
+
+  // 未登录状态
+  if (!isAuthenticated || !userId) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <p className="text-muted-foreground">
+          {t("my_providers.login_required")}
+        </p>
+        <Button onClick={openAuthDialog}>{t("auth.signin_link")}</Button>
+      </div>
+    );
+  }
+
+  // 已登录，显示完整页面
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <div className="space-y-1">
-        <h1 className="text-3xl font-bold">{t("my_providers.title")}</h1>
-        <p className="text-muted-foreground text-sm">
-          {t("my_providers.subtitle")}
-        </p>
-      </div>
+      <MyProvidersHeader />
 
       {/* 顶部统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <QuotaCard
-          current={providers.length}
-          limit={quotaLimit}
-          isUnlimited={isUnlimited}
-          isLoading={isRefreshing || isQuotaLoading}
-        />
-        <HealthStats providers={providers} isLoading={isRefreshing} />
-      </div>
+      <MyProvidersSummary
+        providers={providers}
+        quotaLimit={quotaLimit}
+        isUnlimited={isUnlimited}
+        isLoading={isRefreshing || isQuotaLoading}
+      />
 
       {/* 操作栏 */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        {/* 搜索框 */}
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t("my_providers.search_placeholder")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={refresh}
-            disabled={isRefreshing}
-            className="flex-1 md:flex-none"
-          >
-            <RefreshCw
-              className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
-            />
-            {t("my_providers.refresh")}
-          </Button>
-          <Button onClick={handleCreate} className="flex-1 md:flex-none">
-            <Plus className="w-4 h-4 mr-2" />
-            {t("my_providers.create_provider")}
-          </Button>
-        </div>
-      </div>
+      <MyProvidersToolbar
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        isRefreshing={isRefreshing}
+        onRefresh={refresh}
+        onCreate={handleCreate}
+      />
 
       {/* Provider 列表 */}
-      {filteredProviders.length === 0 && !isRefreshing ? (
-        <div className="rounded-lg border border-dashed p-12 text-center">
-          <div className="mx-auto max-w-md space-y-3">
-            <h3 className="text-lg font-medium">
-              {t("my_providers.empty_message")}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {t("my_providers.empty_description")}
-            </p>
-            <Button onClick={handleCreate} className="mt-4">
-              <Plus className="w-4 h-4 mr-2" />
-              {t("my_providers.create_provider")}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filteredProviders.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              provider={provider}
-              metrics={metricsByProviderId[provider.provider_id]}
-              isMetricsLoading={isMetricsLoading}
-              onConfigure={handleEdit}
-              onDelete={handleDeleteClick}
-              onViewDetails={handleViewDetails}
-              onViewModels={handleViewModels}
-              onManageKeys={handleManageKeys}
-              canModify
-              canManageKeys
-            />
-          ))}
-        </div>
-      )}
+      <PrivateProvidersCards
+        providers={filteredProviders}
+        isRefreshing={isRefreshing}
+        metricsByProviderId={metricsByProviderId}
+        isMetricsLoading={isMetricsLoading}
+        onCreate={handleCreate}
+        onEdit={handleEdit}
+        onDelete={handleDeleteClick}
+        onViewDetails={handleViewDetails}
+        onViewModels={handleViewModels}
+        onManageKeys={handleManageKeys}
+      />
 
       {/* 创建/编辑表单抽屉 */}
       <ProviderFormEnhanced
@@ -298,38 +288,13 @@ export function MyProvidersPageClient({
       />
 
       {/* 删除确认抽屉 */}
-      <Drawer open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DrawerContent className="mx-auto w-full max-w-md">
-          <DrawerHeader>
-            <DrawerTitle>{t("providers.delete_dialog_title")}</DrawerTitle>
-            <DrawerDescription>
-              {t("providers.delete_dialog_description")}{" "}
-              <span className="font-mono font-semibold">{deletingProviderId}</span>
-              {t("providers.delete_dialog_warning")}
-            </DrawerDescription>
-          </DrawerHeader>
-          <DrawerFooter className="border-t bg-background/80 backdrop-blur">
-            <div className="flex w-full justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteConfirmOpen(false)}
-                disabled={isDeleting}
-              >
-                {t("providers.btn_cancel")}
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDeleteConfirm}
-                disabled={isDeleting}
-              >
-                {isDeleting
-                  ? t("providers.deleting_button")
-                  : t("providers.delete_button")}
-              </Button>
-            </div>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+      <DeleteProviderDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        providerId={deletingProviderId}
+        isDeleting={isDeleting}
+        onConfirm={handleDeleteConfirm}
+      />
 
       {/* 模型查看抽屉 */}
       <ProviderModelsDialog

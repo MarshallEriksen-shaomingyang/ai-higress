@@ -9,6 +9,8 @@ import type {
   DashboardV2TopModelsResponse,
   DashboardV2CostByProviderResponse,
   DashboardV2ProvidersMetricsResponse,
+  SystemKPIData,
+  SystemDashboardProvidersResponse,
 } from '@/lib/api-types';
 
 /**
@@ -298,6 +300,216 @@ export const useUserDashboardProvidersMetrics = (
     {
       ...dashboardV2CacheConfig,
       params,
+    }
+  );
+
+  return {
+    data,
+    items: data?.items || [],
+    error,
+    loading,
+    validating,
+    refresh,
+  };
+};
+
+// ============= Dashboard v2 系统页 Hooks =============
+
+/**
+ * 获取系统 Dashboard v2 KPI 指标
+ * 
+ * @param filters 筛选器参数
+ * @returns KPI 数据、加载状态、错误信息和刷新函数
+ */
+export const useSystemDashboardKPIs = (filters: DashboardV2FilterParams = {}) => {
+  const {
+    timeRange = '7d',
+    transport = 'all',
+    isStream = 'all',
+  } = filters;
+
+  const params = useMemo(() => ({
+    time_range: timeRange,
+    transport,
+    is_stream: isStream,
+  }), [timeRange, transport, isStream]);
+
+  const {
+    data,
+    error,
+    loading,
+    validating,
+    refresh,
+  } = useApiGet<SystemKPIData>(
+    '/metrics/v2/system-dashboard/kpis',
+    {
+      ...dashboardV2CacheConfig,
+      params,
+    }
+  );
+
+  return {
+    data,
+    error,
+    loading,
+    validating,
+    refresh,
+  };
+};
+
+/**
+ * 获取系统 Dashboard v2 Pulse 数据（近 24h，分钟粒度）
+ * 
+ * @param filters 筛选器参数（不包含 timeRange，固定近 24h）
+ * @returns Pulse 数据、加载状态、错误信息和刷新函数
+ */
+export const useSystemDashboardPulse = (filters: Omit<DashboardV2FilterParams, 'timeRange'> = {}) => {
+  const {
+    transport = 'all',
+    isStream = 'all',
+  } = filters;
+
+  const params = useMemo(() => ({
+    transport,
+    is_stream: isStream,
+  }), [transport, isStream]);
+
+  const {
+    data,
+    error,
+    loading,
+    validating,
+    refresh,
+  } = useApiGet<DashboardV2PulseResponse>(
+    '/metrics/v2/system-dashboard/pulse',
+    {
+      ...dashboardV2CacheConfig,
+      params,
+    }
+  );
+
+  return {
+    data,
+    points: data?.points || [],
+    error,
+    loading,
+    validating,
+    refresh,
+  };
+};
+
+/**
+ * 获取系统 Dashboard v2 Token 趋势数据
+ * 
+ * @param filters 筛选器参数
+ * @param bucket 时间桶粒度（hour 或 day）
+ * @returns Token 趋势数据、加载状态、错误信息和刷新函数
+ */
+export const useSystemDashboardTokens = (
+  filters: DashboardV2FilterParams = {},
+  bucket: 'hour' | 'day' = 'hour'
+) => {
+  const {
+    timeRange = '7d',
+    transport = 'all',
+    isStream = 'all',
+  } = filters;
+
+  const params = useMemo(() => ({
+    time_range: timeRange,
+    bucket,
+    transport,
+    is_stream: isStream,
+  }), [timeRange, bucket, transport, isStream]);
+
+  const {
+    data,
+    error,
+    loading,
+    validating,
+    refresh,
+  } = useApiGet<DashboardV2TokensResponse>(
+    '/metrics/v2/system-dashboard/tokens',
+    {
+      ...dashboardV2CacheConfig,
+      params,
+    }
+  );
+
+  return {
+    data,
+    points: data?.points || [],
+    error,
+    loading,
+    validating,
+    refresh,
+  };
+};
+
+/**
+ * 获取系统 Dashboard v2 Top Models 排行
+ * 
+ * @param filters 筛选器参数
+ * @param limit 返回数量限制（默认 10）
+ * @returns Top Models 数据、加载状态、错误信息和刷新函数
+ */
+export const useSystemDashboardTopModels = (
+  filters: DashboardV2FilterParams = {},
+  limit: number = 10
+) => {
+  const {
+    timeRange = '7d',
+    transport = 'all',
+    isStream = 'all',
+  } = filters;
+
+  const params = useMemo(() => ({
+    time_range: timeRange,
+    limit: limit.toString(),
+    transport,
+    is_stream: isStream,
+  }), [timeRange, limit, transport, isStream]);
+
+  const {
+    data,
+    error,
+    loading,
+    validating,
+    refresh,
+  } = useApiGet<DashboardV2TopModelsResponse>(
+    '/metrics/v2/system-dashboard/top-models',
+    {
+      ...dashboardV2CacheConfig,
+      params,
+    }
+  );
+
+  return {
+    data,
+    items: data?.items || [],
+    error,
+    loading,
+    validating,
+    refresh,
+  };
+};
+
+/**
+ * 获取系统 Dashboard v2 Provider 状态列表
+ * 
+ * @returns Provider 状态数据、加载状态、错误信息和刷新函数
+ */
+export const useSystemDashboardProviders = () => {
+  const {
+    data,
+    error,
+    loading,
+    validating,
+    refresh,
+  } = useApiGet<SystemDashboardProvidersResponse>(
+    '/metrics/v2/system-dashboard/providers',
+    {
+      ...dashboardV2CacheConfig,
     }
   );
 

@@ -9,13 +9,13 @@ import { useI18n } from "@/lib/i18n-context";
 import { providerService } from "@/http/provider";
 import { useErrorDisplay } from "@/lib/errors";
 import {
-    Drawer,
-    DrawerContent,
-    DrawerDescription,
-    DrawerFooter,
-    DrawerHeader,
-    DrawerTitle,
-} from "@/components/ui/drawer";
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ProviderModelsDialogProps {
@@ -65,14 +65,14 @@ export function ProviderModelsDialog({
     };
 
     return (
-        <Drawer open={open} onOpenChange={onOpenChange}>
-            <DrawerContent className="mx-auto w-full max-w-2xl">
-                <DrawerHeader>
-                    <DrawerTitle>{t("providers.models_dialog_title")}</DrawerTitle>
-                    <DrawerDescription>{t("providers.models_dialog_description")}</DrawerDescription>
-                </DrawerHeader>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="w-full max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>{t("providers.models_dialog_title")}</DialogTitle>
+                    <DialogDescription>{t("providers.models_dialog_description")}</DialogDescription>
+                </DialogHeader>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+                <div className="max-h-[70vh] overflow-y-auto space-y-4">
                     {providerId && (
                         <div className="text-sm text-muted-foreground">
                             {t("providers.models_provider_id_label")}:{" "}
@@ -143,12 +143,10 @@ export function ProviderModelsDialog({
                     )}
                 </div>
 
-                <DrawerFooter className="border-t bg-background/80 backdrop-blur">
-                    <div className="flex w-full justify-end">
-                        <Button onClick={() => onOpenChange(false)}>{t("common.close")}</Button>
-                    </div>
-                </DrawerFooter>
-            </DrawerContent>
-        </Drawer>
+                <DialogFooter>
+                    <Button onClick={() => onOpenChange(false)}>{t("common.close")}</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }

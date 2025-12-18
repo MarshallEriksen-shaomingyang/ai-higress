@@ -762,3 +762,40 @@ export interface DashboardV2ProvidersMetricsResponse {
 export interface DashboardV2CostByProviderResponse {
   items: DashboardV2ProviderCostItem[];
 }
+
+// ============= Dashboard v2 系统页相关 =============
+
+/**
+ * Dashboard v2 系统页 KPI 数据
+ * 注意：系统页没有 credits_spent 字段
+ */
+export interface SystemKPIData {
+  time_range: string;
+  total_requests: number;
+  error_rate: number;
+  latency_p95_ms: number;
+  tokens: {
+    input: number;
+    output: number;
+    total: number;
+    estimated_requests: number;
+  };
+}
+
+/**
+ * Provider 状态项（系统页）
+ */
+export interface ProviderStatusItem {
+  provider_id: string;
+  operation_status: 'active' | 'inactive' | 'maintenance';
+  status: 'healthy' | 'degraded' | 'unhealthy'; // 健康状态
+  audit_status: 'approved' | 'pending' | 'rejected';
+  last_check: string; // ISO 8601 格式
+}
+
+/**
+ * Dashboard v2 系统页 Provider 状态响应
+ */
+export interface SystemDashboardProvidersResponse {
+  items: ProviderStatusItem[];
+}

@@ -1,16 +1,16 @@
-import { OverviewV2Client } from "./_components/overview-v2-client";
+import { OverviewClient } from "./_components/overview-client";
 import type { Metadata } from "next";
 
 /**
  * 页面元数据
  */
 export const metadata: Metadata = {
-  title: "Dashboard v2 - 概览",
+  title: "Dashboard - 概览",
   description: "查看系统健康状况、Token 使用情况和成本花费",
 };
 
 /**
- * Dashboard v2 用户页 - 概览页面（服务端组件）
+ * Dashboard 用户页 - 概览页面（服务端组件）
  * 
  * 职责：
  * - 提供页面布局和容器
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 export default function DashboardOverviewPage() {
   return (
     <div className="container mx-auto p-6">
-      <OverviewV2Client />
+      <OverviewClient />
     </div>
   );
 }
