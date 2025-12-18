@@ -19,6 +19,7 @@ from .provider_metrics_history import (
     ProviderRoutingMetricsHourly,
 )
 from .user_metrics_history import UserRoutingMetricsHistory
+from .user_app_metrics_history import UserAppRequestMetricsHistory
 from .registration_window import RegistrationWindow, RegistrationWindowStatus
 from .notification import Notification, NotificationReceipt
 from .user_permission import UserPermission
@@ -57,6 +58,7 @@ __all__ = [
     "ProviderRoutingMetricsHistory",
     "ProviderRoutingMetricsHourly",
     "UserRoutingMetricsHistory",
+    "UserAppRequestMetricsHistory",
     "ProviderAuditLog",
     "ProviderTestRecord",
     "RegistrationWindow",

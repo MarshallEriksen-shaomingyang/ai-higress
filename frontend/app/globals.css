@@ -46,11 +46,13 @@
   /* 8px */
 
   /* Charts - 蓝紫色系 */
-  --chart-1: #6366f1;
-  --chart-2: #8b5cf6;
-  --chart-3: #06b6d4;
-  --chart-4: #10b981;
-  --chart-5: #f59e0b;
+  /* 注意：图表组件使用 `hsl(var(--chart-x))`，这里需要存 HSL 三元组 */
+  /* 使用逗号分隔的旧语法，提高 `hsl(var(--chart-x))` 的浏览器兼容性 */
+  --chart-1: 239, 84%, 67%;
+  --chart-2: 258, 90%, 66%;
+  --chart-3: 189, 94%, 43%;
+  --chart-4: 160, 84%, 39%;
+  --chart-5: 38, 92%, 50%;
 
   /* Sidebar - 浅灰白 */
   --sidebar: #f5f6f8;
@@ -83,11 +85,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: calc(var(--radius) - 1px);
   --radius-lg: var(--radius);
@@ -140,6 +142,13 @@
   --border: #2a2a2a;
   --input: #252525;
   --ring: #8b5cf6;
+
+  /* Charts - 与 light 保持一致（HSL 三元组） */
+  --chart-1: 239, 84%, 67%;
+  --chart-2: 258, 90%, 66%;
+  --chart-3: 189, 94%, 43%;
+  --chart-4: 160, 84%, 39%;
+  --chart-5: 38, 92%, 50%;
   
   /* 侧边栏 */
   --sidebar: #0a0a0a;
@@ -173,11 +182,12 @@ html.christmas {
   --border: #fecaca;
   --input: #fecaca;
   --ring: #dc2626;
-  --chart-1: #dc2626;
-  --chart-2: #16a34a;
-  --chart-3: #fbbf24;
-  --chart-4: #ef4444;
-  --chart-5: #22c55e;
+  /* Charts - 圣诞主题（HSL 三元组） */
+  --chart-1: 0, 72%, 51%;
+  --chart-2: 142, 76%, 36%;
+  --chart-3: 43, 96%, 56%;
+  --chart-4: 0, 84%, 60%;
+  --chart-5: 142, 71%, 45%;
   --sidebar: #fef2f2;
   --sidebar-foreground: #1a0505;
   --sidebar-primary: #dc2626;
@@ -442,4 +452,3 @@ html.christmas {
     text-shadow: 0 2px 8px rgba(224, 195, 140, 0.3);
     font-family: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif;
   }
-

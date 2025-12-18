@@ -1,12 +1,7 @@
 "use client";
 
 import { FileQuestion } from "lucide-react";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AdaptiveCard, CardDescription } from "@/components/cards/adaptive-card";
 import { useI18n } from "@/lib/i18n-context";
 
 interface EmptyStateProps {
@@ -50,24 +45,22 @@ export function EmptyState({
   const { t } = useI18n();
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <div className="flex flex-col items-center gap-3 py-8">
-          {icon || (
-            <FileQuestion className="size-12 text-muted-foreground/50" />
+    <AdaptiveCard className={className}>
+      <div className="flex flex-col items-center gap-3 py-12">
+        {icon || (
+          <FileQuestion className="size-12 text-muted-foreground/50" />
+        )}
+        <div className="text-center space-y-1">
+          <h3 className="text-base font-medium">
+            {title || t("common.no_data")}
+          </h3>
+          {message && (
+            <CardDescription className="text-sm">
+              {message}
+            </CardDescription>
           )}
-          <div className="text-center space-y-1">
-            <CardTitle className="text-base">
-              {title || t("common.no_data")}
-            </CardTitle>
-            {message && (
-              <CardDescription className="text-sm">
-                {message}
-              </CardDescription>
-            )}
-          </div>
         </div>
-      </CardHeader>
-    </Card>
+      </div>
+    </AdaptiveCard>
   );
 }

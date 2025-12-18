@@ -17,7 +17,11 @@ from app.db import get_db_session
 from app.deps import get_redis
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.logging_config import logger
-from app.models import ProviderRoutingMetricsHistory, UserRoutingMetricsHistory
+from app.models import (
+    ProviderRoutingMetricsHistory,
+    UserAppRequestMetricsHistory,
+    UserRoutingMetricsHistory,
+)
 from app.redis_client import redis_get_json, redis_set_json
 from app.schemas.metrics import (
     APIKeyMetricsSummary,
@@ -30,8 +34,10 @@ from app.schemas.metrics import (
     OverviewMetricsTimeSeries,
     ProviderMetricsSummary,
     ProviderMetricsTimeSeries,
+    UserAppUsageMetrics,
     UserMetricsSummary,
     UserActiveProviderMetrics,
+    UserOverviewAppUsage,
     UserOverviewActiveProviders,
     UserOverviewMetricsSummary,
     UserOverviewMetricsTimeSeries,
@@ -688,6 +694,98 @@ async def get_user_overview_providers(
             )
 
     return overview
+
+
+@router.get(
+    "/user-overview/apps",
+    response_model=UserOverviewAppUsage,
+    summary="仪表盘概览（用户维度）：App 使用排行",
+)
+async def get_user_overview_apps(
+    time_range: Literal["today", "7d", "30d", "all"] = Query("7d"),
+    limit: int = Query(10, ge=1, le=50),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+    db: Session = Depends(get_db_session),
+    redis: Redis = Depends(get_redis),
+) -> UserOverviewAppUsage:
+    user_uuid = UUID(current_user.id)
+    cache_key = f"metrics:user-overview:apps:{current_user.id}:{time_range}:{limit}"
+
+    if redis is not object:  # pragma: no branch
+        try:
+            cached = await redis_get_json(redis, cache_key)
+        except Exception:  # pragma: no cover
+            logger.exception(
+                "Failed to load user overview apps cache (key=%s)",
+                cache_key,
+            )
+            cached = None
+        if cached:
+            try:
+                return UserOverviewAppUsage.model_validate(cached)
+            except Exception:  # pragma: no cover
+                logger.exception(
+                    "Malformed user overview apps cache (key=%s)",
+                    cache_key,
+                )
+
+    start_at = _resolve_time_range(time_range)
+
+    stmt: Select = (
+        select(
+            UserAppRequestMetricsHistory.app_name,
+            func.coalesce(func.sum(UserAppRequestMetricsHistory.total_requests), 0).label(
+                "total_requests"
+            ),
+            func.max(UserAppRequestMetricsHistory.window_start).label("last_seen_at"),
+        )
+        .where(UserAppRequestMetricsHistory.user_id == user_uuid)
+        .group_by(UserAppRequestMetricsHistory.app_name)
+        .order_by(func.sum(UserAppRequestMetricsHistory.total_requests).desc())
+        .limit(limit)
+    )
+    if start_at is not None:
+        stmt = stmt.where(UserAppRequestMetricsHistory.window_start >= start_at)
+
+    try:
+        rows = db.execute(stmt).all()
+    except Exception:  # pragma: no cover
+        logger.exception("Failed to load user overview apps")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load user overview apps",
+        )
+
+    items = [
+        UserAppUsageMetrics(
+            app_name=row[0],
+            total_requests=int(row.total_requests or 0),
+            last_seen_at=row.last_seen_at,
+        )
+        for row in rows
+    ]
+
+    result = UserOverviewAppUsage(
+        user_id=current_user.id,
+        time_range=time_range,
+        items=items,
+    )
+
+    if redis is not object:
+        try:
+            await redis_set_json(
+                redis,
+                cache_key,
+                result.model_dump(),
+                ttl_seconds=OVERVIEW_CACHE_TTL_SECONDS,
+            )
+        except Exception:  # pragma: no cover
+            logger.exception(
+                "Failed to store user overview apps cache (key=%s)",
+                cache_key,
+            )
+
+    return result
 
 
 @router.get(

@@ -301,6 +301,19 @@ export interface UserOverviewMetricsTimeSeries {
   points: MetricsDataPoint[];
 }
 
+export interface UserAppUsageMetrics {
+  app_name: string;
+  total_requests: number;
+  last_seen_at: string | null;
+}
+
+export interface UserOverviewAppUsage {
+  scope: "user";
+  user_id: string;
+  time_range: string;
+  items: UserAppUsageMetrics[];
+}
+
 // ============= 注册窗口 / Registration Windows =============
 
 export type RegistrationWindowStatus = "scheduled" | "active" | "closed";

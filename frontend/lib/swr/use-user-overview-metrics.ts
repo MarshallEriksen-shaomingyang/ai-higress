@@ -5,6 +5,7 @@ import {
   UserOverviewMetricsSummary,
   UserOverviewActiveProviders,
   UserOverviewMetricsTimeSeries,
+  UserOverviewAppUsage,
 } from "@/lib/api-types";
 import { useApiGet } from "./hooks";
 
@@ -89,6 +90,27 @@ export function useUserOverviewActivity(params: UseUserOverviewParams = {}) {
 
   const activity = useMemo(() => data, [data]);
   return { activity, error, loading, validating, refresh };
+}
+
+export function useUserOverviewApps(params: UseUserOverviewParams = {}) {
+  const {
+    time_range = "7d",
+    limit = 10,
+  } = params;
+
+  const { data, error, loading, validating, refresh } = useApiGet<UserOverviewAppUsage>(
+    "/metrics/user-overview/apps",
+    {
+      strategy: "frequent",
+      params: {
+        time_range,
+        limit,
+      },
+    }
+  );
+
+  const apps = useMemo(() => data, [data]);
+  return { apps, error, loading, validating, refresh };
 }
 
 export function useUserSuccessRateTrend(params: UseUserOverviewParams = {}) {

@@ -8,3 +8,4 @@ export { LatencyPercentilesChart } from "./latency-percentiles-chart";
 export { LatencyPercentilesChartLive } from "./latency-percentiles-chart-live";
 export { TokenUsageChart } from "./token-usage-chart";
 export { CostByProviderChart } from "./cost-by-provider-chart";
+export { AppsUsageChart } from "./apps-usage-chart";

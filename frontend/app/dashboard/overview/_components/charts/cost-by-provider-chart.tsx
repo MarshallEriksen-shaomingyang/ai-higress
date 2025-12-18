@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { AdaptiveCard, CardContent } from "@/components/cards/adaptive-card";
 import { useI18n } from "@/lib/i18n-context";
 import type { DashboardV2ProviderCostItem } from "@/lib/api-types";
 import {
@@ -10,6 +10,7 @@ import {
   Cell,
   Legend,
   ResponsiveContainer,
+  Label,
 } from "recharts";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 
@@ -54,24 +55,26 @@ export function CostByProviderChart({
 }: CostByProviderChartProps) {
   const { t } = useI18n();
 
-  const chartData = useMemo(() => {
+  const { chartData, totalCredits } = useMemo(() => {
     if (!data || data.length === 0) {
-      return [];
+      return { chartData: [], totalCredits: 0 };
     }
 
     // 按 credits_spent 降序排序
     const sortedData = [...data].sort((a, b) => b.credits_spent - a.credits_spent);
 
     // 计算总 credits
-    const totalCredits = sortedData.reduce((sum, item) => sum + item.credits_spent, 0);
+    const total = sortedData.reduce((sum, item) => sum + item.credits_spent, 0);
 
     // 转换为图表数据格式，添加占比
-    return sortedData.map((item, index) => ({
+    const formatted = sortedData.map((item, index) => ({
       provider_id: item.provider_id,
       credits_spent: item.credits_spent,
-      percentage: totalCredits > 0 ? (item.credits_spent / totalCredits) * 100 : 0,
+      percentage: total > 0 ? (item.credits_spent / total) * 100 : 0,
       color: CHART_COLORS[index % CHART_COLORS.length],
     }));
+
+    return { chartData: formatted, totalCredits: total };
   }, [data]);
 
   const hasData = chartData.length > 0;
@@ -141,13 +144,10 @@ export function CostByProviderChart({
   };
 
   return (
-    <Card className="border-none shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base font-medium">
-          {t("dashboard_v2.chart.cost.title")}
-        </CardTitle>
-        <CardDescription>{t("dashboard_v2.chart.cost.subtitle")}</CardDescription>
-      </CardHeader>
+    <AdaptiveCard
+      title={t("dashboard_v2.chart.cost.title")}
+      description={t("dashboard_v2.chart.cost.subtitle")}
+    >
       <CardContent>
         {isLoading && !hasData ? (
           <div className="h-80 flex items-center justify-center text-sm text-muted-foreground">
@@ -180,6 +180,37 @@ export function CostByProviderChart({
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
+                  {/* 中心显示总成本 */}
+                  <Label
+                    content={({ viewBox }) => {
+                      if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                        return (
+                          <text
+                            x={viewBox.cx}
+                            y={viewBox.cy}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                          >
+                            <tspan
+                              x={viewBox.cx}
+                              y={viewBox.cy}
+                              className="fill-foreground text-2xl font-bold"
+                            >
+                              {formatCredits(totalCredits)}
+                            </tspan>
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy || 0) + 20}
+                              className="fill-muted-foreground text-xs"
+                            >
+                              {t("dashboard_v2.chart.cost.total_label")}
+                            </tspan>
+                          </text>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
                 </Pie>
                 <ChartTooltip content={<CustomTooltip />} />
                 <Legend content={renderLegend} />
@@ -188,6 +219,6 @@ export function CostByProviderChart({
           </ChartContainer>
         )}
       </CardContent>
-    </Card>
+    </AdaptiveCard>
   );
 }

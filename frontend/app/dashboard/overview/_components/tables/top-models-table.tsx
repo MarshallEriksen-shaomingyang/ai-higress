@@ -1,6 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { AdaptiveCard, CardContent } from "@/components/cards/adaptive-card"
 import {
   Table,
   TableBody,
@@ -31,10 +31,7 @@ export function TopModelsTable({
 
   if (error) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("dashboardV2.topModels.title")}</CardTitle>
-        </CardHeader>
+      <AdaptiveCard title={t("dashboardV2.topModels.title")}>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <p className="text-muted-foreground text-sm">
@@ -43,16 +40,13 @@ export function TopModelsTable({
             <p className="text-destructive text-xs mt-2">{error.message}</p>
           </div>
         </CardContent>
-      </Card>
+      </AdaptiveCard>
     )
   }
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("dashboardV2.topModels.title")}</CardTitle>
-        </CardHeader>
+      <AdaptiveCard title={t("dashboardV2.topModels.title")}>
         <CardContent>
           <div className="space-y-3">
             {[...Array(5)].map((_, i) => (
@@ -63,16 +57,13 @@ export function TopModelsTable({
             ))}
           </div>
         </CardContent>
-      </Card>
+      </AdaptiveCard>
     )
   }
 
   if (sortedData.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("dashboardV2.topModels.title")}</CardTitle>
-        </CardHeader>
+      <AdaptiveCard title={t("dashboardV2.topModels.title")}>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <p className="text-muted-foreground text-sm">
@@ -80,15 +71,12 @@ export function TopModelsTable({
             </p>
           </div>
         </CardContent>
-      </Card>
+      </AdaptiveCard>
     )
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("dashboardV2.topModels.title")}</CardTitle>
-      </CardHeader>
+    <AdaptiveCard title={t("dashboardV2.topModels.title")}>
       <CardContent>
         <Table>
           <TableHeader>
@@ -117,6 +105,6 @@ export function TopModelsTable({
           </TableBody>
         </Table>
       </CardContent>
-    </Card>
+    </AdaptiveCard>
   )
 }

@@ -26,6 +26,7 @@ from app.deps import get_db, get_http_client, get_redis
 from app.errors import forbidden
 from app.logging_config import logger
 from app.log_sanitizer import sanitize_headers_for_log
+from app.services.client_app_fingerprint import infer_client_app_name
 from app.services.chat_routing_service import (
     _normalize_payload_by_model,
     _strip_model_group_prefix,
@@ -34,6 +35,7 @@ from app.services.credit_service import (
     InsufficientCreditsError,
     ensure_account_usable,
 )
+from app.services.user_app_metrics_service import record_user_app_request_metric
 from app.services.user_provider_service import get_accessible_provider_ids
 from app.settings import settings
 from app.upstream import detect_request_format
@@ -63,6 +65,14 @@ async def chat_completions(
         raw_body.get("stream"),
         current_key.user_id,
         x_session_id,
+    )
+
+    # 入口请求口径的 App 使用指标：用来回答“某用户主要用哪些客户端调用网关”。
+    record_user_app_request_metric(
+        db,
+        user_id=current_key.user_id,
+        api_key_id=current_key.id,
+        app_name=infer_client_app_name(request.headers),
     )
 
     payload = dict(raw_body)

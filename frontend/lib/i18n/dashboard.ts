@@ -59,10 +59,14 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboard_v2.chart.latency_percentiles.subtitle": "Last 24 hours",
     "dashboard_v2.chart.latency.title": "Latency Percentiles",
     "dashboard_v2.chart.latency.subtitle": "Last 24 hours",
+    "dashboard_v2.chart.apps_usage.title": "Top Client Apps",
+    "dashboard_v2.chart.apps_usage.subtitle": "Top {limit}",
+    "dashboard_v2.chart.apps_usage.requests": "Requests",
     "dashboard_v2.chart.token_usage.title": "Token Usage",
     "dashboard_v2.chart.token_usage.subtitle": "Input vs Output",
     "dashboard_v2.chart.token_usage.input_tokens": "Input Tokens",
     "dashboard_v2.chart.token_usage.output_tokens": "Output Tokens",
+    "dashboard_v2.chart.token_usage.total_tokens": "Total Tokens",
     "dashboard_v2.chart.token_usage.estimated_tooltip": "{count} requests have estimated token counts",
     "dashboard_v2.chart.tokens.title": "Token Usage",
     "dashboard_v2.chart.tokens.subtitle": "Input vs Output",
@@ -78,6 +82,7 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboardV2.system.topModels.title": "Top Models",
 
     // Error labels for charts
+    "dashboard_v2.chart.error.label": "Errors",
     "dashboard_v2.chart.error.4xx": "4xx Errors",
     "dashboard_v2.chart.error.5xx": "5xx Errors",
     "dashboard_v2.chart.error.429": "429 Errors",
@@ -91,6 +96,7 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     // Cost chart labels
     "dashboard_v2.chart.cost.credits_label": "Credits",
     "dashboard_v2.chart.cost.percentage_label": "Percentage",
+    "dashboard_v2.chart.cost.total_label": "Total Credits",
 
     // Loading & Error states
     "dashboard_v2.loading": "Loading...",
@@ -205,10 +211,14 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboard_v2.chart.latency_percentiles.subtitle": "近 24 小时",
     "dashboard_v2.chart.latency.title": "延迟分位数",
     "dashboard_v2.chart.latency.subtitle": "近 24 小时",
+    "dashboard_v2.chart.apps_usage.title": "客户端使用排行",
+    "dashboard_v2.chart.apps_usage.subtitle": "Top {limit}",
+    "dashboard_v2.chart.apps_usage.requests": "请求数",
     "dashboard_v2.chart.token_usage.title": "Token 使用趋势",
     "dashboard_v2.chart.token_usage.subtitle": "输入 vs 输出",
     "dashboard_v2.chart.token_usage.input_tokens": "输入 Token",
     "dashboard_v2.chart.token_usage.output_tokens": "输出 Token",
+    "dashboard_v2.chart.token_usage.total_tokens": "Token 总量",
     "dashboard_v2.chart.token_usage.estimated_tooltip": "{count} 个请求的 Token 来自估算",
     "dashboard_v2.chart.tokens.title": "Token 使用",
     "dashboard_v2.chart.tokens.subtitle": "输入 vs 输出",
@@ -224,6 +234,7 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     "dashboardV2.system.topModels.title": "热门模型",
 
     // Error labels for charts
+    "dashboard_v2.chart.error.label": "错误数",
     "dashboard_v2.chart.error.4xx": "4xx 错误",
     "dashboard_v2.chart.error.5xx": "5xx 错误",
     "dashboard_v2.chart.error.429": "429 错误",
@@ -237,6 +248,7 @@ export const dashboardV2Translations: Record<Language, Record<string, string>> =
     // Cost chart labels
     "dashboard_v2.chart.cost.credits_label": "Credits",
     "dashboard_v2.chart.cost.percentage_label": "占比",
+    "dashboard_v2.chart.cost.total_label": "总 Credits",
 
     // Loading & Error states
     "dashboard_v2.loading": "加载中...",

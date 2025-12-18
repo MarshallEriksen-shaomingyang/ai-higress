@@ -64,8 +64,9 @@ export function ActivityChart({ data }: ActivityChartProps) {
             type="monotone"
             dataKey="total"
             name="total"
-            stroke="#16a34a"
-            fill="#16a34a33"
+            stroke="hsl(var(--chart-1))"
+            fill="hsl(var(--chart-1))"
+            fillOpacity={0.2}
             strokeWidth={2}
             dot={false}
             activeDot={{ r: 3 }}
@@ -74,8 +75,9 @@ export function ActivityChart({ data }: ActivityChartProps) {
             type="monotone"
             dataKey="errors"
             name="errors"
-            stroke="#ef4444"
-            fill="#ef444433"
+            stroke="hsl(var(--chart-4))"
+            fill="hsl(var(--chart-4))"
+            fillOpacity={0.2}
             strokeWidth={1.5}
             dot={false}
             activeDot={{ r: 3 }}

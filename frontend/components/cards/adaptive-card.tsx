@@ -4,9 +4,12 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import {
   Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
 
-interface AdaptiveCardProps extends Omit<React.ComponentProps<typeof Card>, "className"> {
+interface AdaptiveCardProps extends Omit<React.ComponentProps<typeof Card>, "className" | "title"> {
   /**
    * 传给内部 Card 的 className（用于控制 Card 本身样式）
    */
@@ -21,6 +24,18 @@ interface AdaptiveCardProps extends Omit<React.ComponentProps<typeof Card>, "cla
    * @default true
    */
   showDecor?: boolean;
+  /**
+   * 卡片标题（可选）
+   */
+  title?: React.ReactNode;
+  /**
+   * 卡片描述（可选）
+   */
+  description?: React.ReactNode;
+  /**
+   * 标题右侧的操作区域（可选）
+   */
+  headerAction?: React.ReactNode;
 }
 
 /**
@@ -47,9 +62,14 @@ export function AdaptiveCard({
   className,
   wrapperClassName,
   showDecor = true,
+  title,
+  description,
+  headerAction,
   children,
   ...props
 }: AdaptiveCardProps) {
+  const hasHeader = title || description || headerAction;
+
   return (
     <div className={cn("relative", wrapperClassName)}>
       <Card
@@ -82,9 +102,32 @@ export function AdaptiveCard({
           </div>
         )}
 
-      
         {/* 卡片内容 */}
         <div className="relative z-20">
+          {/* 可选的标题区域 */}
+          {hasHeader && (
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  {title && (
+                    <CardTitle className="text-base font-medium">
+                      {title}
+                    </CardTitle>
+                  )}
+                  {description && (
+                    <CardDescription>{description}</CardDescription>
+                  )}
+                </div>
+                {headerAction && (
+                  <div className="flex-shrink-0 ml-4">
+                    {headerAction}
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+          )}
+
+          {/* 内容区域 */}
           {children}
         </div>
       </Card>
@@ -97,7 +140,7 @@ export {
   CardHeader,
   CardFooter,
   CardTitle,
-  CardAction,
   CardDescription,
+  CardAction,
   CardContent,
 } from "@/components/ui/card";

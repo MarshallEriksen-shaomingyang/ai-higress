@@ -9,6 +9,7 @@
 | `GET /metrics/user-overview/summary` | 我的总请求 / 成功率 / 活跃 Provider 汇总，含上一周期对比 | Redis `metrics:user-overview:summary:{user_id}:...`，TTL=60s | 依赖 `UserRoutingMetricsHistory` |
 | `GET /metrics/user-overview/providers` | 我的 Provider 排行榜（按请求量排序） | Redis `metrics:user-overview:providers:{user_id}:...`，TTL=60s | 支持 `limit`、`transport`、`is_stream` |
 | `GET /metrics/user-overview/timeseries` | 我的近期活动/成功率趋势 | Redis `metrics:user-overview:timeseries:{user_id}:...`，TTL=60s | 仅支持 `bucket=minute` |
+| `GET /metrics/user-overview/apps` | 我的 App/客户端使用排行（按请求量排序） | Redis `metrics:user-overview:apps:{user_id}:...`，TTL=60s | 依赖 `UserAppRequestMetricsHistory`（入口请求口径） |
 
 所有接口均要求登录态（JWT），后端自动从 `current_user` 中获取 `user_id`，不接受任意用户 ID。
 
@@ -32,6 +33,7 @@
 | `is_stream` | 是否流式过滤 | `true` / `false` / `all`（默认 `all`） |
 | `bucket` | 时间序列粒度（仅 timeseries） | 目前仅支持 `minute` |
 | `limit` | Provider 排行数量（仅 providers） | 1 ~ 50，默认 4 |
+| `limit` | App 排行数量（仅 apps） | 1 ~ 50，默认 10 |
 
 ## 4. 响应示例
 
@@ -113,6 +115,35 @@
 ```
 
 当用户无数据时，`total_requests=0` 且 `points=[]`。
+
+### 4.4 Apps
+
+```json
+{
+  "scope": "user",
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "time_range": "7d",
+  "items": [
+    {
+      "app_name": "Cherry Studio",
+      "total_requests": 123,
+      "last_seen_at": "2025-12-18T13:53:00Z"
+    },
+    {
+      "app_name": "Roo Code",
+      "total_requests": 45,
+      "last_seen_at": "2025-12-18T13:52:00Z"
+    }
+  ]
+}
+```
+
+`app_name` 推断规则（从高到低）：
+
+1. `X-Title` / `x-title`
+2. `User-Agent` 第一个 product token（如 `RooCode/3.36.12` -> `RooCode`；浏览器 UA 会退化）
+3. `Referer`/`Origin` 的 hostname
+4. `unknown`
 
 ## 5. 缓存与清理
 

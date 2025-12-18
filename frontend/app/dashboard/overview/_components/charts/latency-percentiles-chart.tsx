@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { AdaptiveCard, CardContent } from "@/components/cards/adaptive-card";
 import { useI18n } from "@/lib/i18n-context";
 import type { DashboardV2PulseDataPoint } from "@/lib/api-types";
 import {
@@ -124,30 +124,27 @@ export function LatencyPercentilesChart({ data, isLoading, error }: LatencyPerce
 
   const hasData = chartData.length > 0;
 
-  // 图表配置
+  // 图表配置 - 使用语义化颜色（绿→橙→红）
   const chartConfig = {
     p50: {
       label: t("dashboard_v2.chart.latency.p50"),
-      color: "hsl(var(--chart-2))",
+      color: "hsl(142, 76%, 36%)", // 绿色 - 正常
     },
     p95: {
       label: t("dashboard_v2.chart.latency.p95"),
-      color: "hsl(var(--chart-3))",
+      color: "hsl(38, 92%, 50%)", // 橙色 - 警戒
     },
     p99: {
       label: t("dashboard_v2.chart.latency.p99"),
-      color: "hsl(var(--chart-4))",
+      color: "hsl(0, 84%, 60%)", // 红色 - 异常
     },
   };
 
   return (
-    <Card className="border-none shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base font-medium">
-          {t("dashboard_v2.chart.latency_percentiles.title")}
-        </CardTitle>
-        <CardDescription>{t("dashboard_v2.chart.latency_percentiles.subtitle")}</CardDescription>
-      </CardHeader>
+    <AdaptiveCard
+      title={t("dashboard_v2.chart.latency_percentiles.title")}
+      description={t("dashboard_v2.chart.latency_percentiles.subtitle")}
+    >
       <CardContent>
         {isLoading && !hasData ? (
           <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
@@ -245,6 +242,6 @@ export function LatencyPercentilesChart({ data, isLoading, error }: LatencyPerce
           </ChartContainer>
         )}
       </CardContent>
-    </Card>
+    </AdaptiveCard>
   );
 }

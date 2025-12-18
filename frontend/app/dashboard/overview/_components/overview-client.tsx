@@ -9,6 +9,7 @@ import {
   LatencyPercentilesChart,
   TokenUsageChart,
   CostByProviderChart,
+  AppsUsageChart,
 } from "./charts";
 import { TopModelsTable } from "./tables";
 import { ErrorState } from "./error-state";
@@ -20,6 +21,7 @@ import {
   useUserDashboardTopModels,
   useUserDashboardCostByProvider,
 } from "@/lib/swr/use-dashboard-v2";
+import { useUserOverviewApps } from "@/lib/swr/use-user-overview-metrics";
 import { useI18n } from "@/lib/i18n-context";
 
 // 使用 memo 优化图表组件，避免不必要的重渲染
@@ -27,6 +29,7 @@ const MemoizedRequestsErrorsChart = memo(RequestsErrorsChart);
 const MemoizedLatencyPercentilesChart = memo(LatencyPercentilesChart);
 const MemoizedTokenUsageChart = memo(TokenUsageChart);
 const MemoizedCostByProviderChart = memo(CostByProviderChart);
+const MemoizedAppsUsageChart = memo(AppsUsageChart);
 const MemoizedTopModelsTable = memo(TopModelsTable);
 
 /**
@@ -81,6 +84,7 @@ export function OverviewClient() {
   const tokensResult = useUserDashboardTokens(filters, "hour");
   const topModelsResult = useUserDashboardTopModels(filters, 10);
   const costResult = useUserDashboardCostByProvider(costFilters, 12);
+  const appsResult = useUserOverviewApps({ time_range: timeRange, limit: 10 });
 
   // 提取 KPI 数据
   const kpiData = kpisResult.data;
@@ -201,21 +205,40 @@ export function OverviewClient() {
       </section>
 
       {/* 层级 4 - 排行榜 */}
-      <section>
-        {topModelsResult.error ? (
-          <ErrorState
-            title={t("dashboard.errors.loadFailed")}
-            message={topModelsResult.error.message}
-            onRetry={topModelsResult.refresh}
-          />
-        ) : topModelsResult.items.length === 0 && !topModelsResult.loading ? (
-          <EmptyState message={t("dashboard.errors.noData")} />
-        ) : (
-          <MemoizedTopModelsTable
-            data={topModelsResult.items}
-            isLoading={topModelsResult.loading}
-          />
-        )}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          {appsResult.error ? (
+            <ErrorState
+              title={t("dashboard.errors.loadFailed")}
+              message={appsResult.error.message}
+              onRetry={appsResult.refresh}
+            />
+          ) : (appsResult.apps?.items?.length || 0) === 0 && !appsResult.loading ? (
+            <EmptyState message={t("dashboard.errors.noData")} />
+          ) : (
+            <MemoizedAppsUsageChart
+              data={appsResult.apps?.items || []}
+              isLoading={appsResult.loading}
+              limit={10}
+            />
+          )}
+        </div>
+        <div>
+          {topModelsResult.error ? (
+            <ErrorState
+              title={t("dashboard.errors.loadFailed")}
+              message={topModelsResult.error.message}
+              onRetry={topModelsResult.refresh}
+            />
+          ) : topModelsResult.items.length === 0 && !topModelsResult.loading ? (
+            <EmptyState message={t("dashboard.errors.noData")} />
+          ) : (
+            <MemoizedTopModelsTable
+              data={topModelsResult.items}
+              isLoading={topModelsResult.loading}
+            />
+          )}
+        </div>
       </section>
     </div>
   );

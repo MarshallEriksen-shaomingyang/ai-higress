@@ -252,7 +252,7 @@ export function ProvidersTableEnhanced({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => router.push(`/dashboard/providers/${provider.id}/keys`)}
+                  onClick={() => router.push(`/dashboard/providers/${provider.provider_id}/keys`)}
                   className="h-8 w-8 p-0"
                 >
                   <Key className="w-4 h-4" />

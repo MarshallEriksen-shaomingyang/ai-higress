@@ -299,6 +299,28 @@ class UserOverviewActiveProviders(BaseModel):
     items: list[UserActiveProviderMetrics] = Field(default_factory=list)
 
 
+class UserAppUsageMetrics(BaseModel):
+    app_name: str = Field(
+        ...,
+        description="客户端 App 名称（由 X-Title/User-Agent/Referer 推断，可能被客户端伪造）",
+    )
+    total_requests: int = Field(..., description="总请求数（入口请求口径）")
+    last_seen_at: dt.datetime | None = Field(
+        None,
+        description="最近一次出现的时间桶起点（UTC，分钟粒度）",
+    )
+
+
+class UserOverviewAppUsage(BaseModel):
+    scope: Literal["user"] = "user"
+    user_id: str
+    time_range: str
+    items: list[UserAppUsageMetrics] = Field(
+        default_factory=list,
+        description="按请求量降序排序的 App 使用排行",
+    )
+
+
 __all__ = [
     "APIKeyMetricsSummary",
     "ActiveProviderMetrics",
@@ -315,4 +337,6 @@ __all__ = [
     "UserOverviewMetricsTimeSeries",
     "UserActiveProviderMetrics",
     "UserOverviewActiveProviders",
+    "UserAppUsageMetrics",
+    "UserOverviewAppUsage",
 ]

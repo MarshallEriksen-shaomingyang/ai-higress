@@ -13,7 +13,12 @@ from sqlalchemy.pool import StaticPool
 from app.db import get_db_session
 from app.deps import get_db, get_redis
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
-from app.models import Base, ProviderRoutingMetricsHistory, UserRoutingMetricsHistory
+from app.models import (
+    Base,
+    ProviderRoutingMetricsHistory,
+    UserAppRequestMetricsHistory,
+    UserRoutingMetricsHistory,
+)
 from app.routes import create_app
 from app.services.api_key_cache import CachedAPIKey
 from tests.utils import InMemoryRedis, seed_user_and_key
@@ -148,6 +153,44 @@ def _insert_user_overview_metrics(
     db.commit()
 
 
+def _insert_user_app_overview_metrics(db: Session, *, user_id: UUID) -> None:
+    now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
+    db.add(
+        UserAppRequestMetricsHistory(
+            id=uuid4(),
+            user_id=user_id,
+            api_key_id=None,
+            app_name="Cherry Studio",
+            window_start=now,
+            window_duration=60,
+            total_requests=3,
+        )
+    )
+    db.add(
+        UserAppRequestMetricsHistory(
+            id=uuid4(),
+            user_id=user_id,
+            api_key_id=None,
+            app_name="Roo Code",
+            window_start=now,
+            window_duration=60,
+            total_requests=2,
+        )
+    )
+    db.add(
+        UserAppRequestMetricsHistory(
+            id=uuid4(),
+            user_id=user_id,
+            api_key_id=None,
+            app_name="Cherry Studio",
+            window_start=now - dt.timedelta(minutes=1),
+            window_duration=60,
+            total_requests=4,
+        )
+    )
+    db.commit()
+
+
 @pytest.fixture()
 def client_with_db():
     """Create test client with in-memory database."""
@@ -242,6 +285,29 @@ async def test_metrics_timeseries_api(mock_get_cached_api_key, client_with_db):
     assert data["time_range"] == "all"
     assert data["bucket"] == "minute"
     assert len(data["points"]) >= 3
+
+
+@pytest.mark.asyncio
+async def test_metrics_user_overview_apps_api(client_with_db):
+    client, session_factory = client_with_db
+
+    user_id = UUID("00000000-0000-0000-0000-000000000000")
+    with session_factory() as session:
+        _insert_user_app_overview_metrics(session, user_id=user_id)
+
+    resp = client.get(
+        "/metrics/user-overview/apps",
+        params={"time_range": "all", "limit": 10},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["scope"] == "user"
+    assert data["user_id"] == str(user_id)
+    assert data["time_range"] == "all"
+    assert len(data["items"]) == 2
+    assert data["items"][0]["app_name"] == "Cherry Studio"
+    assert data["items"][0]["total_requests"] == 7
 
 
 @patch("app.auth.get_cached_api_key")
