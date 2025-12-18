@@ -230,7 +230,8 @@ def _resolve_rollup_model(
 def _bucket_trunc_expr(db: Session, bucket: Literal["hour", "day"], column):
     dialect = db.get_bind().dialect.name
     if dialect == "sqlite":
-        fmt = "%Y-%m-%d %H:00:00" if bucket == "hour" else "%Y-%m-%d 00:00:00"
+        # Emit ISO8601 with 'Z' to keep parsing consistent (Pydantic will parse it as UTC).
+        fmt = "%Y-%m-%dT%H:00:00Z" if bucket == "hour" else "%Y-%m-%dT00:00:00Z"
         return func.strftime(fmt, column)
     return func.date_trunc(bucket, column)
 

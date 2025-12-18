@@ -103,6 +103,143 @@ def _batched_delete_before_cutoff(*, session, model, cutoff: dt.datetime) -> int
     return total_deleted
 
 
+def _iter_days(start: dt.date, end_exclusive: dt.date):
+    cur = start
+    while cur < end_exclusive:
+        yield cur
+        cur = cur + dt.timedelta(days=1)
+
+
+def _is_partitioned_history_table(session) -> bool:
+    if session.get_bind().dialect.name != "postgresql":
+        return False
+    row = session.execute(
+        text(
+            "SELECT 1 "
+            "FROM pg_partitioned_table "
+            "WHERE partrelid = 'provider_routing_metrics_history'::regclass"
+        )
+    ).first()
+    return bool(row)
+
+
+def _ensure_history_partitions_and_drop_old(*, session, retention_days: int) -> int:
+    """
+    Ensure daily partitions exist for the recent+near-future window and drop old partitions.
+
+    Returns the number of partitions created + dropped (best-effort).
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return 0
+
+    now = dt.datetime.now(dt.timezone.utc)
+    today = now.date()
+    keep_from_day = today - dt.timedelta(days=retention_days)
+
+    # Create partitions for [keep_from_day-2, today+2] to avoid default partition usage.
+    start_day = keep_from_day - dt.timedelta(days=2)
+    end_day = today + dt.timedelta(days=3)
+
+    changed = 0
+
+    def _part_name(day: dt.date) -> str:
+        return f"provider_routing_metrics_history_p{day.strftime('%Y%m%d')}"
+
+    for day in _iter_days(start_day, end_day):
+        part = _part_name(day)
+        start = dt.datetime.combine(day, dt.time(0, 0, 0), tzinfo=dt.timezone.utc).isoformat()
+        end = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(0, 0, 0), tzinfo=dt.timezone.utc).isoformat()
+
+        exists = session.execute(text("SELECT to_regclass(:name)"), {"name": part}).scalar_one_or_none()
+        if exists is None:
+            session.execute(
+                text(
+                    f"CREATE TABLE {part} "
+                    "PARTITION OF provider_routing_metrics_history "
+                    f"FOR VALUES FROM ('{start}') TO ('{end}')"
+                )
+            )
+            changed += 1
+
+        # Best-effort local indexes (do not rely on partitioned index attachment).
+        session.execute(
+            text(
+                f"CREATE INDEX IF NOT EXISTS {part}_provider_logical_window "
+                f"ON {part} (provider_id, logical_model, transport, is_stream, window_start)"
+            )
+        )
+        session.execute(text(f"CREATE INDEX IF NOT EXISTS {part}_user_window ON {part} (user_id, window_start)"))
+        session.execute(text(f"CREATE INDEX IF NOT EXISTS {part}_api_key_window ON {part} (api_key_id, window_start)"))
+
+    # Ensure DEFAULT partition has basic indexes as a safety net.
+    session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS provider_routing_metrics_history_default_provider_logical_window "
+            "ON provider_routing_metrics_history_default (provider_id, logical_model, transport, is_stream, window_start)"
+        )
+    )
+    session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS provider_routing_metrics_history_default_user_window "
+            "ON provider_routing_metrics_history_default (user_id, window_start)"
+        )
+    )
+    session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS provider_routing_metrics_history_default_api_key_window "
+            "ON provider_routing_metrics_history_default (api_key_id, window_start)"
+        )
+    )
+
+    # Drop partitions older than keep_from_day.
+    parts = session.execute(
+        text(
+            "SELECT c.relname "
+            "FROM pg_inherits i "
+            "JOIN pg_class c ON c.oid = i.inhrelid "
+            "JOIN pg_class p ON p.oid = i.inhparent "
+            "WHERE p.relname = 'provider_routing_metrics_history'"
+        )
+    ).all()
+    for (relname,) in parts:
+        if not isinstance(relname, str):
+            continue
+        if not relname.startswith("provider_routing_metrics_history_p"):
+            continue
+        suffix = relname.removeprefix("provider_routing_metrics_history_p")
+        if len(suffix) != 8 or not suffix.isdigit():
+            continue
+        try:
+            day = dt.datetime.strptime(suffix, "%Y%m%d").date()
+        except Exception:
+            continue
+        if day < keep_from_day:
+            session.execute(text(f"DROP TABLE IF EXISTS {relname}"))
+            changed += 1
+
+    # Clean up any rows that accidentally landed in the DEFAULT partition (batched by ctid).
+    cutoff_ts = dt.datetime.combine(keep_from_day, dt.time(0, 0, 0), tzinfo=dt.timezone.utc)
+    batch_size = int(settings.dashboard_metrics_cleanup_batch_size)
+    while True:
+        deleted = session.execute(
+            text(
+                "WITH doomed AS ("
+                "  SELECT ctid FROM provider_routing_metrics_history_default "
+                "  WHERE window_start < :cutoff "
+                "  LIMIT :batch"
+                ") "
+                "DELETE FROM provider_routing_metrics_history_default d "
+                "USING doomed "
+                "WHERE d.ctid = doomed.ctid"
+            ),
+            {"cutoff": cutoff_ts, "batch": batch_size},
+        ).rowcount
+        session.commit()
+        if not deleted:
+            break
+    return changed
+
+
 def _utc_floor_hour(ts: dt.datetime) -> dt.datetime:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=dt.timezone.utc)
@@ -526,6 +663,9 @@ def cleanup_metrics_history() -> int:
                 return 0
 
             retention_days = _get_effective_metrics_retention_days(session)
+            if _is_partitioned_history_table(session):
+                return _ensure_history_partitions_and_drop_old(session=session, retention_days=retention_days)
+
             cutoff = _now_utc_minute() - dt.timedelta(days=retention_days)
             return _batched_delete_before_cutoff(session=session, model=ProviderRoutingMetricsHistory, cutoff=cutoff)
     finally:

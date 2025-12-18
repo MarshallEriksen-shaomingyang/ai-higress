@@ -43,6 +43,19 @@ Dashboard v2 在 `time_range != today` 时会**优先查询 rollup 表**，若 r
 - `DASHBOARD_METRICS_HOURLY_RETENTION_DAYS` / `DASHBOARD_METRICS_DAILY_RETENTION_DAYS`
 - `DASHBOARD_METRICS_CLEANUP_BATCH_SIZE`
 
+## Postgres 分区（分钟桶表）
+
+为避免 `provider_routing_metrics_history`（分钟桶事实表）在高写入/长期运行下出现 bloat 与大 DELETE 锁问题，后端提供 **按天 RANGE 分区**方案：
+
+- 迁移：`0040_partition_provider_routing_metrics_history_by_day`
+- 分区命名：`provider_routing_metrics_history_pYYYYMMDD`（UTC 天）
+- DEFAULT 分区：`provider_routing_metrics_history_default`（兜底，理论上应很少写入）
+- 清理策略：`tasks.metrics.cleanup_history` 在 Postgres 分区表场景下会优先执行“创建近期分区 + drop 过期分区”，而不是扫表 delete
+
+注意：
+- 分区迁移需要对表做结构调整与数据搬迁，首次升级可能会有一定耗时（与历史数据量相关）。
+- 该方案在 Postgres 下默认生效，属于“以运维稳定为目标”的推荐配置；如你确实不希望启用分区，请自行 fork/调整迁移策略。
+
 ---
 
 ## 1) 用户页 KPI
