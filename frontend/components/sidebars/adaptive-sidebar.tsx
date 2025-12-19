@@ -81,11 +81,6 @@ const navItems: NavItem[] = [
     href: "/dashboard/my-submissions",
     icon: Send,
   },
-  {
-    titleKey: "nav.metrics",
-    href: "/dashboard/metrics",
-    icon: Activity,
-  },
 ];
 
 const adminItems: NavItem[] = [
