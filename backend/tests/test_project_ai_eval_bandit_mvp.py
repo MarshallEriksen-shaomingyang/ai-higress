@@ -62,6 +62,42 @@ def _mock_send(request: httpx.Request) -> httpx.Response:
             if isinstance(m, dict) and m.get("role") == "user"
         ]
         last = user_messages[-1] if user_messages else ""
+
+        # streaming (OpenAI SSE)
+        if body.get("stream") is True:
+            model = str(body.get("model") or "test-model")
+            created = 1730000000
+            stream_id = "cmpl-test-stream"
+            sse_frames = [
+                {
+                    "id": stream_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+                },
+                {
+                    "id": stream_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": f"echo: {last}"}, "finish_reason": None}],
+                },
+                {
+                    "id": stream_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+                },
+            ]
+            content = "".join(
+                [f"data: {json.dumps(frame, ensure_ascii=False)}\n\n" for frame in sse_frames]
+                + ["data: [DONE]\n\n"]
+            ).encode("utf-8")
+            return httpx.Response(200, headers={"Content-Type": "text/event-stream"}, content=content)
+
         data = {
             "id": "cmpl-test",
             "object": "chat.completion",
@@ -383,6 +419,122 @@ def test_eval_context_features_fallback_to_project_ai(app_with_mock_chat, monkey
         assert isinstance(features, dict)
         assert features.get("task_type") == "qa"
         assert features.get("risk_tier") == "low"
+
+
+def test_eval_streaming_sse_parallel(app_with_mock_chat, monkeypatch):
+    app, SessionLocal, redis = app_with_mock_chat
+    user_id, api_key_id = _get_seed_ids(SessionLocal)
+    headers = jwt_auth_headers(str(user_id))
+
+    from app.api.v1 import eval_routes
+
+    @asynccontextmanager
+    async def _http_client_for_eval():
+        transport = httpx.MockTransport(_mock_send)
+        async with httpx.AsyncClient(transport=transport, timeout=30.0) as client:
+            yield client
+
+    monkeypatch.setattr(eval_routes, "_background_http_client", _http_client_for_eval)
+
+    def _read_sse_events(resp: httpx.Response, *, max_events: int = 200):
+        events = []
+        event_type = None
+        data_lines = []
+        for line in resp.iter_lines():
+            if isinstance(line, (bytes, bytearray)):
+                line = line.decode("utf-8", errors="ignore")
+            if line.startswith("event:"):
+                event_type = line.split(":", 1)[1].strip()
+                continue
+            if line.startswith("data:"):
+                data_lines.append(line.split(":", 1)[1].strip())
+                continue
+            if line.strip() == "":
+                if data_lines:
+                    data_str = "\n".join(data_lines).strip()
+                    events.append((event_type or "message", data_str))
+                    if data_str == "[DONE]":
+                        break
+                    if len(events) >= max_events:
+                        break
+                event_type = None
+                data_lines = []
+        return events
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/assistants",
+            headers=headers,
+            json={
+                "project_id": str(api_key_id),
+                "name": "默认助手",
+                "system_prompt": "你是一个严谨的助手",
+                "default_logical_model": "test-model",
+            },
+        )
+        assert resp.status_code == 201
+        assistant_id = resp.json()["assistant_id"]
+
+        resp = client.post(
+            "/v1/conversations",
+            headers=headers,
+            json={"assistant_id": assistant_id, "project_id": str(api_key_id), "title": "test"},
+        )
+        assert resp.status_code == 201
+        conversation_id = resp.json()["conversation_id"]
+
+        resp = client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            headers=headers,
+            json={"content": "你好"},
+        )
+        assert resp.status_code == 200
+        baseline_run_id = resp.json()["baseline_run"]["run_id"]
+        message_id = resp.json()["message_id"]
+
+        resp = client.put(
+            f"/v1/projects/{api_key_id}/eval-config",
+            headers=headers,
+            json={"enabled": True, "candidate_logical_models": ["test-model", "test-model-2"]},
+        )
+        assert resp.status_code == 200
+
+        with client.stream(
+            "POST",
+            "/v1/evals",
+            headers={**headers, "Accept": "text/event-stream"},
+            json={
+                "project_id": str(api_key_id),
+                "assistant_id": assistant_id,
+                "conversation_id": conversation_id,
+                "message_id": message_id,
+                "baseline_run_id": baseline_run_id,
+                "streaming": True,
+            },
+        ) as resp:
+            assert resp.status_code == 200
+            assert resp.headers["content-type"].startswith("text/event-stream")
+            events = _read_sse_events(resp)
+
+        assert any(t == "eval.created" for t, _ in events)
+        assert any(t == "run.delta" for t, _ in events)
+        assert any(t == "run.completed" for t, _ in events)
+        assert any(t == "eval.completed" for t, _ in events)
+        assert any(t == "done" and d == "[DONE]" for t, d in events)
+
+    from sqlalchemy import select
+    from app.models import Eval, Run
+
+    with SessionLocal() as db:
+        eval_row = db.execute(select(Eval).where(Eval.baseline_run_id == UUID(str(baseline_run_id)))).scalars().first()
+        assert eval_row is not None
+        challenger_ids = [UUID(str(x)) for x in (eval_row.challenger_run_ids or [])]
+        assert challenger_ids
+        runs = list(db.execute(select(Run).where(Run.id.in_(challenger_ids))).scalars().all())
+        assert runs
+        assert all(r.status == "succeeded" for r in runs)
+        assert all(isinstance(r.output_text, str) and r.output_text for r in runs)
+        assert all(isinstance(r.response_payload, dict) for r in runs)
 
 
 def test_conversation_archive_and_delete(app_with_mock_chat):

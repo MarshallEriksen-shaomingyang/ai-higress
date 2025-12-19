@@ -2,6 +2,9 @@
 
 本文档描述了聊天助手系统的基础设施实现，包括类型定义、HTTP 客户端服务和 SWR hooks。
 
+> 注意：本文件描述的是“前端侧基础设施代码”，但实际能否跑通取决于它是否与后端 API 契约一致。
+> 本仓库后端契约以 `docs/api/*.md` 为准；如果前端为了方便做了字段/结构的 normalize，需要在请求层显式转换。
+
 ## 文件结构
 
 ```
@@ -200,6 +203,36 @@ const { messages, nextCursor, isLoading, error, mutate } = useMessages(conversat
   limit: 50,
 });
 ```
+
+## 重要：与后端契约对齐检查（当前最需要修的点）
+
+结合后端 API（`docs/api/assistants.md` / `docs/api/project-eval-config.md`）做 code review，当前前端基础设施存在几类“会导致 404/405 或渲染错误”的不一致：
+
+1) **HTTP 方法不一致（会 405）**
+- 后端：助手/会话/评测配置更新均为 `PUT`
+- 前端 `frontend/http/*` 当前用 `PATCH`
+- 解决方案：二选一
+  - 前端改 `PUT`；或
+  - 后端补 `PATCH` 兼容路由（并在 docs/api 标注）
+
+2) **会话详情接口不一致（会 404）**
+- 前端 `conversationService.getConversation()` 访问 `GET /v1/conversations/{conversationId}`
+- 后端目前没有该接口（只有 list + update + messages）
+- 解决方案：二选一
+  - 移除该调用，详情从 list 数据派生；或
+  - 后端补 `GET /v1/conversations/{id}`
+
+3) **TypeScript 类型与实际响应不一致（会渲染错/运行时报错）**
+- 后端消息 `content` 是结构化对象（例如 `{type:'text', text:'...'}`），而不是 string
+- messages 列表返回结构与 run 字段命名（`latency_ms`、`request_payload` 等）与 `frontend/lib/api-types.ts` 的 chat 类型段不一致
+- 建议：确定“后端返回结构”为单一真源，然后在
+  - 类型层（`api-types.ts`）对齐；或
+  - HTTP 服务层（`frontend/http/*`）做 normalize（例如把 `archived_at -> archived`、把 `content.text -> content`）
+
+4) **project_id 取值**
+- 后端约定 `project_id == api_key_id`（不是 `user.id`）
+- 前端聊天模块需要提供“当前 API Key（项目）选择器”，再把 `api_key_id` 传给 assistants / conversations / eval-config / evals 相关接口
+
 - **缓存策略**: `frequent`（实时对话场景）
 
 ### useRun

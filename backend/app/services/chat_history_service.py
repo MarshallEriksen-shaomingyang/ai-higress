@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.errors import bad_request, forbidden, not_found
 from app.models import AssistantPreset, Conversation, Message, Run
+from app.services.api_key_service import get_api_key_by_id
 
 
 def _parse_offset_cursor(cursor: str | None) -> int:
@@ -26,6 +27,18 @@ def _next_cursor(offset: int, limit: int, *, has_more: bool) -> str | None:
         return None
     return str(offset + limit)
 
+def _ensure_project_accessible(db: Session, *, user_id: UUID, project_id: UUID) -> None:
+    """
+    MVP: project_id == api_key_id
+
+    这里做一次显式校验，避免写入无效的 api_key_id：
+    - 让前端/调用方在“选错 project_id”时得到清晰的 404
+    - 避免后续在 run/eval 阶段才因为 resolve_project_context 失败而难以定位
+    """
+    api_key = get_api_key_by_id(db, project_id, user_id=user_id)
+    if api_key is None:
+        raise not_found("项目不存在或无权访问", details={"project_id": str(project_id)})
+
 
 def create_assistant(
     db: Session,
@@ -37,6 +50,9 @@ def create_assistant(
     default_logical_model: str,
     model_preset: dict | None,
 ) -> AssistantPreset:
+    if project_id is not None:
+        _ensure_project_accessible(db, user_id=user_id, project_id=project_id)
+
     assistant = AssistantPreset(
         user_id=user_id,
         api_key_id=project_id,
@@ -51,6 +67,7 @@ def create_assistant(
         db.commit()
     except IntegrityError:
         db.rollback()
+        # 这里原则上只会触发 uq_assistant_presets_user_project_name（避免把 FK/其他错误误报为“重名”）。
         raise bad_request("助手名称已存在")
     db.refresh(assistant)
     return assistant
@@ -146,6 +163,7 @@ def create_conversation(
     assistant_id: UUID,
     title: str | None,
 ) -> Conversation:
+    _ensure_project_accessible(db, user_id=user_id, project_id=project_id)
     assistant = get_assistant(db, assistant_id=assistant_id, user_id=user_id)
     if assistant.api_key_id is not None and UUID(str(assistant.api_key_id)) != project_id:
         raise forbidden("该助手不属于当前项目", details={"assistant_id": str(assistant_id), "project_id": str(project_id)})

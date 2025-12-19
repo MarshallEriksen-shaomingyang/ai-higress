@@ -12,7 +12,7 @@ from uuid import UUID
 import os
 import httpx
 
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -44,6 +44,7 @@ from app.redis_client import get_redis_client
 from app.settings import settings
 from app.api.v1.chat.request_handler import RequestHandler
 from app.api.v1.chat.provider_selector import ProviderSelector
+from app.api.v1.chat.billing import record_completion_usage
 from app.upstream import detect_request_format
 
 
@@ -460,6 +461,8 @@ async def execute_run_stream(
     stream_created: int | None = None
     stream_model: str | None = None
     stream_usage: dict[str, Any] | None = None
+    buffer = ""
+    request_payload_for_billing: dict[str, Any] | None = None
 
     try:
         payload = payload_override or chat_run_service.build_openai_request_payload(
@@ -470,6 +473,7 @@ async def execute_run_stream(
             requested_logical_model=requested_logical_model,
         )
         payload["stream"] = True
+        request_payload_for_billing = payload
         api_style = detect_request_format(payload)
 
         def _sink(provider_id: str, model_id: str | None = None) -> None:
@@ -488,52 +492,95 @@ async def execute_run_stream(
             session_id=str(conversation.id),
             assistant_id=UUID(str(assistant.id)),
             provider_id_sink=_sink,
+            idempotency_key=f"eval_run:{run_id_str}",
         ):
-            # 解析 chunk 获取文本增量（best-effort）
-            text_delta = ""
+            text_deltas: list[str] = []
             try:
-                chunk_str = chunk_bytes.decode("utf-8", errors="ignore")
-                if chunk_str.startswith("data: "):
-                    data_str = chunk_str[6:].strip()
-                    if data_str != "[DONE]":
-                        data = json.loads(data_str)
-                        if isinstance(data, dict):
-                            if isinstance(data.get("id"), str):
-                                stream_id = stream_id or data["id"]
-                            if isinstance(data.get("created"), int):
-                                stream_created = stream_created or data["created"]
-                            if isinstance(data.get("model"), str):
-                                stream_model = stream_model or data["model"]
-                            if isinstance(data.get("usage"), dict):
-                                stream_usage = data["usage"]
-                        if "choices" in data and len(data["choices"]) > 0:
-                            delta = data["choices"][0].get("delta", {})
-                            text_delta = delta.get("content", "")
-                            if text_delta:
-                                full_text_list.append(text_delta)
-                        elif "error" in data:
-                            yield {
-                                "run_id": run_id_str,
-                                "type": "run.error",
-                                "status": "failed",
-                                "error": data["error"],
-                                "error_code": data["error"].get("type") if isinstance(data.get("error"), dict) else None,
-                            }
-                            # 更新 DB 记录失败
-                            run.status = "failed"
-                            run.selected_provider_id = selected.get("provider_id")
-                            run.selected_provider_model = selected.get("model_id")
-                            run.error_code = data["error"].get("type") or "UPSTREAM_ERROR"
-                            run.error_message = data["error"].get("message")
-                            run.response_payload = {"error": data["error"]} if isinstance(data.get("error"), dict) else None
-                            if run.cost_credits is None:
-                                run.cost_credits = cost_credits
-                            run.finished_at = datetime.now(UTC)
-                            db.add(run)
-                            db.commit()
-                            return
+                buffer += chunk_bytes.decode("utf-8", errors="ignore")
+                while "\n\n" in buffer:
+                    raw_event, buffer = buffer.split("\n\n", 1)
+                    raw_event = raw_event.strip()
+                    if not raw_event:
+                        continue
+
+                    data_lines: list[str] = []
+                    for line in raw_event.splitlines():
+                        if line.startswith("data:"):
+                            data_lines.append(line[len("data:") :].strip())
+                    if not data_lines:
+                        continue
+
+                    data_str = "\n".join(data_lines).strip()
+                    if not data_str or data_str == "[DONE]":
+                        continue
+
+                    data = json.loads(data_str)
+                    if not isinstance(data, dict):
+                        continue
+
+                    if isinstance(data.get("id"), str):
+                        stream_id = stream_id or data["id"]
+                    if isinstance(data.get("created"), int):
+                        stream_created = stream_created or data["created"]
+                    if isinstance(data.get("model"), str):
+                        stream_model = stream_model or data["model"]
+                    if isinstance(data.get("usage"), dict):
+                        stream_usage = data["usage"]
+
+                    if isinstance(data.get("error"), dict):
+                        err = data["error"]
+                        err_type = err.get("type") if isinstance(err.get("type"), str) else None
+                        err_message = err.get("message") if isinstance(err.get("message"), str) else None
+
+                        # 更新 DB 记录失败（对齐 non-stream：补齐 latency_ms，并尽量保留 billing 口径）
+                        run.status = "failed"
+                        run.selected_provider_id = selected.get("provider_id")
+                        run.selected_provider_model = selected.get("model_id")
+                        run.error_code = (err_type or "UPSTREAM_ERROR").strip()
+                        run.error_message = (err_message or err_type or "upstream_error")
+                        run.response_payload = {"error": err}
+                        if run.cost_credits is None:
+                            run.cost_credits = cost_credits
+                        run.latency_ms = int(max(0, (time.time() - start) * 1000))
+                        run.finished_at = datetime.now(UTC)
+                        db.add(run)
+                        db.commit()
+
+                        # 计费：与 non-stream 对齐（usage 缺失时会回退到 request max_tokens 估算）
+                        record_completion_usage(
+                            db,
+                            user_id=UUID(str(api_key.user_id)),
+                            api_key_id=UUID(str(api_key.id)),
+                            logical_model_name=requested_logical_model,
+                            provider_id=run.selected_provider_id,
+                            provider_model_id=run.selected_provider_model,
+                            response_payload={"error": err},
+                            request_payload=payload,
+                            is_stream=True,
+                            idempotency_key=f"eval_run:{run_id_str}",
+                        )
+
+                        yield {
+                            "run_id": run_id_str,
+                            "type": "run.error",
+                            "status": "failed",
+                            "error": err,
+                            "error_code": run.error_code,
+                        }
+                        return
+
+                    choices = data.get("choices")
+                    if isinstance(choices, list) and choices:
+                        first = choices[0] if isinstance(choices[0], dict) else None
+                        if isinstance(first, dict):
+                            delta = first.get("delta")
+                            if isinstance(delta, dict):
+                                content = delta.get("content")
+                                if isinstance(content, str) and content:
+                                    text_deltas.append(content)
             except Exception:
-                pass
+                # best-effort：不影响主流程
+                text_deltas = []
 
             if not cost_persisted and selected.get("provider_id") and selected.get("model_id"):
                 cost_credits = estimate_streaming_precharge_cost_credits(
@@ -550,15 +597,17 @@ async def execute_run_stream(
                 db.commit()
                 cost_persisted = True
 
-            yield {
-                "run_id": run_id_str,
-                "type": "run.delta",
-                "status": "running",
-                "provider_id": selected.get("provider_id"),
-                "provider_model": selected.get("model_id"),
-                "cost_credits": cost_credits,
-                "delta": text_delta,
-            }
+            for text_delta in text_deltas:
+                full_text_list.append(text_delta)
+                yield {
+                    "run_id": run_id_str,
+                    "type": "run.delta",
+                    "status": "running",
+                    "provider_id": selected.get("provider_id"),
+                    "provider_model": selected.get("model_id"),
+                    "cost_credits": cost_credits,
+                    "delta": text_delta,
+                }
 
         full_text = "".join(full_text_list)
         output_preview = full_text[:380].rstrip() if full_text else None
@@ -604,6 +653,20 @@ async def execute_run_stream(
         db.add(run)
         db.commit()
 
+        # 计费：与 non-stream 对齐（流式也按 usage / request max_tokens 口径）
+        record_completion_usage(
+            db,
+            user_id=UUID(str(api_key.user_id)),
+            api_key_id=UUID(str(api_key.id)),
+            logical_model_name=requested_logical_model,
+            provider_id=run.selected_provider_id,
+            provider_model_id=run.selected_provider_model,
+            response_payload=response_payload,
+            request_payload=payload,
+            is_stream=True,
+            idempotency_key=f"eval_run:{run_id_str}",
+        )
+
         yield {
             "run_id": run_id_str,
             "type": "run.completed",
@@ -622,11 +685,46 @@ async def execute_run_stream(
         run.selected_provider_model = selected.get("model_id")
         if run.cost_credits is None:
             run.cost_credits = cost_credits
+        run.latency_ms = int(max(0, (time.time() - start) * 1000))
         run.finished_at = datetime.now(UTC)
         db.add(run)
         db.commit()
         # 对于 CancelledError，通常不需要 yield 东西，因为连接已经断开了
         raise
+    except HTTPException as exc:
+        run.status = "failed"
+        run.selected_provider_id = selected.get("provider_id")
+        run.selected_provider_model = selected.get("model_id")
+        run.error_code = "UPSTREAM_ERROR"
+        run.error_message = str(exc.detail)
+        if run.cost_credits is None:
+            run.cost_credits = cost_credits
+        run.latency_ms = int(max(0, (time.time() - start) * 1000))
+        run.finished_at = datetime.now(UTC)
+        db.add(run)
+        db.commit()
+
+        # 计费：与 non-stream 对齐（HTTPException 也会按请求做保守估算）
+        record_completion_usage(
+            db,
+            user_id=UUID(str(api_key.user_id)),
+            api_key_id=UUID(str(api_key.id)),
+            logical_model_name=requested_logical_model,
+            provider_id=run.selected_provider_id,
+            provider_model_id=run.selected_provider_model,
+            response_payload={"error": {"type": "UPSTREAM_ERROR", "message": str(exc.detail)}},
+            request_payload=request_payload_for_billing or (payload_override if isinstance(payload_override, dict) else None),
+            is_stream=True,
+            idempotency_key=f"eval_run:{run_id_str}",
+        )
+
+        yield {
+            "run_id": run_id_str,
+            "type": "run.error",
+            "status": "failed",
+            "error_code": run.error_code,
+            "error": {"message": str(exc.detail)},
+        }
     except Exception as exc:
         logger.exception("eval_service: streaming run failed (run_id=%s): %s", run.id, exc)
         run.status = "failed"

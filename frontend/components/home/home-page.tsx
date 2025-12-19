@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { ArrowRight, Zap, Shield, BarChart3, Network, Cpu, Key, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { AdaptiveCard, CardContent } from "@/components/cards/adaptive-card";
 import { useI18n } from "@/lib/i18n-context";
 import { useGatewayConfig } from "@/lib/swr";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -129,7 +129,7 @@ export function HomePage() {
 
       {/* API Access */}
       <section className="container mx-auto px-6 pb-12 max-w-5xl">
-        <Card className="border bg-muted/30">
+        <AdaptiveCard className="border bg-muted/30">
           <CardContent className="p-6 space-y-6">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground uppercase tracking-wide">
@@ -167,7 +167,7 @@ export function HomePage() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </AdaptiveCard>
       </section>
 
       {/* Features Grid */}
@@ -180,7 +180,7 @@ export function HomePage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature, index) => (
-            <Card key={index} className="border hover:shadow-lg transition-shadow">
+            <AdaptiveCard key={index} className="border hover:shadow-lg transition-shadow">
               <CardContent className="pt-6">
                 <div className="flex flex-col items-start space-y-3">
                   <div className="p-2 bg-muted rounded">
@@ -192,7 +192,7 @@ export function HomePage() {
                   </p>
                 </div>
               </CardContent>
-            </Card>
+            </AdaptiveCard>
           ))}
         </div>
       </section>
@@ -203,7 +203,7 @@ export function HomePage() {
           <h2 className="text-3xl font-bold mb-4">{t("home.use_cases_title")}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
+          <AdaptiveCard>
             <CardContent className="pt-6">
               <h3 className="text-xl font-semibold mb-3">{t("home.use_case.enterprise.title")}</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
@@ -213,8 +213,8 @@ export function HomePage() {
                 <li>{t("home.use_case.enterprise.item4")}</li>
               </ul>
             </CardContent>
-          </Card>
-          <Card>
+          </AdaptiveCard>
+          <AdaptiveCard>
             <CardContent className="pt-6">
               <h3 className="text-xl font-semibold mb-3">{t("home.use_case.developer.title")}</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
@@ -224,7 +224,7 @@ export function HomePage() {
                 <li>{t("home.use_case.developer.item4")}</li>
               </ul>
             </CardContent>
-          </Card>
+          </AdaptiveCard>
         </div>
       </section>
 

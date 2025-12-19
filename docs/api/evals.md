@@ -52,6 +52,8 @@ Response（`streaming=true`，SSE / `text/event-stream`）:
 - 错误：`type=run.error` / `type=eval.error`
 - 心跳：`type=heartbeat`（用于保持连接与中间状态刷新）
 - 结束：`type=eval.completed`，并以 `event: done` + `data: [DONE]` 结束
+  - `eval.completed.status` 以数据库中 eval 的最终状态为准：通常为 `ready`（全部 challenger 结束）或 `rated`（用户已提交评分）
+  - 若同一个 `baseline_run_id` 对应的 eval 已存在，服务端不会重复执行已结束的 challenger run，而是优先发送已落库的 `run.completed/run.error` 快照并结束（queued 的 run 仍会被执行）
 
 示例（SSE data 行内 JSON）：
 ```text

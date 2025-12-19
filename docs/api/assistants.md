@@ -37,6 +37,7 @@ Response:
 说明：
 - `default_logical_model` 支持设置为 `"auto"`：表示由 Bandit（Thompson Sampling）在项目配置的 `candidate_logical_models` 中选择一个模型作为本次 baseline 的实际模型（单路执行，不并行）。
 - 若项目未配置 `candidate_logical_models`，则 `"auto"` 会返回 400。
+- `project_id`（MVP: project_id == api_key_id）可为空；若传入，则后端会校验该项目是否存在且归属当前用户。
 
 Request:
 ```json
@@ -48,6 +49,9 @@ Request:
   "model_preset": {"temperature": 0.2}
 }
 ```
+
+Errors:
+- `404 not_found`：项目不存在或无权访问（`project_id` 传错）
 
 ### GET `/v1/assistants/{assistant_id}`
 
@@ -75,6 +79,10 @@ Request:
   "title": "可选标题"
 }
 ```
+
+Errors:
+- `404 not_found`：项目不存在或无权访问（`project_id` 传错）
+- `403 forbidden`：助手不属于当前项目
 
 ### GET `/v1/conversations?assistant_id=...`
 

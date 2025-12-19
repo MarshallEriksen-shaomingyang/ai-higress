@@ -9,8 +9,23 @@
 ## 0. 前置约定
 
 - **认证方式**：所有管理/历史/评测相关接口均为 JWT（`Authorization: Bearer <access_token>`）。
-- **Project 概念（MVP）**：`project_id == api_key_id`（项目即 API Key）。
+- **Project 概念（MVP）**：`project_id == api_key_id`（项目即 API Key）；后端会校验 project_id 是否存在且归属当前用户，传错会直接 `404 not_found`。
 - **性能约束**：历史列表只加载轻量数据，run 详情惰性加载；推荐评测默认最多 3 个模型（baseline + 2 challengers）。
+
+---
+
+## 0.5 当前前端落地进度（代码层）
+
+你后续已经把“聊天模块”的前端基础设施搭起来了，主要落点：
+
+- 页面与组件：`frontend/app/chat/*`、`frontend/components/chat/*`
+- 类型：`frontend/lib/api-types.ts`（新增了 chat 相关类型段）
+- 请求层：`frontend/http/{assistant,conversation,message,eval,eval-config}.ts`
+- 数据层：`frontend/lib/swr/use-{assistants,conversations,messages,evals,eval-config}.ts`
+- 状态：`frontend/lib/stores/chat-store.ts`
+- 文案：`frontend/lib/i18n/chat.ts`
+
+这些文件的存在说明“前端框架与交互骨架”已落地，但下一步最关键是 **把类型/HTTP 方法/响应结构与后端契约对齐**（见第 8 节）。
 
 ---
 
@@ -103,7 +118,7 @@
 
 建议交互：
 - 助手列表项展示：名称 + 默认模型（或显示 auto）
-- 会话列表项展示：title（可为空）+ `last_activity_at`
+- 会话列表项展示：title（可为空）+ `last_activity_at` +（可选）`is_pinned/unread_count/last_message_content`（后端已提供，能显著提升“秒开感”）
 - 删除与归档必须二次确认（Dialog），避免误操作
 
 ### B. 会话内聊天与历史加载（避免卡顿）
@@ -213,7 +228,39 @@
 ## 7. 常见错误与前端提示建议
 
 - 404 会话不存在：会话被删除或已归档且写入接口被拒（发送消息应提示“会话已归档/删除”）
+- 404 项目不存在或无权访问：`project_id` 传错/无权访问（常见于把 `user.id` 当成 project_id）
 - 403 项目未启用推荐评测：提示“该项目未启用推荐评测”
 - 429 评测太频繁（cooldown）：提示“评测太频繁，请稍后再试”
 
 > 建议统一使用前端现有错误标准化层（`ErrorHandler`）来展示 `detail.message` 与 `detail.error`。
+
+---
+
+## 8. 对齐检查（你新增代码后，当前最需要补齐的点）
+
+下面是本次 code review 发现的“前后端不一致/容易踩坑”的清单，建议按优先级修正：
+
+### P0：会直接导致接口 404/405 的不一致
+
+- `project_id` 来源：前端聊天模块当前把 `user.id` 当 `project_id`，但后端约定是 `project_id == api_key_id`。需要在前端提供“当前项目（API Key）选择器”，或复用现有 API Key 管理页的选择结果（存储 `api_key_id`）。
+- HTTP 方法：
+  - 后端：助手更新是 `PUT /v1/assistants/{assistant_id}`；会话更新是 `PUT /v1/conversations/{conversation_id}`；评测配置更新是 `PUT /v1/projects/{project_id}/eval-config`
+  - 前端请求层当前使用了 `PATCH`（会 405）。要么前端改为 `PUT`，要么后端增加 `PATCH` 兼容路由（两者择一）
+- 会话详情：前端请求层调用了 `GET /v1/conversations/{conversation_id}`，但后端目前没有这个接口（只有 list + update + messages）。要么删掉这个调用并改为“列表数据即详情”，要么后端补 `GET /v1/conversations/{id}`（两者择一）
+- 触发评测：`POST /v1/evals` 的 `message_id` 是必填；前端目前留空/尝试“从 baseline_run_id 推断”会触发 422/400，需要在消息列表中把 `message_id` 一并带上（`POST /v1/conversations/{id}/messages` 本身就会返回 `message_id`）。
+
+### P0：响应结构/类型不一致（会导致渲染错误/运行时报错）
+
+目前后端契约（`docs/api/assistants.md`）与前端 `frontend/lib/api-types.ts` 的 chat 类型段存在明显不一致，典型包括：
+
+- `archived`：后端是 `archived_at`（datetime/null），前端是 boolean
+- `message.content`：后端是结构化 dict（如 `{type:'text', text:'...'}`），前端按 string 渲染
+- messages 列表：后端每条 message 附带 `runs: RunSummary[]`；前端类型是 `{ message, run? }`
+- run 字段：后端是 `latency_ms/cost_credits/request_payload/response_payload`；前端是 `latency/cost/request/response` 等
+
+建议明确“后端契约是源头”，前端在请求层做一次 normalize（或直接改类型与组件渲染逻辑），避免到处写兼容判断。
+
+### P1：性能/体验实现里容易遗漏的点
+
+- SWR key 与预加载：你新增的 cache preloader 如果用 `JSON.stringify(key)`，会和 SWR 对 object key 的序列化不一致，导致预加载失效；应使用与 `useSWR` 完全一致的 key（同样的 object/array key 形状）。
+- 消息顺序：后端消息列表当前是倒序分页（新 → 旧）；前端虚拟列表若按数组顺序渲染并“滚到底部”，可能会把“旧消息”放在底部，体验反转。建议在渲染层统一成“旧 → 新”，并调整乐观插入位置与分页合并策略。

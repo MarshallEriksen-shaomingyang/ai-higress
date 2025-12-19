@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
 from uuid import UUID
 
@@ -121,6 +122,19 @@ async def create_eval_endpoint(
         provider_scopes=list(getattr(cfg, "provider_scopes", None) or DEFAULT_PROVIDER_SCOPES),
     )
     auth = _to_authenticated_api_key(db, api_key=ctx.api_key)
+    eval_id = UUID(str(eval_obj.id))
+    eval_status = str(eval_obj.status)
+    user_id = UUID(str(current_user.id))
+    conversation_id = UUID(str(payload.conversation_id))
+    assistant_id = UUID(str(payload.assistant_id))
+    message_id = UUID(str(payload.message_id))
+    challenger_run_ids = [UUID(str(r.id)) for r in challenger_runs]
+    challengers_initial = [
+        {k: (str(v) if isinstance(v, UUID) else v) for k, v in _run_to_summary(r).items()}
+        for r in challenger_runs
+    ]
+    baseline_run_id_str = str(eval_obj.baseline_run_id)
+    explanation_payload = explanation
 
     # 释放 db/http client（StreamingResponse 生命周期很长，避免一直占用 request-scoped 资源）
     try:
@@ -134,54 +148,120 @@ async def create_eval_endpoint(
 
     # 流式模式：真并行执行 challenger runs 并通过 SSE 返回
     async def _stream_generator():
-        run_tasks = []
+        run_tasks: list[asyncio.Task[None]] = []
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         try:
             # 1. 首先返回 Eval 对象基本信息
             initial_data = {
                 "type": "eval.created",
-                "eval_id": str(eval_obj.id),
-                "status": eval_obj.status,
-                "baseline_run_id": str(eval_obj.baseline_run_id),
-                "challengers": [
-                    {k: (str(v) if isinstance(v, UUID) else v) for k, v in _run_to_summary(r).items()}
-                    for r in challenger_runs
-                ],
-                "explanation": explanation,
+                "eval_id": str(eval_id),
+                "status": eval_status,
+                "baseline_run_id": baseline_run_id_str,
+                "challengers": challengers_initial,
+                "explanation": explanation_payload,
             }
             yield _encode_sse_event(event_type="eval.created", data=initial_data)
 
-            queue = asyncio.Queue()
+            def _emit_run_snapshot(run_row: RunModel) -> dict[str, Any] | None:
+                if run_row.status == "succeeded":
+                    return {
+                        "run_id": str(run_row.id),
+                        "type": "run.completed",
+                        "status": "succeeded",
+                        "provider_id": run_row.selected_provider_id,
+                        "provider_model": run_row.selected_provider_model,
+                        "cost_credits": run_row.cost_credits,
+                        "latency_ms": run_row.latency_ms,
+                        "full_text": run_row.output_text,
+                    }
+                if run_row.status in {"failed", "cancelled"}:
+                    err_obj: dict[str, Any] | None = None
+                    if isinstance(run_row.response_payload, dict) and isinstance(run_row.response_payload.get("error"), dict):
+                        err_obj = run_row.response_payload.get("error")  # type: ignore[assignment]
+                    if err_obj is None:
+                        err_obj = {"message": run_row.error_message or "run_failed"}
+                    return {
+                        "run_id": str(run_row.id),
+                        "type": "run.error",
+                        "status": "failed" if run_row.status == "failed" else run_row.status,
+                        "error_code": run_row.error_code,
+                        "error": err_obj,
+                    }
+                return None
 
-            async def _run_task(run_id: UUID):
+            # 2) 先把已完成/失败的 challenger 直接发 snapshot；queued 才执行（避免重复跑/重复计费）
+            to_execute: list[UUID] = []
+            unfinished: set[UUID] = set()
+            if challenger_run_ids:
+                with SessionLocal() as snapshot_db:
+                    rows = list(
+                        snapshot_db.execute(select(RunModel).where(RunModel.id.in_(challenger_run_ids)))
+                        .scalars()
+                        .all()
+                    )
+                for row in rows:
+                    if row.status == "queued":
+                        to_execute.append(UUID(str(row.id)))
+                        unfinished.add(UUID(str(row.id)))
+                    elif row.status == "running":
+                        unfinished.add(UUID(str(row.id)))
+                    else:
+                        snap = _emit_run_snapshot(row)
+                        if snap is not None:
+                            await queue.put(snap)
+
+            async def _run_task(run_id: UUID) -> None:
                 try:
                     # 每个 run 独立 session，避免同一 Session 在多个并发任务中交叉使用导致报错
                     with SessionLocal() as task_db:
-                        # 重新加载必要对象
                         task_run = (
                             task_db.execute(select(RunModel).where(RunModel.id == run_id))
                             .scalars()
                             .first()
                         )
+                        if task_run is None:
+                            await queue.put(
+                                {
+                                    "run_id": str(run_id),
+                                    "type": "run.error",
+                                    "status": "failed",
+                                    "error_code": "NOT_FOUND",
+                                    "error": {"message": "run not found"},
+                                }
+                            )
+                            return
+
+                        if task_run.status != "queued":
+                            snap = _emit_run_snapshot(task_run)
+                            if snap is not None:
+                                await queue.put(snap)
+                            return
+
                         conv = get_conversation(
                             task_db,
-                            conversation_id=payload.conversation_id,
-                            user_id=UUID(str(current_user.id)),
+                            conversation_id=conversation_id,
+                            user_id=user_id,
                         )
                         assistant = get_assistant(
                             task_db,
-                            assistant_id=payload.assistant_id,
-                            user_id=UUID(str(current_user.id)),
+                            assistant_id=assistant_id,
+                            user_id=user_id,
                         )
                         user_message = (
-                            task_db.execute(select(MessageModel).where(MessageModel.id == payload.message_id))
+                            task_db.execute(select(MessageModel).where(MessageModel.id == message_id))
                             .scalars()
                             .first()
                         )
 
-                        if not all([task_run, conv, assistant, user_message]):
-                            logger.error(
-                                "eval_routes: context objects not found for run %s", run_id
-                            )
+                        if conv is None or assistant is None or user_message is None:
+                            logger.error("eval_routes: context objects not found for run %s", run_id)
+                            task_run.status = "failed"
+                            task_run.error_code = "NOT_FOUND"
+                            task_run.error_message = "Context objects not found"
+                            task_run.response_payload = {"error": {"type": "NOT_FOUND", "message": task_run.error_message}}
+                            task_run.finished_at = datetime.now(UTC)
+                            task_db.add(task_run)
+                            task_db.commit()
                             await queue.put(
                                 {
                                     "run_id": str(run_id),
@@ -209,10 +289,27 @@ async def create_eval_endpoint(
                             ):
                                 await queue.put(item)
                 except asyncio.CancelledError:
-                    # 客户端断开/请求取消：让取消按预期传播，避免误报 run.error。
                     raise
                 except Exception as task_exc:
                     logger.exception("eval_routes: run_task failed for run %s", run_id)
+                    # best-effort 落库（对齐 poll 路径）
+                    try:
+                        with SessionLocal() as err_db:
+                            err_run = (
+                                err_db.execute(select(RunModel).where(RunModel.id == run_id))
+                                .scalars()
+                                .first()
+                            )
+                            if err_run is not None and err_run.status in {"queued", "running"}:
+                                err_run.status = "failed"
+                                err_run.error_code = "INTERNAL_ERROR"
+                                err_run.error_message = str(task_exc)
+                                err_run.response_payload = {"error": {"type": "INTERNAL_ERROR", "message": str(task_exc)}}
+                                err_run.finished_at = datetime.now(UTC)
+                                err_db.add(err_run)
+                                err_db.commit()
+                    except Exception:
+                        logger.info("eval_routes: failed to persist run error snapshot", exc_info=True)
                     await queue.put(
                         {
                             "run_id": str(run_id),
@@ -223,13 +320,13 @@ async def create_eval_endpoint(
                         }
                     )
 
-            # 启动所有任务
-            run_tasks = [asyncio.create_task(_run_task(r.id)) for r in challenger_runs]
+            # 启动所有 queued run
+            run_tasks = [asyncio.create_task(_run_task(run_id)) for run_id in to_execute]
             
             num_tasks = len(run_tasks)
             while True:
                 finished_tasks = sum(1 for t in run_tasks if t.done())
-                if finished_tasks >= num_tasks and queue.empty():
+                if finished_tasks >= num_tasks and queue.empty() and not unfinished:
                     break
 
                 try:
@@ -238,8 +335,31 @@ async def create_eval_endpoint(
                     event_type = "message"
                     if isinstance(item, dict):
                         event_type = str(item.get("type") or "message")
+                        if event_type in {"run.completed", "run.error"}:
+                            run_id_str = item.get("run_id")
+                            try:
+                                unfinished.discard(UUID(str(run_id_str)))
+                            except Exception:
+                                pass
                     yield _encode_sse_event(event_type=event_type, data=item)
                 except asyncio.TimeoutError:
+                    # best-effort：观察非本次请求启动的 running 任务，捕捉其最终态
+                    if unfinished:
+                        try:
+                            with SessionLocal() as poll_db:
+                                polled = list(
+                                    poll_db.execute(select(RunModel).where(RunModel.id.in_(list(unfinished))))
+                                    .scalars()
+                                    .all()
+                                )
+                            for row in polled:
+                                if row.status in {"succeeded", "failed", "cancelled"}:
+                                    unfinished.discard(UUID(str(row.id)))
+                                    snap = _emit_run_snapshot(row)
+                                    if snap is not None:
+                                        await queue.put(snap)
+                        except Exception:
+                            logger.info("eval_routes: polling unfinished runs failed", exc_info=True)
                     yield _encode_sse_event(
                         event_type="heartbeat",
                         data={"type": "heartbeat", "ts": int(time.time())},
@@ -251,13 +371,15 @@ async def create_eval_endpoint(
 
             # 检查是否全部 ready
             with SessionLocal() as final_db:
-                _maybe_mark_eval_ready(final_db, eval_id=eval_obj.id)
+                _maybe_mark_eval_ready(final_db, eval_id=eval_id)
                 final_db.commit()
+                eval_row = final_db.execute(select(EvalModel).where(EvalModel.id == eval_id)).scalars().first()
+                final_status = str(eval_row.status) if eval_row is not None else "ready"
 
             final_data = {
                 "type": "eval.completed",
-                "eval_id": str(eval_obj.id),
-                "status": "ready"
+                "eval_id": str(eval_id),
+                "status": final_status,
             }
             yield _encode_sse_event(event_type="eval.completed", data=final_data)
             yield _encode_sse_event(event_type="done", data="[DONE]")

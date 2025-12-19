@@ -1,5 +1,8 @@
 # 项目 AI 推荐评测（Top3）——前端对接说明（仅文档，不含代码）
 
+> 说明：本功能已并入“聊天助手/历史/评测”整体链路；更完整的对接与契约请以
+> `docs/frontend/chat-assistants-history-eval-integration.md` 为准。本文保留为“推荐评测”视角的补充说明。
+
 ## 目标体验（用户体验最优的默认策略）
 
 - 用户正常聊天只看到 baseline（当前选择/默认模型）
@@ -14,7 +17,7 @@
 ### 1) 会话列表：只取摘要
 
 - 使用 `GET /v1/conversations?assistant_id=...&cursor=...&limit=...`
-- 列表项只渲染轻量字段（title/updated_at/last_preview）
+- 列表项只渲染轻量字段（title/last_activity_at/last_message_content/unread_count/is_pinned）
 
 ### 2) 消息列表：分页 + run 摘要
 
@@ -30,7 +33,7 @@
 ### 触发
 
 - 前提：已经有 baseline run（即用户已看到 baseline 回复）
-- 调用：`POST /v1/evals`（携带 baseline_run_id 等信息）
+- 调用：`POST /v1/evals`（携带 `project_id/assistant_id/conversation_id/message_id/baseline_run_id`）
 - 说明：后端会基于“用户可访问的 provider（自有/分享给我/公共池）+ API Key 限制”来选 challenger 并执行评测；前端无需自行判断权限，但需要展示明确错误提示。
 
 ### 展示

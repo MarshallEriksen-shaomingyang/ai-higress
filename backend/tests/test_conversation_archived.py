@@ -24,6 +24,22 @@ def test_list_conversations_archived(client: TestClient, db_session: Session):
     api_key = db_session.execute(select(APIKey).where(APIKey.user_id == user.id)).scalars().first()
     project_id = str(api_key.id)
 
+    # 0. Invalid project_id should return 404 (avoid misleading "name exists" or 500).
+    resp = client.post(
+        "/v1/assistants",
+        headers=headers,
+        json={
+            "project_id": user_id,  # user_id != api_key_id
+            "name": "Should Fail",
+            "system_prompt": "You are a test bot.",
+            "default_logical_model": "gpt-4o",
+            "model_preset": {},
+        },
+    )
+    assert resp.status_code == 404, resp.text
+    detail = resp.json().get("detail") or {}
+    assert detail.get("error") == "not_found"
+
     # 3. Create Assistant
     resp = client.post(
         "/v1/assistants",
