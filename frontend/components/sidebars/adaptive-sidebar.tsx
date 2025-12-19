@@ -6,18 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+import { useSidebarStore } from "@/lib/stores/sidebar-store";
 import {
   LayoutDashboard,
   Cpu,
@@ -140,7 +129,7 @@ function DecoratedMenuItem({
   children,
   className,
   ...props
-}: React.ComponentProps<typeof SidebarMenuItem>) {
+}: React.ComponentProps<"li">) {
   return (
     <div className="relative">
       {/* 圣诞装饰 - 通过 CSS 类自动控制 */}
@@ -194,22 +183,24 @@ function DecoratedMenuItem({
         </div>
       </div>
       
-      <SidebarMenuItem className={cn(className)} {...props}>
+      <li className={cn("group/menu-item relative", className)} {...props}>
         {children}
-      </SidebarMenuItem>
+      </li>
     </div>
   );
 }
 
 /**
  * 自适应主题侧边栏组件
- * 通过 CSS 变量和类名自动适配所有主题
+ * 使用 Zustand 管理状态，避免 Context 导致的全局重渲染
  * 装饰效果可拔插，通过 CSS 控制
  */
 export function AdaptiveSidebar() {
   const pathname = usePathname();
   const { t } = useI18n();
   const currentUser = useAuthStore((state) => state.user);
+  const isCollapsed = useSidebarStore((state) => state.isCollapsed);
+  
   const roleCodes = currentUser?.role_codes ?? [];
   const isSuperuser = currentUser?.is_superuser === true;
   const isAdmin =
@@ -226,22 +217,21 @@ export function AdaptiveSidebar() {
           "flex items-center space-x-3 px-3 py-2.5 rounded transition-colors text-sm",
           isActive
             ? "bg-primary text-primary-foreground"
-            : "text-sidebar-foreground hover:bg-sidebar-accent"
+            : "hover:bg-muted",
+          isCollapsed && "justify-center px-2"
         )}
       >
         <item.icon className="w-5 h-5 flex-shrink-0" />
-        <span>{t(item.titleKey)}</span>
+        {!isCollapsed && <span>{t(item.titleKey)}</span>}
       </Link>
     );
 
     // 只有激活的菜单项才使用装饰组件
-    const MenuItemWrapper = isActive ? DecoratedMenuItem : SidebarMenuItem;
+    const MenuItemWrapper = isActive ? DecoratedMenuItem : "li";
 
     return (
-      <MenuItemWrapper key={item.href}>
-        <SidebarMenuButton asChild isActive={isActive}>
-          {linkContent}
-        </SidebarMenuButton>
+      <MenuItemWrapper key={item.href} className="group/menu-item relative">
+        {linkContent}
       </MenuItemWrapper>
     );
   };
@@ -252,62 +242,64 @@ export function AdaptiveSidebar() {
   });
 
   return (
-    <Sidebar className="hidden lg:flex w-64 border-r h-screen theme-adaptive-sidebar">
-      <SidebarHeader className="p-6 border-b">
+    <aside
+      className={cn(
+        "hidden lg:flex flex-col border-r h-screen theme-adaptive-sidebar bg-card transition-all duration-200",
+        isCollapsed ? "w-16" : "w-64"
+      )}
+    >
+      {/* Header */}
+      <div className="p-6 border-b">
         <Link
           href="/"
-          className="text-2xl font-bold tracking-tight hover:opacity-80 transition-opacity"
+          className={cn(
+            "font-bold tracking-tight hover:opacity-80 transition-opacity block",
+            isCollapsed ? "text-base text-center" : "text-2xl"
+          )}
         >
-          {t("app.title")}
+          {isCollapsed ? t("app.title").charAt(0) : t("app.title")}
         </Link>
-      </SidebarHeader>
+      </div>
 
-      <SidebarContent className="flex-1 overflow-y-auto py-6">
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu className="px-3 space-y-2">
-              {navItems.map((item) => renderMenuItem(item, pathname === item.href))}
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto py-6">
+        <nav>
+          <ul className={cn("px-3 space-y-2", isCollapsed && "px-2")}>
+            {navItems.map((item) => renderMenuItem(item, pathname === item.href))}
 
-              {isAdmin && (
-                <>
+            {isAdmin && (
+              <>
+                {!isCollapsed && (
                   <div className="pt-6 pb-2">
-                    <SidebarGroupLabel className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       {t("nav.admin")}
-                    </SidebarGroupLabel>
+                    </p>
                   </div>
+                )}
+                {isCollapsed && <div className="pt-4 pb-2"><hr className="border-muted" /></div>}
 
-                  {visibleAdminItems.map((item) =>
-                    renderMenuItem(item, pathname === item.href)
-                  )}
-                </>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
+                {visibleAdminItems.map((item) =>
+                  renderMenuItem(item, pathname === item.href)
+                )}
+              </>
+            )}
+          </ul>
+        </nav>
+      </div>
 
-      <SidebarFooter className="p-4 border-t">
+      {/* Footer */}
+      <div className="p-4 border-t">
         <Link
           href="/profile"
-          className="flex items-center space-x-3 px-3 py-2.5 rounded hover:bg-sidebar-accent transition-colors text-sm"
+          className={cn(
+            "flex items-center space-x-3 px-3 py-2.5 rounded hover:bg-muted transition-colors text-sm",
+            isCollapsed && "justify-center px-2"
+          )}
         >
           <UserCircle className="w-5 h-5 flex-shrink-0" />
-          <span>{t("nav.my_profile")}</span>
+          {!isCollapsed && <span>{t("nav.my_profile")}</span>}
         </Link>
-      </SidebarFooter>
-    </Sidebar>
+      </div>
+    </aside>
   );
 }
-
-// 重新导出 shadcn sidebar 的所有子组件
-export {
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";

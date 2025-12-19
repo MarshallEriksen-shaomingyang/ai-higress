@@ -240,6 +240,7 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_error_cost_input_invalid": "Input cost must be a non-negative number",
     "providers.form_error_cost_output_invalid": "Output cost must be a non-negative number",
     "providers.form_error_api_key_required": "API Key cannot be empty",
+    "providers.form_error_multiple_keys_edit_hint": "This provider has multiple API keys; please update them in the API Keys section.",
     "providers.form_error_user_not_logged_in": "User not logged in",
     
     // Form success messages
@@ -250,6 +251,7 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_context_loading_detail": "Loading Provider details",
     "providers.form_context_creating": "Creating Provider",
     "providers.form_context_updating": "Updating Provider",
+    "providers.form_context_updating_api_key": "Updating API Key",
 
     // Form field labels and descriptions
     "providers.form_section_basic": "Basic Configuration",
@@ -274,8 +276,11 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_field_api_key": "API Key",
     "providers.form_field_api_key_placeholder": "sk-...",
     "providers.form_field_api_key_help": "Upstream vendor's API key, will be stored in encrypted form",
+    "providers.form_field_api_key_help_edit": "Saved: {masked}. Leave empty to keep unchanged; fill to replace (single-key providers).",
+    "providers.form_field_api_key_help_edit_vertexai": "Credentials already saved. Leave empty to keep unchanged; fill to replace.",
     "providers.form_field_api_key_placeholder_vertexai": "Paste GCP service account JSON (recommended) or OAuth access token",
     "providers.form_field_api_key_help_vertexai": "Vertex AI uses Google Cloud credentials (service account JSON recommended). This secret is stored encrypted.",
+    "providers.form_default_key_label": "Default Key",
     "providers.form_field_overridden": "Overridden",
     "providers.form_field_optional": "(optional)",
     "providers.form_field_required": "*",
@@ -569,6 +574,7 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_error_cost_input_invalid": "输入成本必须为非负数",
     "providers.form_error_cost_output_invalid": "输出成本必须为非负数",
     "providers.form_error_api_key_required": "API Key 不能为空",
+    "providers.form_error_multiple_keys_edit_hint": "该 Provider 存在多条 API Key，请前往「API 密钥管理」中修改。",
     "providers.form_error_user_not_logged_in": "用户未登录",
     
     // Form success messages
@@ -579,6 +585,7 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_context_loading_detail": "加载 Provider 详情",
     "providers.form_context_creating": "创建 Provider",
     "providers.form_context_updating": "更新 Provider",
+    "providers.form_context_updating_api_key": "更新 API Key",
 
     // Form field labels and descriptions
     "providers.form_section_basic": "基础配置",
@@ -603,8 +610,11 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_field_api_key": "API Key",
     "providers.form_field_api_key_placeholder": "sk-...",
     "providers.form_field_api_key_help": "上游厂商的 API 密钥，将以加密形式存储",
+    "providers.form_field_api_key_help_edit": "已保存：{masked}。留空则不修改；填写则替换（仅单密钥 Provider）。",
+    "providers.form_field_api_key_help_edit_vertexai": "已保存凭证。留空则不修改；填写则替换。",
     "providers.form_field_api_key_placeholder_vertexai": "粘贴 GCP 服务账号 JSON（推荐）或 OAuth access token",
     "providers.form_field_api_key_help_vertexai": "Vertex AI 需要 Google Cloud 凭证（推荐使用服务账号 JSON）。该密钥会加密存储。",
+    "providers.form_default_key_label": "默认密钥",
     "providers.form_field_overridden": "已覆盖",
     "providers.form_field_optional": "（可选）",
     "providers.form_field_required": "*",

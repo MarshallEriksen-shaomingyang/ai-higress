@@ -27,7 +27,11 @@ import {
 } from "@/components/ui/drawer";
 
 // 表单验证 Schema（根据服务端返回的 SDK 列表动态校验）
-const createProviderFormSchema = (sdkVendorOptions: string[], t: (key: string) => string) =>
+const createProviderFormSchema = (
+    sdkVendorOptions: string[],
+    t: (key: string) => string,
+    isEditing: boolean
+) =>
     z
     .object({
         // 预设相关
@@ -67,8 +71,10 @@ const createProviderFormSchema = (sdkVendorOptions: string[], t: (key: string) =
         staticModels: z.array(z.any()).default([]),
         supportedApiStyles: z.array(z.string()).default([]),
         
-        // API Key（必填）
-        apiKey: z.string().trim().min(1, t("providers.form_error_api_key_required")),
+        // API Key：创建必填；编辑时留空表示不修改（后端不回传明文）
+        apiKey: isEditing
+            ? z.string().trim().optional().or(z.literal(""))
+            : z.string().trim().min(1, t("providers.form_error_api_key_required")),
     })
     .superRefine((values, ctx) => {
         // 所有模式下，当未使用预设时都需要合法的 Base URL
@@ -279,9 +285,10 @@ export function ProviderFormEnhanced({
     const { showError } = useErrorDisplay();
     const { data: sdkVendorsData, loading: sdkVendorsLoading } = useSdkVendors();
     const sdkVendors = sdkVendorsData?.vendors || [];
+    const isEditing = Boolean(editingProvider);
     const providerFormSchema = useMemo(
-        () => createProviderFormSchema(sdkVendors, t),
-        [sdkVendors, t]
+        () => createProviderFormSchema(sdkVendors, t, isEditing),
+        [sdkVendors, t, isEditing]
     );
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [selectedPreset, setSelectedPreset] = useState<ProviderPreset | null>(null);
@@ -298,6 +305,15 @@ export function ProviderFormEnhanced({
 
     const transport = form.watch("transport");
     const isSdkTransport = transport === "sdk";
+    const maskedApiKey = useMemo(() => {
+        if (!isEditing) return "";
+        const sourceData = editingProviderDetail || editingProvider;
+        return (
+            sourceData?.api_keys?.[0]?.key ||
+            sourceData?.api_key ||
+            ""
+        );
+    }, [editingProviderDetail, editingProvider, isEditing]);
 
     useEffect(() => {
         if (open) return;
@@ -450,6 +466,34 @@ export function ProviderFormEnhanced({
                     supported_api_styles: values.supportedApiStyles.length > 0 ? values.supportedApiStyles as ApiStyle[] : undefined,
                 };
 
+                // 可选：如果用户填写了新的 API Key，则同步替换密钥（单密钥场景）
+                const newApiKey = typeof values.apiKey === "string" ? values.apiKey.trim() : "";
+                if (newApiKey) {
+                    try {
+                        const { providerKeyService } = await import("@/http/provider-keys");
+                        const keys = await providerKeyService.getKeys(editingProvider.provider_id);
+
+                        if (keys.length > 1) {
+                            throw new Error(t("providers.form_error_multiple_keys_edit_hint"));
+                        }
+
+                        if (keys.length === 1) {
+                            await providerKeyService.updateKey(editingProvider.provider_id, keys[0].id, { key: newApiKey });
+                        } else {
+                            await providerKeyService.createKey(editingProvider.provider_id, {
+                                key: newApiKey,
+                                label: t("providers.form_default_key_label"),
+                                weight: 1,
+                                status: "active",
+                            });
+                        }
+                    } catch (error) {
+                        // 先更新密钥，避免“配置更新成功但密钥失败”的半成功体验
+                        showError(error, { context: t("providers.form_context_updating_api_key") });
+                        return;
+                    }
+                }
+
                 await providerService.updatePrivateProvider(userId, editingProvider.provider_id, updatePayload);
                 toast.success(t("providers.form_success_updated"));
             } else {
@@ -569,6 +613,8 @@ export function ProviderFormEnhanced({
                                     isSdkTransport={isSdkTransport}
                                     sdkVendorOptions={sdkVendors}
                                     sdkVendorsLoading={sdkVendorsLoading}
+                                    isEditing={isEditing}
+                                    apiKeyPlaceholder={maskedApiKey}
                                 />
 
                                 <AdvancedProviderConfig

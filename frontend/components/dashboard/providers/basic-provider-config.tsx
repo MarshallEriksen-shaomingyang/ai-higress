@@ -18,6 +18,8 @@ interface BasicProviderConfigProps {
     isSdkTransport: boolean;
     sdkVendorOptions: string[];
     sdkVendorsLoading?: boolean;
+    isEditing?: boolean;
+    apiKeyPlaceholder?: string;
 }
 
 export function BasicProviderConfig({
@@ -27,6 +29,8 @@ export function BasicProviderConfig({
     isSdkTransport,
     sdkVendorOptions,
     sdkVendorsLoading,
+    isEditing = false,
+    apiKeyPlaceholder,
 }: BasicProviderConfigProps) {
     const { t } = useI18n();
     const sdkVendor = form.watch("sdkVendor");
@@ -198,25 +202,40 @@ export function BasicProviderConfig({
                 render={({ field }: { field: any }) => (
                     <div className="space-y-2">
                         <FormLabel>
-                            {t("providers.form_field_api_key")} <span className="text-destructive">*</span>
+                            {t("providers.form_field_api_key")}
+                            {!isEditing && <span className="text-destructive"> *</span>}
                         </FormLabel>
                         {isVertexAiSdk ? (
                             <Textarea
                                 {...field}
-                                placeholder={t("providers.form_field_api_key_placeholder_vertexai")}
+                                placeholder={
+                                    isEditing
+                                        ? t("providers.form_field_api_key_placeholder_vertexai")
+                                        : t("providers.form_field_api_key_placeholder_vertexai")
+                                }
                                 className="min-h-[120px] font-mono"
                             />
                         ) : (
                             <Input
                                 {...field}
                                 type="password"
-                                placeholder={t("providers.form_field_api_key_placeholder")}
+                                placeholder={
+                                    isEditing
+                                        ? apiKeyPlaceholder || t("providers.form_field_api_key_placeholder")
+                                        : t("providers.form_field_api_key_placeholder")
+                                }
                             />
                         )}
                         <p className="text-xs text-muted-foreground">
-                            {isVertexAiSdk
-                                ? t("providers.form_field_api_key_help_vertexai")
-                                : t("providers.form_field_api_key_help")}
+                            {isEditing
+                                ? isVertexAiSdk
+                                    ? t("providers.form_field_api_key_help_edit_vertexai")
+                                    : t("providers.form_field_api_key_help_edit", {
+                                          masked: apiKeyPlaceholder || t("providers.form_field_api_key_placeholder"),
+                                      })
+                                : isVertexAiSdk
+                                    ? t("providers.form_field_api_key_help_vertexai")
+                                    : t("providers.form_field_api_key_help")}
                         </p>
                     </div>
                 )}
