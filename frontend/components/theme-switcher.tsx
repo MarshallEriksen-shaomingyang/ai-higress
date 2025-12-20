@@ -19,7 +19,11 @@ const themes = [
   { value: "system", icon: "💻" },
 ] as const;
 
-export function ThemeSwitcher() {
+export function ThemeSwitcher({
+  align = "end",
+}: {
+  align?: "start" | "center" | "end";
+} = {}) {
   const { theme, setTheme } = useTheme();
   const { t } = useI18n();
   const [mounted, setMounted] = React.useState(false);
@@ -45,7 +49,7 @@ export function ThemeSwitcher() {
           <span className="sr-only">{t("theme.switchTheme")}</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
+      <DropdownMenuContent align={align} className="w-40">
         {themes.map((themeOption) => (
           <DropdownMenuItem
             key={themeOption.value}

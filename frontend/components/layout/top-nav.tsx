@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Menu, PanelLeft } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -9,36 +9,26 @@ import { UserMenu } from "./user-menu";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/dashboard/notifications/notification-bell";
 import { MobileSidebar } from "./mobile-sidebar";
-import { ThemeSwitcher } from "@/components/theme-switcher";
+import { AppearanceControls } from "@/components/layout/appearance-controls";
 
 export function TopNav() {
-    const [mounted, setMounted] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const { language, setLanguage, t } = useI18n();
+    const { t } = useI18n();
     const { isAuthenticated, isLoading, openAuthDialog } = useAuthStore();
     const toggleSidebar = useSidebarStore((state) => state.toggleSidebar);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    const handleLanguageToggle = () => {
-        console.log("Language toggle clicked, current language:", language);
-        const newLang = language === "en" ? "zh" : "en";
-        console.log("Setting language to:", newLang);
-        setLanguage(newLang);
-    };
 
     return (
         <header className="h-16 border-b bg-card flex items-center px-4 lg:px-6">
             {/* 移动端菜单按钮 */}
-            <button
+            <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setMobileMenuOpen(true)}
-                className="lg:hidden h-9 w-9 p-0 rounded hover:bg-muted transition-colors flex items-center justify-center"
-                aria-label="打开菜单"
+                className="lg:hidden h-9 w-9"
+                aria-label={t("common.open_menu")}
             >
                 <Menu className="h-5 w-5" />
-            </button>
+            </Button>
 
             {/* 桌面端侧边栏切换按钮 */}
             <Button
@@ -46,7 +36,7 @@ export function TopNav() {
                 size="icon"
                 onClick={toggleSidebar}
                 className="hidden lg:flex h-9 w-9"
-                aria-label="切换侧边栏"
+                aria-label={t("common.toggle_sidebar")}
             >
                 <PanelLeft className="h-5 w-5" />
             </Button>
@@ -55,20 +45,7 @@ export function TopNav() {
             <MobileSidebar open={mobileMenuOpen} onOpenChange={setMobileMenuOpen} />
 
             <div className="flex items-center space-x-2 ml-auto">
-                {/* Language Toggle */}
-                {mounted && (
-                    <button
-                        onClick={handleLanguageToggle}
-                        className="h-9 w-9 p-0 rounded hover:bg-muted transition-colors flex items-center justify-center"
-                    >
-                        <span className="text-sm font-medium">
-                            {language === "en" ? "中" : "En"}
-                        </span>
-                    </button>
-                )}
-
-                {/* Theme Switcher */}
-                <ThemeSwitcher />
+                <AppearanceControls variant="topnav" />
 
                 {/* Notification Bell */}
                 {!isLoading && isAuthenticated && (
