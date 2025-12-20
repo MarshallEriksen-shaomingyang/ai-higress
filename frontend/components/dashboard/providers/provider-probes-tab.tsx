@@ -10,13 +10,13 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Play, Plus, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
@@ -348,16 +348,16 @@ export function ProviderProbesTab({
         </CardContent>
       </Card>
 
-      <Drawer open={editorOpen} onOpenChange={setEditorOpen}>
-        <DrawerContent className="mx-auto w-full max-w-2xl">
-          <DrawerHeader>
-            <DrawerTitle>
+      <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
               {editingTask ? translations?.editTitle ?? "Edit" : translations?.createTitle ?? "Create"}
-            </DrawerTitle>
-            <DrawerDescription>{translations?.form?.hint ?? ""}</DrawerDescription>
-          </DrawerHeader>
+            </DialogTitle>
+            <DialogDescription>{translations?.form?.hint ?? ""}</DialogDescription>
+          </DialogHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <div className="flex-1 overflow-y-auto px-1">
             <div className="grid gap-4">
               <div className="grid gap-2">
                 <Label>{translations?.form?.name ?? "Name"}</Label>
@@ -445,33 +445,31 @@ export function ProviderProbesTab({
             </div>
           </div>
 
-          <DrawerFooter className="border-t bg-background/80 backdrop-blur">
-            <div className="flex w-full justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditorOpen(false)}>
-                {translations?.cancel ?? "Cancel"}
-              </Button>
-              <Button onClick={submit} disabled={creating || updating}>
-                {creating || updating ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : null}
-                {translations?.save ?? "Save"}
-              </Button>
-            </div>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+          <DialogFooter className="pt-4">
+            <Button variant="outline" onClick={() => setEditorOpen(false)}>
+              {translations?.cancel ?? "Cancel"}
+            </Button>
+            <Button onClick={submit} disabled={creating || updating}>
+              {creating || updating ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              {translations?.save ?? "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <Drawer open={resultOpen} onOpenChange={setResultOpen}>
-        <DrawerContent className="mx-auto w-full max-w-3xl">
-          <DrawerHeader>
-            <DrawerTitle>{translations?.result?.title ?? "Result"}</DrawerTitle>
-            <DrawerDescription className="font-mono text-xs">
+      <Dialog open={resultOpen} onOpenChange={setResultOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{translations?.result?.title ?? "Result"}</DialogTitle>
+            <DialogDescription className="font-mono text-xs">
               {latestRun
                 ? `${providerId} · ${latestRun.model_id} · ${latestRun.api_style} · ${latestRun.status_code ?? "-"} · ${latestRun.latency_ms ?? "-"}ms`
                 : ""}
-            </DrawerDescription>
-          </DrawerHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 space-y-3">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-1 space-y-3">
             {latestRun?.response_text ? (
               <Card>
                 <CardHeader>
@@ -507,35 +505,31 @@ export function ProviderProbesTab({
               </Card>
             ) : null}
           </div>
-          <DrawerFooter className="border-t bg-background/80 backdrop-blur">
-            <div className="flex w-full justify-end">
-              <Button variant="outline" onClick={() => setResultOpen(false)}>
-                {translations?.cancel ?? "Close"}
-              </Button>
-            </div>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+          <DialogFooter className="pt-4">
+            <Button variant="outline" onClick={() => setResultOpen(false)}>
+              {translations?.cancel ?? "Close"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <Drawer open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DrawerContent className="mx-auto w-full max-w-md">
-          <DrawerHeader>
-            <DrawerTitle>{translations?.delete?.title ?? "Delete"}</DrawerTitle>
-            <DrawerDescription>{translations?.delete?.description ?? ""}</DrawerDescription>
-          </DrawerHeader>
-          <DrawerFooter className="border-t bg-background/80 backdrop-blur">
-            <div className="flex w-full justify-end gap-2">
-              <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
-                {translations?.cancel ?? "Cancel"}
-              </Button>
-              <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
-                {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                {translations?.delete?.confirm ?? "Confirm"}
-              </Button>
-            </div>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{translations?.delete?.title ?? "Delete"}</DialogTitle>
+            <DialogDescription>{translations?.delete?.description ?? ""}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-4">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              {translations?.cancel ?? "Cancel"}
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              {translations?.delete?.confirm ?? "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
