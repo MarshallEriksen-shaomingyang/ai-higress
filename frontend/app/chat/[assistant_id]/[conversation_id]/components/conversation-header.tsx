@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, SlidersHorizontal } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useSWRConfig } from "swr";
-import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,17 +147,6 @@ export function ConversationHeader({
               </SelectContent>
             </Select>
           </div>
-
-          <Button
-            asChild
-            variant="ghost"
-            size="icon"
-            aria-label={t("chat.settings.open")}
-          >
-            <Link href="/chat/settings">
-              <SlidersHorizontal className="size-4" />
-            </Link>
-          </Button>
 
           <Button
             variant="ghost"

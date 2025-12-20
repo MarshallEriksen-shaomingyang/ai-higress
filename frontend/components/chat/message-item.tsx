@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useI18n } from "@/lib/i18n-context";
 import type { Message, RunSummary } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
+import { MessageContent } from "./message-content";
 
 export interface MessageItemProps {
   message: Message;
@@ -108,9 +109,7 @@ export function MessageItem({
           )}
         >
           <CardContent className="py-3 px-4">
-            <div className="whitespace-pre-wrap break-words text-sm">
-              {message.content}
-            </div>
+            <MessageContent content={message.content} role={message.role} />
 
             {/* Run 摘要信息 */}
             {isAssistant && (

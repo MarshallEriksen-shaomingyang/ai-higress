@@ -136,6 +136,14 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.message.input_label": "Message content",
     "chat.message.list_label": "Message list",
     "chat.message.no_response": "No response yet",
+    "chat.message.thoughts": "Thoughts",
+    "chat.message.show": "Show",
+    "chat.message.hide": "Hide",
+    "chat.message.show_thoughts": "Show thoughts",
+    "chat.message.hide_thoughts": "Hide thoughts",
+    "chat.message.code": "Code",
+    "chat.message.copy_code": "Copy code",
+    "chat.message.copied": "Copied",
 
     // ===== Run 详情 =====
     "chat.run.title": "Run Details",
@@ -405,6 +413,14 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.message.input_label": "消息内容",
     "chat.message.list_label": "消息列表",
     "chat.message.no_response": "暂无回复",
+    "chat.message.thoughts": "思维链",
+    "chat.message.show": "查看",
+    "chat.message.hide": "收起",
+    "chat.message.show_thoughts": "查看思维链",
+    "chat.message.hide_thoughts": "收起思维链",
+    "chat.message.code": "代码",
+    "chat.message.copy_code": "复制代码",
+    "chat.message.copied": "已复制",
 
     // ===== Run 详情 =====
     "chat.run.title": "运行详情",

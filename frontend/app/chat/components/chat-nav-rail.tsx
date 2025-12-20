@@ -29,13 +29,14 @@ const navItems: NavItem[] = [
     href: "/chat",
     icon: MessageSquare,
     labelKey: "nav.chat",
-    isActive: (pathname) => pathname.startsWith("/chat"),
+    isActive: (pathname) =>
+      pathname.startsWith("/chat") && !pathname.startsWith("/chat/settings"),
   },
   {
-    href: "/system",
+    href: "/chat/settings",
     icon: Settings,
-    labelKey: "nav.system",
-    isActive: (pathname) => pathname.startsWith("/system"),
+    labelKey: "chat.settings.title",
+    isActive: (pathname) => pathname.startsWith("/chat/settings"),
   },
 ];
 

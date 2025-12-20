@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MessageItem } from '../message-item';
 import { MessageInput } from '../message-input';
 import type { Message, RunSummary } from '@/lib/api-types';
@@ -58,6 +58,25 @@ describe('MessageItem', () => {
   it('shows status badge for assistant message', () => {
     render(<MessageItem message={mockAssistantMessage} runs={[mockRun]} />);
     expect(screen.getByText('chat.run.status_succeeded')).toBeInTheDocument();
+  });
+
+  it('collapses <think> content by default and toggles on click', () => {
+    const messageWithThink: Message = {
+      message_id: 'msg-3',
+      conversation_id: 'conv-1',
+      role: 'assistant',
+      content: '<think>Hidden reasoning</think>\n\nVisible answer.',
+      run_id: 'run-2',
+      created_at: new Date().toISOString(),
+    };
+
+    render(<MessageItem message={messageWithThink} runs={[mockRun]} />);
+
+    expect(screen.queryByText('Hidden reasoning')).not.toBeInTheDocument();
+    expect(screen.getByText('Visible answer.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.message.show_thoughts' }));
+    expect(screen.getByText('Hidden reasoning')).toBeInTheDocument();
   });
 });
 
