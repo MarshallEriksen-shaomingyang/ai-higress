@@ -26,21 +26,14 @@
 **效果**:
 - Dashboard 所有图表和 KPI 卡片立即显示
 - 无加载闪烁，用户体验流畅
-- 启用了 SSR，SEO 友好
+- 禁用 SSR（避免 Hydration 错误），但预取数据仍然有效
 
-### 3. 私有 Provider 页面
-**路径**: `frontend/app/dashboard/my-providers/page.tsx`
+**注意**:
+- 使用 `dynamic import` 禁用 SSR
+- 避免 HealthBadge 的 loading 状态导致 Hydration 错误
+- 预取数据通过 SWR fallback 传递，客户端首次渲染使用 fallback
 
-**预取数据**:
-- 私有 Provider 列表 (`/users/me/private-providers`)
-- 配额信息 (`/users/me/quota`)
-
-**效果**:
-- Provider 列表和配额信息立即显示
-- 客户端组件改用 SWR hooks，自动利用 fallback
-- 移除了 useEffect 手动数据获取逻辑
-
-### 4. 系统性能监控页
+### 3. 系统性能监控页
 **路径**: `frontend/app/system/performance/page.tsx`
 
 **说明**:
@@ -48,6 +41,15 @@
 - 数据存储在浏览器 localStorage
 - 不需要服务端预取
 - 已将页面改为服务端组件，标题移到客户端组件内部
+
+### 4. 私有 Provider 页面（已移除预取）
+**路径**: `frontend/app/dashboard/my-providers/page.tsx`
+
+**说明**:
+- 此页面需要用户登录，数据依赖客户端的 userId
+- 服务端无法获取 userId（存储在客户端 auth store）
+- 不进行服务端预取，让客户端直接请求
+- 客户端组件已改用 SWR hooks，统一数据管理
 
 ## 核心工具
 

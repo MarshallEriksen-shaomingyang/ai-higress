@@ -17,7 +17,12 @@ export async function serverFetch<T>(
     const cookieStore = await cookies();
     const token = cookieStore.get('access_token')?.value;
     
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // 与前端 httpClient 保持一致：优先使用 NEXT_PUBLIC_API_BASE_URL
+    // 兼容旧变量名 NEXT_PUBLIC_API_URL
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://localhost:8000';
     const url = `${apiUrl}${endpoint}`;
     
     const res = await fetch(url, {

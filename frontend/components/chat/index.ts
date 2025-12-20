@@ -16,6 +16,8 @@ export { MessageItem } from './message-item';
 export { MessageList } from './message-list';
 export { MessageInput } from './message-input';
 export { RunDetailDialog } from './run-detail-dialog';
+export { SlateChatInput } from './slate-chat-input';
+export type { ModelParameters } from './slate-chat-input';
 
 // 评测组件
 export { EvalPanel } from './eval-panel';

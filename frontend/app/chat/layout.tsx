@@ -11,7 +11,7 @@ export default function ChatLayout({
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       <ChatNavRail />
-      <div className="flex-1 h-full overflow-hidden">
+      <div className="flex-1 h-full overflow-hidden glass-card">
         <ChatLayoutRootClient>{children}</ChatLayoutRootClient>
       </div>
     </div>

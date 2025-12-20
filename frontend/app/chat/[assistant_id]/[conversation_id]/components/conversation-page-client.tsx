@@ -7,7 +7,7 @@ import type { Layout } from "react-resizable-panels";
 import { toast } from "sonner";
 
 import { useAuth } from "@/components/providers/auth-provider";
-import { MessageInput } from "@/components/chat/message-input";
+import { SlateChatInput } from "@/components/chat/slate-chat-input";
 import { MessageList } from "@/components/chat/message-list";
 import {
   ResizableHandle,
@@ -25,6 +25,8 @@ import { useChatLayoutStore } from "@/lib/stores/chat-layout-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useConversationFromList } from "@/lib/swr/use-conversations";
 import { useCreateEval } from "@/lib/swr/use-evals";
+import { useSendMessage } from "@/lib/swr/use-messages";
+import type { ModelParameters } from "@/components/chat/slate-chat-input";
 import { ConversationHeader } from "./conversation-header";
 import { BridgePanelClient } from "@/components/chat/bridge-panel-client";
 
@@ -59,16 +61,24 @@ export function ConversationPageClient({
     activeEvalId,
     setActiveEval,
     conversationModelOverrides,
+    conversationBridgeAgentIds,
   } = useChatStore();
   const setChatVerticalLayout = useChatLayoutStore(
     (s) => s.setChatVerticalLayout
   );
   const createEval = useCreateEval();
+  const sendMessage = useSendMessage(
+    conversationId,
+    assistantId,
+    conversationModelOverrides[conversationId] ?? null
+  );
 
   const isImmersive = useChatLayoutStore((s) => s.isImmersive);
   const setIsImmersive = useChatLayoutStore((s) => s.setIsImmersive);
   const isBridgePanelOpen = useChatLayoutStore((s) => s.isBridgePanelOpen);
-  const setIsBridgePanelOpen = useChatLayoutStore((s) => s.setIsBridgePanelOpen);
+  const setIsBridgePanelOpen = useChatLayoutStore(
+    (s) => s.setIsBridgePanelOpen
+  );
 
   const defaultVerticalLayout = useMemo(() => {
     const storedVerticalLayout =
@@ -141,6 +151,34 @@ export function ConversationPageClient({
     setActiveEval(null);
   };
 
+  // 发送消息处理
+  const handleSendMessage = async (
+    content: string,
+    _images: string[],
+    _parameters: ModelParameters
+  ) => {
+    const bridgeAgentId = conversationBridgeAgentIds[conversationId] ?? null;
+    
+    await sendMessage({
+      content,
+      bridge_agent_id: bridgeAgentId || undefined,
+      // TODO: 如果后端支持，可以添加图片和参数
+      // images: _images,
+      // parameters: _parameters,
+    });
+  };
+
+  // 清空历史记录处理
+  const handleClearHistory = async () => {
+    // TODO: 实现清空历史记录的 API 调用
+    toast.info("清空历史记录功能待实现");
+  };
+
+  // MCP 工具处理
+  const handleMcpAction = () => {
+    setIsBridgePanelOpen(!isBridgePanelOpen);
+  };
+
   if (!conversation) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -154,8 +192,6 @@ export function ConversationPageClient({
   }
 
   const isArchived = conversation.archived;
-  const overrideLogicalModel =
-    conversationModelOverrides[conversationId] ?? null;
 
   return (
     <>
@@ -202,12 +238,13 @@ export function ConversationPageClient({
               maxSize="50%"
             >
               <div className="h-full bg-background">
-                <MessageInput
+                <SlateChatInput
                   conversationId={conversationId}
                   assistantId={assistantId}
-                  overrideLogicalModel={overrideLogicalModel}
                   disabled={isArchived}
-                  layout="fill"
+                  onSend={handleSendMessage}
+                  onClearHistory={handleClearHistory}
+                  onMcpAction={handleMcpAction}
                   className="h-full border-t-0"
                 />
               </div>
@@ -252,12 +289,13 @@ export function ConversationPageClient({
 
                 <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
                   <div className="h-full bg-background">
-                    <MessageInput
+                    <SlateChatInput
                       conversationId={conversationId}
                       assistantId={assistantId}
-                      overrideLogicalModel={overrideLogicalModel}
                       disabled={isArchived}
-                      layout="fill"
+                      onSend={handleSendMessage}
+                      onClearHistory={handleClearHistory}
+                      onMcpAction={handleMcpAction}
                       className="h-full border-t-0"
                     />
                   </div>

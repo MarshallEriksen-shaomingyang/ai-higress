@@ -21,6 +21,12 @@
 - Keep configuration in `app/settings.py`, dependency wiring in `app/deps.py`, logging in `app/logging_config.py`.
 - When adding new routes, reuse existing patterns for auth, context, and upstream calls.
 
+## 配置/变量引用规范（重要）
+- **禁止凭空杜撰**环境变量名、配置键、API 字段名、路由、错误码；引用前必须能在仓库代码/文档中找到真实定义或使用点。
+- 在回答“某变量从哪里来/怎么配”这类问题时，**必须给出可定位的依据**（至少 1 个文件路径定位点，必要时说明可用的 `rg` 关键字）。
+- 如确需新增环境变量/配置项：必须同步更新对应的示例与使用处（例如 `.env.example`、`frontend/.env.example`、相关代码），避免出现多套命名导致的 401/配置漂移。
+- 前端 API 基础地址优先使用 `NEXT_PUBLIC_API_BASE_URL`（如需兼容历史变量名，应明确标注为兼容逻辑而非新规范）。
+
 ## 前端 UI 框架使用规范
 - 技术栈与目录
   - 前端工程位于 `frontend/`，使用 **Next.js(App Router) + Tailwind CSS + shadcn/ui 风格组件库**。

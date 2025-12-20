@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Provider, providerService } from "@/http/provider";
+import type { Provider } from "@/http/provider";
 import { useI18n } from "@/lib/i18n-context";
 import { useErrorDisplay } from "@/lib/errors";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -46,6 +46,7 @@ export function MyProvidersPageClient() {
     providers,
     loading: isLoadingProviders,
     refresh,
+    deleteProvider,
   } = usePrivateProviders({ userId });
 
   // 私有 Provider 配额信息
@@ -155,9 +156,8 @@ export function MyProvidersPageClient() {
 
     setIsDeleting(true);
     try {
-      await providerService.deletePrivateProvider(userId, deletingProviderId);
+      await deleteProvider(deletingProviderId);
       toast.success(t("providers.toast_delete_success"));
-      await refresh();
     } catch (error) {
       showError(error, {
         context: t("providers.toast_delete_error"),
@@ -168,7 +168,7 @@ export function MyProvidersPageClient() {
       setDeleteConfirmOpen(false);
       setDeletingProviderId(null);
     }
-  }, [deletingProviderId, userId, refresh, t, showError]);
+  }, [deletingProviderId, userId, deleteProvider, t, showError]);
 
   // 查看详情
   const handleViewDetails = useCallback((providerId: string) => {

@@ -115,7 +115,7 @@ export const tokenManager = {
   },
 
   // Refresh Token - 仅存储标记，实际 Token 存 HttpOnly Cookie
-  setRefreshToken: (token: string | null | undefined, options?: RememberOption) => {
+  setRefreshToken: (_token: string | null | undefined, options?: RememberOption) => {
     const remember = resolveRemember(options?.remember);
 
     // 存储标记到 Cookie

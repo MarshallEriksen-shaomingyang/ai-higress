@@ -164,24 +164,24 @@
 /* 圣诞主题 - Christmas Theme */
 html.christmas {
   color-scheme: light;
-  --foreground: #1a0505;
+  --foreground: #1a1a1a; /* 深色文字 - 默认 */
   --card: #ffffff;
-  --card-foreground: #1a0505;
+  --card-foreground: #1a1a1a; /* 深色文字 */
   --popover: #ffffff;
-  --popover-foreground: #1a0505;
+  --popover-foreground: #1a1a1a; /* 深色文字 */
   --primary: #dc2626; /* 圣诞红 */
   --primary-foreground: #ffffff;
   --secondary: #16a34a; /* 圣诞绿 */
   --secondary-foreground: #ffffff;
   --muted: #fef2f2;
-  --muted-foreground: #991b1b;
-  --accent: #fbbf24; /* 金色 */
-  --accent-foreground: #78350f;
+  --muted-foreground: #6b7280; /* 灰色 */
+  --accent: #d4af37; /* 金色 - 用于强调 */
+  --accent-foreground: #1a1a1a;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #fecaca;
   --input: #fecaca;
-  --ring: #dc2626;
+  --ring: #d4af37;
   /* Charts - 圣诞主题（HSL 三元组） */
   --chart-1: 0, 72%, 51%;
   --chart-2: 142, 76%, 36%;
@@ -189,13 +189,13 @@ html.christmas {
   --chart-4: 0, 84%, 60%;
   --chart-5: 142, 71%, 45%;
   --sidebar: #fef2f2;
-  --sidebar-foreground: #1a0505;
+  --sidebar-foreground: #1a1a1a; /* 深色文字 */
   --sidebar-primary: #dc2626;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #fee2e2;
-  --sidebar-accent-foreground: #991b1b;
+  --sidebar-accent-foreground: #6b7280; /* 灰色 */
   --sidebar-border: #fecaca;
-  --sidebar-ring: #dc2626;
+  --sidebar-ring: #d4af37;
 }
 
 

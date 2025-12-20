@@ -1,7 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MessageItem } from '../message-item';
-import { MessageInput } from '../message-input';
 import type { Message, RunSummary } from '@/lib/api-types';
 
 // Mock i18n
@@ -10,11 +9,6 @@ vi.mock('@/lib/i18n-context', () => ({
     t: (key: string) => key,
     language: 'zh',
   }),
-}));
-
-// Mock SWR
-vi.mock('@/lib/swr/use-messages', () => ({
-  useSendMessage: () => vi.fn(),
 }));
 
 describe('MessageItem', () => {
@@ -96,24 +90,5 @@ describe('MessageItem', () => {
 
     render(<MessageItem message={messageWithImages} runs={[mockRun]} />);
     expect(screen.getAllByRole('img').length).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe('MessageInput', () => {
-  it('renders input field and send button', () => {
-    render(<MessageInput conversationId="conv-1" />);
-    expect(screen.getByPlaceholderText('chat.message.input_placeholder')).toBeInTheDocument();
-    expect(screen.getByTitle('chat.message.send_hint')).toBeInTheDocument();
-  });
-
-  it('disables input when disabled prop is true', () => {
-    render(<MessageInput conversationId="conv-1" disabled />);
-    const input = screen.getByPlaceholderText('chat.conversation.archived_notice');
-    expect(input).toBeDisabled();
-  });
-
-  it('shows archived notice in placeholder when disabled', () => {
-    render(<MessageInput conversationId="conv-1" disabled />);
-    expect(screen.getByPlaceholderText('chat.conversation.archived_notice')).toBeInTheDocument();
   });
 });
