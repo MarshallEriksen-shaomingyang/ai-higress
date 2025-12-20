@@ -539,7 +539,7 @@ def test_transaction_filtering_by_reason_and_date(monkeypatch):
     - 按 reason（原因）过滤
     - 按日期范围过滤
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     
     app = create_app()
     SessionLocal = install_inmemory_db(app)
@@ -603,7 +603,7 @@ def test_transaction_filtering_by_reason_and_date(monkeypatch):
         assert len(empty_transactions) == 0
 
         # 6) 按日期范围过滤：获取 ISO 格式的日期
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         future_date = (now + timedelta(days=1)).isoformat()
 

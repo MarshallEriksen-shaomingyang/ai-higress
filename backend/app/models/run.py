@@ -20,7 +20,7 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     eval_id: Mapped[PG_UUID | None] = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("chat_evals.id", ondelete="SET NULL"),
+        ForeignKey("chat_evals.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
         index=True,
         doc="可选：所属评测（Eval）。用于在 challenger 完成后高效更新 Eval 状态。",
