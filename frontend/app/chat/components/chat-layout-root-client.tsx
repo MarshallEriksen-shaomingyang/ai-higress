@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Layout } from "react-resizable-panels";
 import { toast } from "sonner";
 
 import { ProjectSelector } from "@/components/chat/project-selector";
@@ -73,12 +74,12 @@ export function ChatLayoutRootClient({
     setSelectedConversation,
   } = useChatStore();
 
-  const storedLayout = useChatLayoutStore((s) => s.layout);
   const setLayout = useChatLayoutStore((s) => s.setLayout);
   const activeTab = useChatLayoutStore((s) => s.activeTab);
   const setActiveTab = useChatLayoutStore((s) => s.setActiveTab);
 
   const defaultLayout = useMemo(() => {
+    const storedLayout = useChatLayoutStore.getState().layout;
     if (!storedLayout) return undefined;
 
     const isValidStoredLayout =
@@ -89,7 +90,36 @@ export function ChatLayoutRootClient({
       Object.keys(storedLayout).length === 2;
 
     return isValidStoredLayout ? storedLayout : undefined;
-  }, [storedLayout]);
+  }, []);
+
+  const layoutDebounceTimerRef = useRef<number | null>(null);
+  const pendingLayoutRef = useRef<Layout | null>(null);
+
+  const handleLayoutChange = useCallback(
+    (layout: Layout) => {
+      pendingLayoutRef.current = layout;
+      if (layoutDebounceTimerRef.current !== null) {
+        window.clearTimeout(layoutDebounceTimerRef.current);
+      }
+      layoutDebounceTimerRef.current = window.setTimeout(() => {
+        if (pendingLayoutRef.current) {
+          setLayout(pendingLayoutRef.current);
+        }
+      }, 200);
+    },
+    [setLayout]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (layoutDebounceTimerRef.current !== null) {
+        window.clearTimeout(layoutDebounceTimerRef.current);
+      }
+      if (pendingLayoutRef.current) {
+        setLayout(pendingLayoutRef.current);
+      }
+    };
+  }, [setLayout]);
 
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(
@@ -334,7 +364,7 @@ export function ChatLayoutRootClient({
           id="chat-layout"
           direction="horizontal"
           defaultLayout={defaultLayout}
-          onLayoutChange={setLayout}
+          onLayoutChange={handleLayoutChange}
           className="h-full w-full"
         >
           <ResizablePanel

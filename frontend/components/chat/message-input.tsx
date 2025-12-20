@@ -27,6 +27,7 @@ export interface MessageInputProps {
   disabled?: boolean;
   onMessageSent?: (message: Message) => void;
   className?: string;
+  layout?: "auto" | "fill";
 }
 
 export function MessageInput({
@@ -36,6 +37,7 @@ export function MessageInput({
   disabled = false,
   onMessageSent,
   className,
+  layout = "auto",
 }: MessageInputProps) {
   const { t } = useI18n();
   const [isSending, setIsSending] = useState(false);
@@ -57,6 +59,18 @@ export function MessageInput({
   });
 
   const content = watch("content");
+  const isFillLayout = layout === "fill";
+
+  const contentField = register("content", {
+    onChange: () => {
+      if (isFillLayout) return;
+
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      }
+    },
+  });
 
   // 发送消息
   const onSubmit = async (data: MessageFormData) => {
@@ -79,7 +93,7 @@ export function MessageInput({
       reset();
 
       // 重置 textarea 高度
-      if (textareaRef.current) {
+      if (!isFillLayout && textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
 
@@ -110,24 +124,20 @@ export function MessageInput({
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className={cn("flex items-end gap-2 p-4 border-t bg-background", className)}
+      className={cn(
+        "flex items-end gap-2 p-4 border-t bg-background",
+        isFillLayout && "h-full",
+        className
+      )}
       role="form"
       aria-label={t("chat.message.input_form")}
     >
       {/* 输入框 */}
-      <div className="flex-1 relative">
+      <div className={cn("flex-1 relative", isFillLayout && "h-full")}>
         <textarea
-          {...register("content", {
-            onChange: () => {
-              // 自动调整高度
-              if (textareaRef.current) {
-                textareaRef.current.style.height = "auto";
-                textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-              }
-            }
-          })}
+          {...contentField}
           ref={(e) => {
-            register("content").ref(e);
+            contentField.ref(e);
             textareaRef.current = e;
           }}
           placeholder={disabled ? t("chat.conversation.archived_notice") : t("chat.message.input_placeholder")}
@@ -142,7 +152,7 @@ export function MessageInput({
             "placeholder:text-muted-foreground",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             "disabled:cursor-not-allowed disabled:opacity-50",
-            "max-h-32 overflow-y-auto",
+            isFillLayout ? "h-full max-h-none overflow-y-auto" : "max-h-32 overflow-y-auto",
             errors.content && "border-destructive"
           )}
         />
@@ -155,6 +165,7 @@ export function MessageInput({
         disabled={disabled || isSending || !content.trim()}
         aria-label={isSending ? t("chat.message.sending") : t("chat.message.send")}
         title={t("chat.message.send_hint")}
+        className={cn(isFillLayout && "self-end")}
       >
         {isSending ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />

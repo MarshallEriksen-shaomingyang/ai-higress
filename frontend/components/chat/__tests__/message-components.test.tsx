@@ -78,6 +78,25 @@ describe('MessageItem', () => {
     fireEvent.click(screen.getByRole('button', { name: 'chat.message.show_thoughts' }));
     expect(screen.getByText('Hidden reasoning')).toBeInTheDocument();
   });
+
+  it('renders markdown image and auto-embeds standalone image url', () => {
+    const messageWithImages: Message = {
+      message_id: 'msg-4',
+      conversation_id: 'conv-1',
+      role: 'assistant',
+      content: [
+        'Here is an image:',
+        '![alt text](https://example.com/a.png)',
+        '',
+        'https://example.com/b.jpg',
+      ].join('\n'),
+      run_id: 'run-3',
+      created_at: new Date().toISOString(),
+    };
+
+    render(<MessageItem message={messageWithImages} runs={[mockRun]} />);
+    expect(screen.getAllByRole('img').length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe('MessageInput', () => {

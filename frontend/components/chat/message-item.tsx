@@ -4,12 +4,13 @@ import { formatDistanceToNow } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
 import { User, Bot, Eye, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useI18n } from "@/lib/i18n-context";
 import type { Message, RunSummary } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 import { MessageContent } from "./message-content";
+import { AdaptiveCard } from "@/components/cards/adaptive-card";
 
 export interface MessageItemProps {
   message: Message;
@@ -100,12 +101,13 @@ export function MessageItem({
       {/* 消息内容 */}
       <div className={cn("flex flex-col gap-2 max-w-[80%]", isUser && "items-end")}>
         {/* 消息卡片 */}
-        <Card
+        <AdaptiveCard
+          showDecor={false}
+          variant="plain"
+          hoverScale={false}
           className={cn(
-            "shadow-sm",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-card"
+            "py-0 gap-0 shadow-sm",
+            isUser ? "bg-primary text-primary-foreground border-0" : "bg-card"
           )}
         >
           <CardContent className="py-3 px-4">
@@ -141,7 +143,7 @@ export function MessageItem({
               </>
             )}
           </CardContent>
-        </Card>
+        </AdaptiveCard>
 
         {/* 时间和操作按钮 */}
         <div className="flex items-center gap-2 px-1">

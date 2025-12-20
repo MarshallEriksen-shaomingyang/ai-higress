@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Eye, EyeOff, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n-context";
 import {
@@ -118,9 +119,11 @@ function CodeBlock({
 function MarkdownContent({
   content,
   enableMath,
+  defaultImageAlt,
 }: {
   content: string;
   enableMath: boolean;
+  defaultImageAlt: string;
 }) {
   return (
     <ReactMarkdown
@@ -137,6 +140,20 @@ function MarkdownContent({
             {children}
           </a>
         ),
+        img: ({ alt, src }) => {
+          if (!src) return null;
+          const resolvedAlt = alt && alt.trim().length > 0 ? alt : defaultImageAlt;
+          return (
+            <a href={src} target="_blank" rel="noreferrer" className="block">
+              <img
+                src={src}
+                alt={resolvedAlt}
+                loading="lazy"
+                className="mt-2 max-w-full rounded-md border bg-muted/10"
+              />
+            </a>
+          );
+        },
         code: ({ children, className, node, ...props }) => {
           const raw = String(children ?? "");
           const langMatch = /language-(\w+)/.exec(className || "");
@@ -189,8 +206,20 @@ function unwrapThinkTags(input: string) {
   return input.replace(/<think>([\s\S]*?)<\/think>/gi, (_, inner: string) => inner ?? "");
 }
 
+function autoEmbedImageUrls(markdown: string) {
+  // 仅对“单独一行”的图片链接做自动嵌入，避免误伤普通文本中的 URL
+  const imageUrlPattern =
+    /(^|\n)\s*(https?:\/\/[^\s)]+?\.(?:png|jpe?g|gif|webp|svg))(?:\s*)(?=\n|$)/gi;
+  const dataUrlPattern = /(^|\n)\s*(data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+)(?:\s*)(?=\n|$)/gi;
+
+  return markdown
+    .replace(imageUrlPattern, (_m, prefix: string, url: string) => `${prefix}![](${url})`)
+    .replace(dataUrlPattern, (_m, prefix: string, url: string) => `${prefix}![](${url})`);
+}
+
 export function MessageContent({ content, role, options, className }: MessageContentProps) {
   const { t } = useI18n();
+  const thinkPanelId = useId();
 
   const resolved = useMemo(() => {
     return { ...DEFAULT_MESSAGE_RENDER_OPTIONS, ...(options ?? {}) };
@@ -208,12 +237,19 @@ export function MessageContent({ content, role, options, className }: MessageCon
 
   const enableMarkdown = resolved.enable_markdown;
   const enableMath = resolved.enable_math;
+  const defaultImageAlt = t("chat.message.image");
 
   const renderBody = (raw: string, preserveNewlines: boolean) => {
     if (!enableMarkdown) {
       return <div className={preserveNewlines ? "whitespace-pre-wrap" : undefined}>{raw}</div>;
     }
-    return <MarkdownContent content={raw} enableMath={enableMath} />;
+    return (
+      <MarkdownContent
+        content={autoEmbedImageUrls(raw)}
+        enableMath={enableMath}
+        defaultImageAlt={defaultImageAlt}
+      />
+    );
   };
 
   const thinkSegments = segments.filter((s) => s.type === "think") as Array<
@@ -235,32 +271,35 @@ export function MessageContent({ content, role, options, className }: MessageCon
   return (
     <div className={cn("text-sm break-words", className)}>
       {role === "assistant" && mergedThink ? (
-        <div className="mb-2 rounded-md border bg-muted/20">
-          <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-            <div className="min-w-0 text-xs text-muted-foreground">
-              {t("chat.message.thoughts")}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowThink((v) => !v)}
-              aria-label={showThink ? t("chat.message.hide_thoughts") : t("chat.message.show_thoughts")}
-            >
-              {showThink ? (
-                <>
-                  <EyeOff className="mr-2 size-4" />
-                  {t("chat.message.hide")}
-                </>
-              ) : (
-                <>
-                  <Eye className="mr-2 size-4" />
-                  {t("chat.message.show")}
-                </>
-              )}
-            </Button>
+        <div className="mb-2">
+          <div className="inline-flex items-center gap-2 rounded-full border bg-muted/10 px-2 py-1 text-xs text-muted-foreground">
+            <span className="text-foreground/80">{t("chat.message.thoughts")}</span>
+            <span className="h-3 w-px bg-border" aria-hidden="true" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="h-6 w-6"
+                  onClick={() => setShowThink((v) => !v)}
+                  aria-label={showThink ? t("chat.message.hide_thoughts") : t("chat.message.show_thoughts")}
+                  aria-expanded={showThink}
+                  aria-controls={thinkPanelId}
+                >
+                  {showThink ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={6}>
+                {showThink ? t("chat.message.hide_thoughts") : t("chat.message.show_thoughts")}
+              </TooltipContent>
+            </Tooltip>
           </div>
+
           {showThink ? (
-            <div className="border-t px-3 py-2 text-xs leading-relaxed">
+            <div
+              id={thinkPanelId}
+              className="mt-2 rounded-md border-l-2 bg-muted/10 px-3 py-2 text-xs leading-relaxed"
+            >
               {renderBody(mergedThink, true)}
             </div>
           ) : null}

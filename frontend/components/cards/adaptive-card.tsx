@@ -15,6 +15,18 @@ interface AdaptiveCardProps extends Omit<React.ComponentProps<typeof Card>, "cla
    */
   className?: string;
   /**
+   * 视觉变体
+   * - theme: 使用全局 .theme-adaptive-card 玻璃拟态样式（默认）
+   * - plain: 不附加主题玻璃样式，便于自定义背景（例如聊天气泡）
+   * @default "theme"
+   */
+  variant?: "theme" | "plain";
+  /**
+   * 是否启用 hover 缩放动效
+   * @default true
+   */
+  hoverScale?: boolean;
+  /**
    * 外层包裹 div 的 className（用于布局/分组 hover 等）
    */
   wrapperClassName?: string;
@@ -60,6 +72,8 @@ interface AdaptiveCardProps extends Omit<React.ComponentProps<typeof Card>, "cla
  */
 export function AdaptiveCard({
   className,
+  variant = "theme",
+  hoverScale = true,
   wrapperClassName,
   showDecor = true,
   title,
@@ -75,10 +89,9 @@ export function AdaptiveCard({
       <Card
         className={cn(
           "relative overflow-hidden",
-          "theme-adaptive-card",
-          "border-white/20",
+          variant === "theme" ? "theme-adaptive-card border-white/20" : undefined,
           "transition-all duration-300",
-          "hover:scale-[1.02]",
+          hoverScale ? "hover:scale-[1.02]" : undefined,
           className,
         )}
         {...props}

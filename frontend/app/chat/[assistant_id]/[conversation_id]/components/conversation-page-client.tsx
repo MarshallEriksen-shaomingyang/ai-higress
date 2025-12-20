@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { Layout } from "react-resizable-panels";
 import { toast } from "sonner";
 
 import { useAuth } from "@/components/providers/auth-provider";
@@ -52,11 +53,11 @@ export function ConversationPageClient({
     setActiveEval,
     conversationModelOverrides,
   } = useChatStore();
-  const storedVerticalLayout = useChatLayoutStore((s) => s.chatVerticalLayout);
   const setChatVerticalLayout = useChatLayoutStore((s) => s.setChatVerticalLayout);
   const createEval = useCreateEval();
 
   const defaultVerticalLayout = useMemo(() => {
+    const storedVerticalLayout = useChatLayoutStore.getState().chatVerticalLayout;
     if (!storedVerticalLayout) return undefined;
 
     const isValid =
@@ -67,7 +68,36 @@ export function ConversationPageClient({
       Object.keys(storedVerticalLayout).length === 2;
 
     return isValid ? storedVerticalLayout : undefined;
-  }, [storedVerticalLayout]);
+  }, []);
+
+  const verticalLayoutDebounceTimerRef = useRef<number | null>(null);
+  const pendingVerticalLayoutRef = useRef<Layout | null>(null);
+
+  const handleVerticalLayoutChange = useCallback(
+    (layout: Layout) => {
+      pendingVerticalLayoutRef.current = layout;
+      if (verticalLayoutDebounceTimerRef.current !== null) {
+        window.clearTimeout(verticalLayoutDebounceTimerRef.current);
+      }
+      verticalLayoutDebounceTimerRef.current = window.setTimeout(() => {
+        if (pendingVerticalLayoutRef.current) {
+          setChatVerticalLayout(pendingVerticalLayoutRef.current);
+        }
+      }, 200);
+    },
+    [setChatVerticalLayout]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (verticalLayoutDebounceTimerRef.current !== null) {
+        window.clearTimeout(verticalLayoutDebounceTimerRef.current);
+      }
+      if (pendingVerticalLayoutRef.current) {
+        setChatVerticalLayout(pendingVerticalLayoutRef.current);
+      }
+    };
+  }, [setChatVerticalLayout]);
 
   const handleTriggerEval = async (messageId: string, baselineRunId: string) => {
     if (!user || !selectedProjectId) return;
@@ -127,7 +157,7 @@ export function ConversationPageClient({
           id="chat-vertical-layout"
           direction="vertical"
           defaultLayout={defaultVerticalLayout}
-          onLayoutChange={setChatVerticalLayout}
+          onLayoutChange={handleVerticalLayoutChange}
         >
           <ResizablePanel
             id="message-list"
@@ -151,14 +181,14 @@ export function ConversationPageClient({
             minSize="15"
             maxSize="50"
           >
-            <div className="flex h-full flex-col bg-background">
-              <div className="flex-1" />
+            <div className="h-full bg-background">
               <MessageInput
                 conversationId={conversationId}
                 assistantId={assistantId}
                 overrideLogicalModel={overrideLogicalModel}
                 disabled={isArchived}
-                className="border-t-0"
+                layout="fill"
+                className="h-full border-t-0"
               />
             </div>
           </ResizablePanel>

@@ -144,6 +144,7 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.message.code": "Code",
     "chat.message.copy_code": "Copy code",
     "chat.message.copied": "Copied",
+    "chat.message.image": "Image",
 
     // ===== Run 详情 =====
     "chat.run.title": "Run Details",
@@ -421,6 +422,7 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.message.code": "代码",
     "chat.message.copy_code": "复制代码",
     "chat.message.copied": "已复制",
+    "chat.message.image": "图片",
 
     // ===== Run 详情 =====
     "chat.run.title": "运行详情",
