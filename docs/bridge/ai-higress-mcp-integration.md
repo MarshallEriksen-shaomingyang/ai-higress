@@ -1,7 +1,12 @@
 AI-Higress-Gateway 接入 MCP（Bridge）设计说明
 ========================================
 
-本文档描述“本项目（AI-Higress-Gateway）如何接入 MCP 能力”的落地设计，基于 `docs/bridge/design.md` 的通用架构方案，强调与本仓库现有技术栈（FastAPI + Next.js）之间的边界与集成点。在让用户创建mcp时向用户说明我们为了用户安全所以用户配置的mcp里面的任何数据都不会经历云端 所以需要用户手动下载配置文件虽然可以加密存储 让远程可以直接一键配置功能还是根据后面用户需求才考虑添加。
+本文档描述“本项目（AI-Higress-Gateway）如何接入 MCP 能力”的落地设计，基于 `docs/bridge/design.md` 的通用架构方案，强调与本仓库现有技术栈（FastAPI + Next.js）之间的边界与集成点。
+
+配置安全说明（方案 A，当前确定）:
+- Web 配置向导在浏览器内生成 `config.yaml` 并下载；敏感信息不上传、不经过云端。
+- 用户需手动导入/放置该配置文件以让 Agent 生效。
+- 未来如需要“一键远程下发配置”，可再评估端到端加密（E2EE）方案，但不作为当前 MVP 范围。
 目标与边界
 ----------
 
@@ -24,9 +29,10 @@ AI-Higress-Gateway 接入 MCP（Bridge）设计说明
 - `backend/`（FastAPI）:
   - Chat 编排层：接收用户消息，调用 LLM；当出现 tool_calls 时向指定 `agent_id` 下发执行并回填 tool result。
   - SSE 输出：将“工具执行日志/状态/终态结果”以 SSE 事件推送给前端。
-- `bridge/`（Go，待新增）:
-  - `cmd/agent`：Bridge Agent（运行在用户机器/服务器）聚合 MCP servers。
-  - `cmd/tunnel-gateway`：Tunnel Gateway（云端连接层）维护 Agent WSS 连接与路由。
+- `bridge/`（Go，已落地 MVP）:
+  - `cmd/bridge`：单入口 CLI（`bridge config|agent|gateway`）。
+  - `bridge agent start`：Bridge Agent（运行在用户机器/服务器）连接云端并执行 MCP（当前先用内置 echo 做端到端验证，后续接入真实 MCP 聚合）。
+  - `bridge gateway serve`：Tunnel Gateway（云端连接层）维护 Agent WSS 连接与路由（当前为单实例无 Redis MVP）。
 
 数据流（端到端）
 --------------
@@ -56,6 +62,10 @@ AI-Higress-Gateway 接入 MCP（Bridge）设计说明
 --------------------------
 
 用户安装与运行 Bridge Agent 不需要 Redis。Redis（或替代消息系统）仅在云端用于“多实例路由/投递解耦/可靠队列”。
+
+当前实现状态（本仓库）:
+- 已实现“单实例无 Redis MVP”：Tunnel Gateway 内存连接表 + 内网 HTTP 下发 + SSE events 回传。
+- 云端 Redis 的 Registry/Streams/PubSub 尚未接入代码，需要后续在“云端部署扩展/多实例”阶段接入（Redis 只部署在云端）。
 
 MVP（推荐先做，零额外依赖）:
 - Tunnel Gateway 单实例部署（内存连接表）。

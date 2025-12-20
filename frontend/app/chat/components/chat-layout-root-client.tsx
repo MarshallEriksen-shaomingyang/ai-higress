@@ -369,9 +369,9 @@ export function ChatLayoutRootClient({
         >
           <ResizablePanel
             id="chat-sidebar"
-            defaultSize="25%"
-            minSize="20%"
-            maxSize="50%"
+            defaultSize={25}
+            minSize={20}
+            maxSize={50}
           >
             <div className="flex h-full flex-col border-r">
               <div className="border-b p-4">
@@ -451,7 +451,7 @@ export function ChatLayoutRootClient({
 
           <ResizableHandle withHandle />
 
-          <ResizablePanel id="chat-main" defaultSize="75%">
+          <ResizablePanel id="chat-main" defaultSize={'75%'}>
             <div className="h-full overflow-hidden">
               {selectedProjectId ? (
                 children

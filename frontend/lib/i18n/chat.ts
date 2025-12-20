@@ -281,6 +281,9 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.action.retry": "Retry",
     "chat.action.retry_load_messages": "Retry loading messages",
     "chat.action.back": "Back",
+    "chat.action.enter_immersive": "Enter Immersive Mode",
+    "chat.action.exit_immersive": "Exit Immersive Mode",
+    "chat.header.immersive_title": "Immersive Reading",
   },
   zh: {
     // ===== 欢迎页面 =====
@@ -559,5 +562,8 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.action.retry": "重试",
     "chat.action.retry_load_messages": "重试加载消息",
     "chat.action.back": "返回",
+    "chat.action.enter_immersive": "开启沉浸模式",
+    "chat.action.exit_immersive": "退出沉浸模式",
+    "chat.header.immersive_title": "沉浸式阅读",
   },
 };

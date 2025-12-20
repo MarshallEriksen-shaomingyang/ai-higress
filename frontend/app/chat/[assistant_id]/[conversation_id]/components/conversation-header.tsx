@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -9,8 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { useI18n } from "@/lib/i18n-context";
+import { useChatLayoutStore } from "@/lib/stores/chat-layout-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useAssistant } from "@/lib/swr/use-assistants";
 import { useLogicalModels } from "@/lib/swr/use-logical-models";
@@ -31,6 +39,9 @@ export function ConversationHeader({
   const { t } = useI18n();
   const { assistant } = useAssistant(assistantId);
   const { models } = useLogicalModels();
+
+  const isImmersive = useChatLayoutStore((s) => s.isImmersive);
+  const setIsImmersive = useChatLayoutStore((s) => s.setIsImmersive);
 
   const {
     conversationModelOverrides,
@@ -78,6 +89,27 @@ export function ConversationHeader({
       </div>
 
       <div className="flex items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsImmersive(!isImmersive)}
+              className="h-9 w-9"
+            >
+              {isImmersive ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {isImmersive
+              ? t("chat.action.exit_immersive")
+              : t("chat.action.enter_immersive")}
+          </TooltipContent>
+        </Tooltip>
         <div className="w-[220px]">
           <Select
             value={selectedValue}

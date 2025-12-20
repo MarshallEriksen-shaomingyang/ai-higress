@@ -32,6 +32,7 @@ from .api.v1.api_key_routes import router as api_key_router
 from .api.v1.chat_routes import router as chat_router
 from .api.v1.credit_routes import router as credit_router
 from .api.v1.gateway_routes import router as gateway_router
+from .api.v1.bridge_routes import router as bridge_router
 from .api.v1.notification_routes import router as notification_router
 from .api.v1.private_provider_routes import router as private_provider_router
 from .api.v1.provider_key_routes import router as provider_key_router
@@ -213,6 +214,8 @@ def create_app() -> FastAPI:
 
     # Chat 相关网关路由（/v1/chat/completions、/v1/responses、/v1/messages）
     app.include_router(chat_router)
+    # MCP Bridge（Agent / Tools / Events）
+    app.include_router(bridge_router)
 
     # Metrics
     app.include_router(metrics_router)

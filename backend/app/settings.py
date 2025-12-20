@@ -584,6 +584,23 @@ class Settings(BaseSettings):
     # Models cache TTL in seconds
     models_cache_ttl: int = Field(300, alias="MODELS_CACHE_TTL")
 
+    # Bridge / MCP tunnel gateway (internal)
+    bridge_gateway_url: str = Field(
+        "http://127.0.0.1:8088",
+        alias="BRIDGE_GATEWAY_URL",
+        description="Tunnel Gateway internal base URL (Backend -> Gateway)",
+    )
+    bridge_gateway_internal_token: str = Field(
+        "",
+        alias="BRIDGE_GATEWAY_INTERNAL_TOKEN",
+        description="Shared token for Tunnel Gateway internal APIs (X-Internal-Token)",
+    )
+    bridge_gateway_events_path: str = Field(
+        "/internal/bridge/events",
+        alias="BRIDGE_GATEWAY_EVENTS_PATH",
+        description="Tunnel Gateway SSE events path (internal)",
+    )
+
     # Browser-mimic headers for upstream (掩护功能)
     mask_as_browser: bool = Field(True, alias="MASK_AS_BROWSER")
     mask_user_agent: str = Field(

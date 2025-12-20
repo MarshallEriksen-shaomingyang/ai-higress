@@ -57,7 +57,7 @@ MCP SDK:
 
 其他依赖（建议）:
 - WebSocket: `nhooyr.io/websocket` 或 `github.com/gorilla/websocket`
-- Redis: `github.com/redis/go-redis/v9`
+- Redis（可选，仅云端 HA/多实例时需要）: `github.com/redis/go-redis/v9`
 
 ---
 
@@ -70,7 +70,7 @@ graph TD
     WebUI[Web Browser / PWA]
     Backend[Backend Orchestrator (FastAPI)\nAuth/Billing/LLM Loop/SSE]
     Tunnel[Tunnel Gateway (Go)\nWSS/Conn Map/Heartbeat]
-    Redis[(Redis\nRegistry + Streams + PubSub)]
+    Redis[(Redis (Optional)\nRegistry + Streams + PubSub)]
     LLM[LLM Providers\n(OpenAI/Claude/DeepSeek...)]
   end
 
@@ -88,8 +88,8 @@ graph TD
   Backend -->|SSE text/event-stream| WebUI
   Backend -->|HTTP/SSE| LLM
 
-  Backend <--> |Redis| Redis
-  Tunnel <--> |Redis| Redis
+  Backend <--> |Redis (Optional)| Redis
+  Tunnel <--> |Redis (Optional)| Redis
 
   Agent -->|WSS Outbound| Tunnel
   Agent -.->|Read| Config
@@ -194,6 +194,19 @@ graph TD
 ---
 
 ## 5. 多实例路由与 Redis 设计（建议）
+
+> 重要：Redis 不属于“用户安装依赖”。用户侧只需要安装并运行 Agent 二进制即可。
+>
+> MVP（推荐先做）可以采用 **Tunnel Gateway 单实例** 部署，不引入 Redis：
+> - Tunnel Gateway 内存维护连接表；
+> - 后端通过内网 HTTP/gRPC 直接下发 INVOKE/CANCEL；
+> - RESULT 强可靠依赖 `RESULT_ACK` + Agent 端缓存/重传。
+>
+> 当进入 K8s 多副本/HA 后，再引入 Redis（或 NATS/Kafka 等）实现跨实例路由与可靠队列。
+
+当前实现状态（本仓库）:
+- 已实现“单实例无 Redis MVP”（内存连接表 + 内网 HTTP 下发 + SSE events 回传）。
+- 云端 Redis（Registry/Streams/PubSub）接入属于后续扩展阶段；Redis 仅部署在云端，不要求用户本地安装。
 
 ### 5.1 Registry（在线注册）
 - Key: `agent_online:{agent_id}`
