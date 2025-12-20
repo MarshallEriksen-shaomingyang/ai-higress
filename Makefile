@@ -1,4 +1,5 @@
 .PHONY: help sync-env dev-backend dev-frontend dev docker-up docker-down clean
+.PHONY: build-bridge-dist
 
 help: ## 显示帮助信息
 	@echo "AI-Higress-Gateway 开发命令"
@@ -41,6 +42,9 @@ clean: ## 清理临时文件
 	rm -rf frontend/.next
 	rm -rf frontend/node_modules/.cache
 	@echo "清理完成"
+
+build-bridge-dist: ## 构建 Go Bridge 发布包（Linux/macOS/Windows）
+	@bash scripts/build-bridge-dist.sh
 
 install-backend: ## 安装后端依赖
 	@echo "安装后端依赖..."

@@ -81,36 +81,39 @@ export function ConversationHeader({
   const displayTitle = (title || "").trim() || t("chat.conversation.untitled");
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b bg-background px-4 py-2">
-      <div className="min-w-0">
+    <div className="flex items-center justify-between gap-2 md:gap-3 border-b bg-background px-3 md:px-4 py-2">
+      <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{displayTitle}</div>
-        <div className="truncate text-xs text-muted-foreground">
+        <div className="truncate text-xs text-muted-foreground hidden md:block">
           {t("chat.header.model_label")}:{" "}
           {currentOverride || effectiveAssistantDefaultModel}
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 md:gap-2">
+        {/* 移动端隐藏 Bridge 按钮 */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant={isBridgePanelOpen ? "secondary" : "ghost"}
               size="icon"
               onClick={() => setIsBridgePanelOpen(!isBridgePanelOpen)}
-              className="h-9 w-9"
+              className="h-8 w-8 md:h-9 md:w-9 hidden md:flex"
             >
               <PlugZap className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t("chat.bridge.toggle")}</TooltipContent>
         </Tooltip>
+        
+        {/* 沉浸模式按钮 */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setIsImmersive(!isImmersive)}
-              className="h-9 w-9"
+              className="h-8 w-8 md:h-9 md:w-9"
             >
               {isImmersive ? (
                 <Minimize2 className="h-4 w-4" />
@@ -125,7 +128,9 @@ export function ConversationHeader({
               : t("chat.action.enter_immersive")}
           </TooltipContent>
         </Tooltip>
-        <div className="w-[220px]">
+        
+        {/* 模型选择器 - 移动端缩小 */}
+        <div className="w-[140px] md:w-[220px]">
           <Select
             value={selectedValue}
             onValueChange={(value) => {
@@ -136,7 +141,7 @@ export function ConversationHeader({
               }
             }}
           >
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-8 md:h-9 text-xs md:text-sm">
               <SelectValue placeholder={t("chat.header.model_placeholder")} />
             </SelectTrigger>
             <SelectContent>

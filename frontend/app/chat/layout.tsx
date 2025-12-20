@@ -10,7 +10,10 @@ export default function ChatLayout({
 }) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
-      <ChatNavRail />
+      {/* 桌面端导航栏 - 在移动端隐藏 */}
+      <div className="hidden md:block h-full">
+        <ChatNavRail />
+      </div>
       <div className="flex-1 h-full overflow-hidden glass-card">
         <ChatLayoutRootClient>{children}</ChatLayoutRootClient>
       </div>

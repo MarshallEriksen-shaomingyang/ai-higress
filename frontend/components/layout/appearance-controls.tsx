@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Languages } from "lucide-react";
+import { Languages, User } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,6 +21,7 @@ export function AppearanceControls({
   className?: string;
 }) {
   const { language, setLanguage, t } = useI18n();
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -32,7 +35,7 @@ export function AppearanceControls({
   const languageButton = (
     <Button
       variant="ghost"
-      size={isRail ? "icon" : "icon"}
+      size="icon"
       onClick={() => setLanguage(language === "en" ? "zh" : "en")}
       aria-label={t("common.switch_language")}
       title={t("common.switch_language")}
@@ -55,6 +58,28 @@ export function AppearanceControls({
         </Tooltip>
       ) : (
         languageButton
+      )}
+      {isRail && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-10 w-10 rounded-xl",
+                pathname.startsWith("/profile") && "bg-accent text-accent-foreground"
+              )}
+            >
+              <Link href="/profile" aria-label={t("nav.my_profile")}>
+                <User className="h-5 w-5" />
+              </Link>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8}>
+            {t("nav.my_profile")}
+          </TooltipContent>
+        </Tooltip>
       )}
     </div>
   );

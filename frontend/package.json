@@ -38,6 +38,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.13",
     "add": "^2.0.6",
+    "ahooks": "^3.9.6",
     "axios": "^1.13.2",
     "bun": "^1.3.3",
     "class-variance-authority": "^0.7.1",

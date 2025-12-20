@@ -1,25 +1,32 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { createEditor, Descendant, Editor, Transforms, Element as SlateElement } from "slate";
 import { Slate, Editable, withReact, ReactEditor } from "slate-react";
 import { withHistory } from "slate-history";
+import { useSize, useDebounceFn } from "ahooks";
 import { 
   Send, 
-  Image as ImageIcon, 
-  Trash2, 
-  Settings2,
   Zap,
   Loader2 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n-context";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ClearHistoryAction } from "./chat-input/clear-history-action";
+import { ImagePreviewGrid, ImageUploadAction } from "./chat-input/image-attachments";
+import { ModelParametersPopover, type ModelParameterEnabled } from "./chat-input/model-parameters-popover";
+import { buildModelPreset } from "./chat-input/model-preset";
+import { encodeImageFileToCompactDataUrl } from "./chat-input/image-encoding";
+import { composeMessageContent, isMessageTooLong } from "./chat-input/message-content";
+import {
+  DEFAULT_MODEL_PARAMETERS,
+  type ModelParameters,
+} from "./chat-input/types";
+
+export type { ModelParameters } from "./chat-input/types";
 
 // Slate 类型定义
 type CustomElement = 
@@ -36,34 +43,35 @@ declare module "slate" {
   }
 }
 
-// 模型参数接口
-export interface ModelParameters {
-  temperature: number;
-  top_p: number;
-  frequency_penalty: number;
-  presence_penalty: number;
-  max_tokens?: number;
-}
+const IMAGE_DATA_URL_MAX_CHARS = 9000;
+const MAX_IMAGES = 3;
 
 export interface SlateChatInputProps {
   conversationId: string;
   assistantId?: string;
   disabled?: boolean;
-  onSend?: (content: string, images: string[], parameters: ModelParameters) => Promise<void>;
+  onSend?:
+    | ((
+        content: string,
+        images: string[],
+        parameters: ModelParameters
+      ) => Promise<void>)
+    | ((
+        payload: {
+          content: string;
+          images: string[];
+          model_preset?: Record<string, number>;
+          parameters: ModelParameters;
+        }
+      ) => Promise<void>);
   onClearHistory?: () => Promise<void>;
   onMcpAction?: () => void;
   className?: string;
   defaultParameters?: Partial<ModelParameters>;
 }
 
-const DEFAULT_PARAMETERS: ModelParameters = {
-  temperature: 1.0,
-  top_p: 1.0,
-  frequency_penalty: 0.0,
-  presence_penalty: 0.0,
-};
-
 export function SlateChatInput({
+  conversationId,
   disabled = false,
   onSend,
   onClearHistory,
@@ -74,13 +82,25 @@ export function SlateChatInput({
   const { t } = useI18n();
   const [editor] = useState(() => withHistory(withReact(createEditor())));
   const [isSending, setIsSending] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [images, setImages] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  
+  // 监听容器大小变化
+  const containerSize = useSize(containerRef);
   
   // 模型参数状态
   const [parameters, setParameters] = useState<ModelParameters>({
-    ...DEFAULT_PARAMETERS,
+    ...DEFAULT_MODEL_PARAMETERS,
     ...defaultParameters,
+  });
+  const [paramEnabled, setParamEnabled] = useState<ModelParameterEnabled>({
+    temperature: false,
+    top_p: false,
+    frequency_penalty: false,
+    presence_penalty: false,
   });
 
   // 初始化编辑器内容
@@ -93,6 +113,31 @@ export function SlateChatInput({
     ],
     []
   );
+
+  // 防抖调整编辑器高度
+  const { run: adjustEditorHeight } = useDebounceFn(
+    () => {
+      if (!editorRef.current || !containerSize) return;
+      
+      // 计算可用高度：容器高度 - 工具栏高度(约44px) - padding
+      const toolbarHeight = 44;
+      const padding = 32; // 上下 padding
+      const availableHeight = (containerSize.height || 0) - toolbarHeight - padding;
+      
+      // 设置最小高度为3行（约72px），最大为可用高度
+      const minHeight = 72;
+      const maxHeight = Math.max(minHeight, availableHeight);
+      
+      editorRef.current.style.minHeight = `${minHeight}px`;
+      editorRef.current.style.maxHeight = `${maxHeight}px`;
+    },
+    { wait: 150 }
+  );
+
+  // 当容器大小变化时调整编辑器高度
+  useEffect(() => {
+    adjustEditorHeight();
+  }, [containerSize, adjustEditorHeight]);
 
   // 获取纯文本内容
   const getTextContent = useCallback(() => {
@@ -116,30 +161,52 @@ export function SlateChatInput({
     });
   }, [editor]);
 
-  // 处理图片上传
-  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleFilesSelected = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith("image/")) {
-        toast.error(t("chat.errors.invalid_file_type"));
-        return;
+      const queued = Array.from(files);
+      const baseImages = images;
+      const remainingSlots = Math.max(0, MAX_IMAGES - baseImages.length);
+      const toProcess = queued.slice(0, remainingSlots);
+      if (toProcess.length < queued.length) {
+        toast.error(t("chat.errors.too_many_images"));
       }
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const url = event.target?.result as string;
-        setImages((prev) => [...prev, url]);
-      };
-      reader.readAsDataURL(file);
-    });
+      const nextImages: string[] = [...baseImages];
 
-    // 重置 input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  }, [t]);
+      for (const file of toProcess) {
+        if (!file.type.startsWith("image/")) {
+          toast.error(t("chat.errors.invalid_file_type"));
+          continue;
+        }
+
+        try {
+          const encoded = await encodeImageFileToCompactDataUrl(file, {
+            maxChars: IMAGE_DATA_URL_MAX_CHARS,
+          });
+          if (!encoded || encoded.length > IMAGE_DATA_URL_MAX_CHARS) {
+            toast.error(t("chat.errors.image_too_large"));
+            continue;
+          }
+          const proposed = composeMessageContent(getTextContent(), [...nextImages, encoded]);
+          if (isMessageTooLong(proposed)) {
+            toast.error(t("chat.errors.message_too_long"));
+            continue;
+          }
+          nextImages.push(encoded);
+        } catch (err) {
+          console.error("Failed to encode image:", err);
+          toast.error(t("chat.errors.image_too_large"));
+        }
+      }
+
+      if (nextImages.length !== baseImages.length) {
+        setImages(nextImages);
+      }
+    },
+    [images, t, getTextContent]
+  );
 
   // 移除图片
   const removeImage = useCallback((index: number) => {
@@ -163,7 +230,29 @@ export function SlateChatInput({
     setIsSending(true);
 
     try {
-      await onSend?.(content, images, parameters);
+      const composed = composeMessageContent(content, images);
+      if (!composed) {
+        toast.error(t("chat.message.input_placeholder"));
+        return;
+      }
+      if (isMessageTooLong(composed)) {
+        toast.error(t("chat.errors.message_too_long"));
+        return;
+      }
+
+      const model_preset = buildModelPreset(paramEnabled, parameters);
+      if (onSend) {
+        if (onSend.length <= 1) {
+          await (onSend as any)({
+            content: composed,
+            images,
+            model_preset,
+            parameters,
+          });
+        } else {
+          await (onSend as any)(composed, images, parameters);
+        }
+      }
       
       // 清空编辑器和图片
       clearEditor();
@@ -176,18 +265,22 @@ export function SlateChatInput({
     } finally {
       setIsSending(false);
     }
-  }, [getTextContent, images, disabled, onSend, parameters, clearEditor, t]);
+  }, [getTextContent, images, disabled, onSend, parameters, clearEditor, t, paramEnabled]);
 
   // 清空历史记录
   const handleClearHistory = useCallback(async () => {
     if (!onClearHistory) return;
 
     try {
+      setIsClearing(true);
       await onClearHistory();
       toast.success(t("chat.message.clear_history_success"));
     } catch (error) {
       console.error("Failed to clear history:", error);
       toast.error(t("chat.message.clear_history_failed"));
+    } finally {
+      setIsClearing(false);
+      setClearDialogOpen(false);
     }
   }, [onClearHistory, t]);
 
@@ -203,220 +296,122 @@ export function SlateChatInput({
   );
 
   return (
-    <div className={cn("flex flex-col gap-3 p-4 border-t bg-background", className)}>
-      {/* 图片预览区 */}
-      {images.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {images.map((url, index) => (
-            <div key={index} className="relative group">
-              <img
-                src={url}
-                alt={`${t("chat.message.uploaded_image")} ${index + 1}`}
-                className="w-20 h-20 object-cover rounded-md border"
-              />
-              <button
-                type="button"
-                onClick={() => removeImage(index)}
-                className="absolute -top-2 -right-2 p-1 bg-destructive text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                aria-label={t("chat.message.remove_image")}
-              >
-                <Trash2 className="size-3" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+    <div 
+      ref={containerRef}
+      className={cn("flex flex-col gap-3 p-4 border-t bg-background h-full", className)}
+    >
+      <ImagePreviewGrid
+        images={images}
+        disabled={disabled || isSending}
+        onRemoveImage={removeImage}
+        uploadedAltPrefix={t("chat.message.uploaded_image")}
+        removeLabel={t("chat.message.remove_image")}
+      />
 
-      {/* 编辑器区域 */}
-      <div className="flex items-end gap-2">
-        <div className="flex-1 relative">
+      {/* 输入框容器 - 包含编辑器和工具栏 */}
+      <div className="relative flex flex-col border rounded-md bg-background focus-within:ring-2 focus-within:ring-ring flex-1">
+        {/* 编辑器区域 */}
+        <div 
+          ref={editorRef}
+          className="flex-1 px-3 pt-3 pb-2 overflow-y-auto"
+        >
           <Slate editor={editor} initialValue={initialValue}>
             <Editable
               placeholder={disabled ? t("chat.conversation.archived_notice") : t("chat.message.input_placeholder")}
-              disabled={disabled || isSending}
+              readOnly={disabled || isSending}
+              aria-disabled={disabled || isSending}
               onKeyDown={handleKeyDown}
               className={cn(
-                "min-h-[80px] max-h-[200px] overflow-y-auto",
-                "w-full resize-none rounded-md border bg-background px-3 py-2 text-sm",
+                "w-full h-full resize-none text-sm outline-none",
                 "placeholder:text-muted-foreground",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                "disabled:cursor-not-allowed disabled:opacity-50"
+                (disabled || isSending) && "cursor-not-allowed opacity-50"
               )}
             />
           </Slate>
         </div>
 
-        {/* 操作按钮组 */}
-        <TooltipProvider>
-          <div className="flex items-center gap-1">
-            {/* 图片上传 */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageUpload}
-              className="hidden"
-              disabled={disabled || isSending}
-            />
+        {/* 工具栏 - 在输入框底部 */}
+        <div className="flex items-center justify-between px-2 py-2 border-t bg-muted/30">
+          <TooltipProvider>
+            <div className="flex items-center gap-1">
+              <ImageUploadAction
+                disabled={disabled || isSending}
+                onFilesSelected={handleFilesSelected}
+                uploadLabel={t("chat.message.upload_image")}
+              />
+
+              <ModelParametersPopover
+                idPrefix={`chat-${conversationId}`}
+                disabled={disabled || isSending}
+                enabled={paramEnabled}
+                parameters={parameters}
+                onEnabledChange={setParamEnabled}
+                onParametersChange={setParameters}
+                onReset={() => {
+                  setParameters({ ...DEFAULT_MODEL_PARAMETERS, ...defaultParameters });
+                  setParamEnabled({
+                    temperature: false,
+                    top_p: false,
+                    frequency_penalty: false,
+                    presence_penalty: false,
+                  });
+                }}
+                title={t("chat.message.model_parameters")}
+                resetLabel={t("chat.message.reset_parameters")}
+                labels={{
+                  temperature: t("chat.message.parameter_temperature"),
+                  top_p: t("chat.message.parameter_top_p"),
+                  frequency_penalty: t("chat.message.parameter_frequency_penalty"),
+                  presence_penalty: t("chat.message.parameter_presence_penalty"),
+                }}
+              />
+
+              {/* MCP 按钮 */}
+              {onMcpAction && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={onMcpAction}
+                      disabled={disabled || isSending}
+                    >
+                      <Zap className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{t("chat.message.mcp_tools")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
+              {/* 清空历史 */}
+              {onClearHistory ? (
+                <ClearHistoryAction
+                  disabled={disabled || isSending}
+                  isBusy={isClearing}
+                  onConfirm={() => void handleClearHistory()}
+                  title={t("chat.message.clear_history")}
+                  description={t("chat.message.clear_history_confirm")}
+                  confirmText={t("chat.action.confirm")}
+                  cancelText={t("chat.action.cancel")}
+                  tooltip={t("chat.message.clear_history")}
+                  open={clearDialogOpen}
+                  onOpenChange={setClearDialogOpen}
+                />
+              ) : null}
+            </div>
+
+            {/* 右侧：发送按钮 */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   type="button"
                   size="icon-sm"
-                  variant="ghost"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={disabled || isSending}
-                >
-                  <ImageIcon className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{t("chat.message.upload_image")}</p>
-              </TooltipContent>
-            </Tooltip>
-
-            {/* 模型参数设置 */}
-            <Popover>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      disabled={disabled || isSending}
-                    >
-                      <Settings2 className="size-4" />
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{t("chat.message.model_parameters")}</p>
-                </TooltipContent>
-              </Tooltip>
-              <PopoverContent className="w-80" align="end">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">{t("chat.message.parameter_temperature")}</Label>
-                      <span className="text-xs text-muted-foreground">{parameters.temperature.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      value={[parameters.temperature]}
-                      onValueChange={([value]) => setParameters((p) => ({ ...p, temperature: value ?? 1.0 }))}
-                      min={0}
-                      max={2}
-                      step={0.1}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">{t("chat.message.parameter_top_p")}</Label>
-                      <span className="text-xs text-muted-foreground">{parameters.top_p.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      value={[parameters.top_p]}
-                      onValueChange={([value]) => setParameters((p) => ({ ...p, top_p: value ?? 1.0 }))}
-                      min={0}
-                      max={1}
-                      step={0.1}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">{t("chat.message.parameter_frequency_penalty")}</Label>
-                      <span className="text-xs text-muted-foreground">{parameters.frequency_penalty.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      value={[parameters.frequency_penalty]}
-                      onValueChange={([value]) => setParameters((p) => ({ ...p, frequency_penalty: value ?? 0.0 }))}
-                      min={0}
-                      max={2}
-                      step={0.1}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">{t("chat.message.parameter_presence_penalty")}</Label>
-                      <span className="text-xs text-muted-foreground">{parameters.presence_penalty.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      value={[parameters.presence_penalty]}
-                      onValueChange={([value]) => setParameters((p) => ({ ...p, presence_penalty: value ?? 0.0 }))}
-                      min={0}
-                      max={2}
-                      step={0.1}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setParameters(DEFAULT_PARAMETERS)}
-                    className="w-full"
-                  >
-                    {t("chat.message.reset_parameters")}
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* MCP 按钮 */}
-            {onMcpAction && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={onMcpAction}
-                    disabled={disabled || isSending}
-                  >
-                    <Zap className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{t("chat.message.mcp_tools")}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-
-            {/* 清空历史 */}
-            {onClearHistory && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={handleClearHistory}
-                    disabled={disabled || isSending}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{t("chat.message.clear_history")}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-
-            {/* 发送按钮 */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  size="icon"
                   onClick={handleSend}
                   disabled={disabled || isSending}
+                  aria-label={isSending ? t("chat.message.sending") : t("chat.message.send")}
                 >
                   {isSending ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -429,14 +424,13 @@ export function SlateChatInput({
                 <p>{t("chat.message.send_hint")}</p>
               </TooltipContent>
             </Tooltip>
-          </div>
-        </TooltipProvider>
+          </TooltipProvider>
+        </div>
       </div>
 
-      {/* 提示文本 */}
-      <p className="text-xs text-muted-foreground text-center">
+      <div className="text-xs text-muted-foreground text-center">
         {t("chat.message.send_hint")}
-      </p>
+      </div>
     </div>
   );
 }

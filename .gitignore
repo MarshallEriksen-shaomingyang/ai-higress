@@ -96,6 +96,7 @@ frontend/.pnpm-debug.log*
 # Project-specific
 # ============================================
 CODEBUDDY.md
+dist/
 specs/
 .specs/
 plans/

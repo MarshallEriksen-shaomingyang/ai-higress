@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -301,6 +301,29 @@ def delete_conversation(
     db.commit()
 
 
+def clear_conversation_messages(
+    db: Session,
+    *,
+    conversation_id: UUID,
+    user_id: UUID,
+) -> Conversation:
+    """
+    清空会话内全部消息（并级联删除 runs/evals），保留会话本身。
+    """
+    conv = get_conversation_any(db, conversation_id=conversation_id, user_id=user_id)
+
+    db.execute(delete(Message).where(Message.conversation_id == conversation_id))
+
+    conv.last_message_content = None
+    conv.unread_count = 0
+    conv.last_activity_at = datetime.now(UTC)
+
+    db.add(conv)
+    db.commit()
+    db.refresh(conv)
+    return conv
+
+
 def delete_assistant(
     db: Session,
     *,
@@ -470,6 +493,7 @@ __all__ = [
     "create_user_message",
     "delete_assistant",
     "delete_conversation",
+    "clear_conversation_messages",
     "get_assistant",
     "get_conversation",
     "get_conversation_any",

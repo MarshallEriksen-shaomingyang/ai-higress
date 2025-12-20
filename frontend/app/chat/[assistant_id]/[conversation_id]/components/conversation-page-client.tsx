@@ -7,7 +7,7 @@ import type { Layout } from "react-resizable-panels";
 import { toast } from "sonner";
 
 import { useAuth } from "@/components/providers/auth-provider";
-import { SlateChatInput } from "@/components/chat/slate-chat-input";
+import { ConversationChatInput } from "@/components/chat/conversation-chat-input";
 import { MessageList } from "@/components/chat/message-list";
 import {
   ResizableHandle,
@@ -25,8 +25,6 @@ import { useChatLayoutStore } from "@/lib/stores/chat-layout-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useConversationFromList } from "@/lib/swr/use-conversations";
 import { useCreateEval } from "@/lib/swr/use-evals";
-import { useSendMessage } from "@/lib/swr/use-messages";
-import type { ModelParameters } from "@/components/chat/slate-chat-input";
 import { ConversationHeader } from "./conversation-header";
 import { BridgePanelClient } from "@/components/chat/bridge-panel-client";
 
@@ -61,17 +59,11 @@ export function ConversationPageClient({
     activeEvalId,
     setActiveEval,
     conversationModelOverrides,
-    conversationBridgeAgentIds,
   } = useChatStore();
   const setChatVerticalLayout = useChatLayoutStore(
     (s) => s.setChatVerticalLayout
   );
   const createEval = useCreateEval();
-  const sendMessage = useSendMessage(
-    conversationId,
-    assistantId,
-    conversationModelOverrides[conversationId] ?? null
-  );
 
   const isImmersive = useChatLayoutStore((s) => s.isImmersive);
   const setIsImmersive = useChatLayoutStore((s) => s.setIsImmersive);
@@ -151,29 +143,6 @@ export function ConversationPageClient({
     setActiveEval(null);
   };
 
-  // 发送消息处理
-  const handleSendMessage = async (
-    content: string,
-    _images: string[],
-    _parameters: ModelParameters
-  ) => {
-    const bridgeAgentId = conversationBridgeAgentIds[conversationId] ?? null;
-    
-    await sendMessage({
-      content,
-      bridge_agent_id: bridgeAgentId || undefined,
-      // TODO: 如果后端支持，可以添加图片和参数
-      // images: _images,
-      // parameters: _parameters,
-    });
-  };
-
-  // 清空历史记录处理
-  const handleClearHistory = async () => {
-    // TODO: 实现清空历史记录的 API 调用
-    toast.info("清空历史记录功能待实现");
-  };
-
   // MCP 工具处理
   const handleMcpAction = () => {
     setIsBridgePanelOpen(!isBridgePanelOpen);
@@ -218,8 +187,8 @@ export function ConversationPageClient({
             <ResizablePanel
               id="message-list"
               defaultSize="70%"
-              minSize="50%"
-              maxSize="85%"
+              minSize="0%"
+              maxSize="100%"
             >
               <div className="h-full overflow-hidden">
                 <MessageList
@@ -234,16 +203,15 @@ export function ConversationPageClient({
             <ResizablePanel
               id="message-input"
               defaultSize="30%"
-              minSize="15%"
-              maxSize="50%"
+              minSize="0%"
+              maxSize="100%"
             >
               <div className="h-full bg-background">
-                <SlateChatInput
+                <ConversationChatInput
                   conversationId={conversationId}
                   assistantId={assistantId}
+                  overrideLogicalModel={conversationModelOverrides[conversationId] ?? null}
                   disabled={isArchived}
-                  onSend={handleSendMessage}
-                  onClearHistory={handleClearHistory}
                   onMcpAction={handleMcpAction}
                   className="h-full border-t-0"
                 />
@@ -276,7 +244,7 @@ export function ConversationPageClient({
                 id="chat-vertical-layout-immersive"
                 direction="vertical"
               >
-                <ResizablePanel defaultSize="70%" minSize="50%" maxSize="85%">
+                <ResizablePanel defaultSize="70%" minSize="0%" maxSize="100%">
                   <div className="h-full overflow-hidden">
                     <MessageList
                       conversationId={conversationId}
@@ -287,14 +255,13 @@ export function ConversationPageClient({
 
                 <ResizableHandle withHandle aria-orientation="horizontal" />
 
-                <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
+                <ResizablePanel defaultSize="30%" minSize="0%" maxSize="100%">
                   <div className="h-full bg-background">
-                    <SlateChatInput
+                    <ConversationChatInput
                       conversationId={conversationId}
                       assistantId={assistantId}
+                      overrideLogicalModel={conversationModelOverrides[conversationId] ?? null}
                       disabled={isArchived}
-                      onSend={handleSendMessage}
-                      onClearHistory={handleClearHistory}
                       onMcpAction={handleMcpAction}
                       className="h-full border-t-0"
                     />
@@ -304,12 +271,12 @@ export function ConversationPageClient({
             </div>
 
             {activeEvalId && (
-              <div className="absolute inset-y-0 right-0 w-96 border-l bg-background shadow-lg z-[110] overflow-y-auto">
+              <div className="absolute inset-y-0 right-0 w-full md:w-96 border-l bg-background shadow-lg z-[110] overflow-y-auto">
                 <EvalPanel evalId={activeEvalId} onClose={handleCloseEval} />
               </div>
             )}
             {isBridgePanelOpen && (
-              <div className="absolute inset-y-0 right-0 w-96 border-l bg-background shadow-lg z-[105] overflow-hidden">
+              <div className="absolute inset-y-0 right-0 w-full md:w-96 border-l bg-background shadow-lg z-[105] overflow-hidden">
                 <BridgePanelClient
                   conversationId={conversationId}
                   onClose={() => setIsBridgePanelOpen(false)}
@@ -321,13 +288,13 @@ export function ConversationPageClient({
       </Dialog>
 
       {activeEvalId && !isImmersive && (
-        <div className="fixed inset-y-0 right-0 w-96 border-l bg-background shadow-lg z-50 overflow-y-auto">
+        <div className="fixed inset-y-0 right-0 w-full md:w-96 border-l bg-background shadow-lg z-50 overflow-y-auto">
           <EvalPanel evalId={activeEvalId} onClose={handleCloseEval} />
         </div>
       )}
 
       {isBridgePanelOpen && !isImmersive && (
-        <div className="fixed inset-y-0 right-0 w-96 border-l bg-background shadow-lg z-40 overflow-hidden">
+        <div className="fixed inset-y-0 right-0 w-full md:w-96 border-l bg-background shadow-lg z-40 overflow-hidden">
           <BridgePanelClient
             conversationId={conversationId}
             onClose={() => setIsBridgePanelOpen(false)}

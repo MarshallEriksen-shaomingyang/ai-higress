@@ -262,6 +262,9 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.errors.invalid_max_challengers": "Max challengers exceeds reasonable range",
     "chat.errors.project_ai_config_incomplete": "Project AI configuration is incomplete",
     "chat.errors.invalid_file_type": "Please select an image file",
+    "chat.errors.image_too_large": "Image is too large to send. Please use a smaller image.",
+    "chat.errors.message_too_long": "Message is too long. Please shorten it or remove attachments.",
+    "chat.errors.too_many_images": "Too many images. Please remove some images.",
     
     // 项目相关错误
     "chat.errors.project_not_found": "Project not found or no access. Please check your project selection.",
@@ -300,6 +303,8 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.action.enter_immersive": "Enter Immersive Mode",
     "chat.action.exit_immersive": "Exit Immersive Mode",
     "chat.header.immersive_title": "Immersive Reading",
+    "chat.sidebar.title": "Chat Sidebar",
+    "chat.title": "Chat",
   },
   zh: {
     // ===== 欢迎页面 =====
@@ -559,6 +564,9 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.errors.invalid_max_challengers": "最大挑战者数超出合理范围",
     "chat.errors.project_ai_config_incomplete": "Project AI 配置不完整",
     "chat.errors.invalid_file_type": "请选择图片文件",
+    "chat.errors.image_too_large": "图片过大，无法发送，请换更小的图片",
+    "chat.errors.message_too_long": "消息内容过长，请缩短文本或移除图片",
+    "chat.errors.too_many_images": "图片数量过多，请先移除部分图片",
     
     // 项目相关错误
     "chat.errors.project_not_found": "项目不存在或无权访问，请检查项目选择",
@@ -597,5 +605,7 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.action.enter_immersive": "开启沉浸模式",
     "chat.action.exit_immersive": "退出沉浸模式",
     "chat.header.immersive_title": "沉浸式阅读",
+    "chat.sidebar.title": "聊天侧边栏",
+    "chat.title": "聊天",
   },
 };

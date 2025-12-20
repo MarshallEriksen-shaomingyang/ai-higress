@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Layout } from "react-resizable-panels";
 import { toast } from "sonner";
+import { Menu } from "lucide-react";
 
 import { ProjectSelector } from "@/components/chat/project-selector";
 import { AssistantList } from "@/components/chat/assistant-list";
@@ -27,6 +28,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n-context";
 import type {
   Assistant,
@@ -49,6 +57,7 @@ import {
   useUpdateConversation,
 } from "@/lib/swr/use-conversations";
 import { useLogicalModels } from "@/lib/swr/use-logical-models";
+import { ChatNavRail } from "./chat-nav-rail";
 
 const AssistantForm = dynamic(
   () =>
@@ -131,6 +140,7 @@ export function ChatLayoutRootClient({
   const [deleteConfirmConversation, setDeleteConfirmConversation] = useState<
     string | null
   >(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const hasInitialized = useRef(false);
 
@@ -228,6 +238,7 @@ export function ChatLayoutRootClient({
     setSelectedAssistant(assistantId);
     setSelectedConversation(null);
     setActiveTab("conversations");
+    setIsMobileSidebarOpen(false); // 移动端选择助手后关闭侧边栏
     router.push(`/chat/${assistantId}`);
   };
 
@@ -298,6 +309,7 @@ export function ChatLayoutRootClient({
     if (!selectedAssistantId) return;
     setSelectedConversation(conversationId);
     setActiveTab("conversations");
+    setIsMobileSidebarOpen(false); // 移动端选择会话后关闭侧边栏
     router.push(`/chat/${selectedAssistantId}/${conversationId}`);
   };
 
@@ -357,9 +369,116 @@ export function ChatLayoutRootClient({
     }
   };
 
+  // 侧边栏内容组件（桌面端和移动端共用）
+  const SidebarContent = () => (
+    <div className="flex h-full flex-col">
+      <div className="border-b p-4">
+        <ProjectSelector />
+      </div>
+
+      {selectedProjectId ? (
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as "assistants" | "conversations")
+          }
+          className="flex flex-1 flex-col"
+        >
+          <div className="border-b px-4 pt-4">
+            <TabsList className="w-full">
+              <TabsTrigger value="assistants" className="flex-1">
+                {t("chat.assistant.title")}
+              </TabsTrigger>
+              <TabsTrigger
+                value="conversations"
+                className="flex-1"
+                disabled={!selectedAssistantId}
+              >
+                {t("chat.conversation.title")}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent
+            value="assistants"
+            className="flex-1 overflow-y-auto p-4 mt-0"
+          >
+            {assistantsError ? (
+              <ErrorAlert error={assistantsError} />
+            ) : (
+              <AssistantList
+                assistants={assistants}
+                isLoading={isLoadingAssistants}
+                selectedAssistantId={selectedAssistantId || undefined}
+                onSelectAssistant={handleSelectAssistant}
+                onCreateAssistant={handleCreateAssistant}
+                onEditAssistant={handleEditAssistant}
+                onDeleteAssistant={handleDeleteAssistant}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent
+            value="conversations"
+            className="flex-1 overflow-y-auto p-4 mt-0"
+          >
+            {conversationsError ? (
+              <ErrorAlert error={conversationsError} />
+            ) : (
+              <ConversationList
+                conversations={conversations}
+                isLoading={isLoadingConversations}
+                onSelectConversation={handleSelectConversation}
+                onCreateConversation={handleCreateConversation}
+                onArchiveConversation={handleArchiveConversation}
+                onRenameConversation={handleRenameConversation}
+                onDeleteConversation={handleDeleteConversation}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="flex flex-1 items-center justify-center p-6">
+          <p className="text-sm text-muted-foreground">
+            {t("chat.project.not_selected")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
       <div className="flex h-full w-full overflow-hidden">
+        {/* 移动端顶部菜单栏 */}
+        <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 py-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="h-9 w-9"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate">
+              {selectedProjectId ? t("chat.title") : t("chat.project.not_selected")}
+            </div>
+          </div>
+          <ChatNavRail variant="mobile" />
+        </div>
+
+        {/* 移动端侧边栏抽屉 */}
+        <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+          <SheetContent side="left" className="w-[85vw] max-w-sm p-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>{t("chat.sidebar.title")}</SheetTitle>
+            </SheetHeader>
+            <SidebarContent />
+          </SheetContent>
+        </Sheet>
+
+        {/* 桌面端布局 */}
         <ResizablePanelGroup
           id="chat-layout"
           direction="horizontal"
@@ -370,89 +489,17 @@ export function ChatLayoutRootClient({
           <ResizablePanel
             id="chat-sidebar"
             defaultSize="25%"
-            minSize="20%"
-            maxSize="50%"
+            minSize="0%"
+            maxSize="100%"
+            className="hidden md:block"
           >
-            <div className="flex h-full flex-col border-r">
-              <div className="border-b p-4">
-                <ProjectSelector />
-              </div>
-
-              {selectedProjectId ? (
-                <Tabs
-                  value={activeTab}
-                  onValueChange={(value) =>
-                    setActiveTab(value as "assistants" | "conversations")
-                  }
-                  className="flex flex-1 flex-col"
-                >
-                  <div className="border-b px-4 pt-4">
-                    <TabsList className="w-full">
-                      <TabsTrigger value="assistants" className="flex-1">
-                        {t("chat.assistant.title")}
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="conversations"
-                        className="flex-1"
-                        disabled={!selectedAssistantId}
-                      >
-                        {t("chat.conversation.title")}
-                      </TabsTrigger>
-                    </TabsList>
-                  </div>
-
-                  <TabsContent
-                    value="assistants"
-                    className="flex-1 overflow-y-auto p-4 mt-0"
-                  >
-                    {assistantsError ? (
-                      <ErrorAlert error={assistantsError} />
-                    ) : (
-                      <AssistantList
-                        assistants={assistants}
-                        isLoading={isLoadingAssistants}
-                        selectedAssistantId={selectedAssistantId || undefined}
-                        onSelectAssistant={handleSelectAssistant}
-                        onCreateAssistant={handleCreateAssistant}
-                        onEditAssistant={handleEditAssistant}
-                        onDeleteAssistant={handleDeleteAssistant}
-                      />
-                    )}
-                  </TabsContent>
-
-                  <TabsContent
-                    value="conversations"
-                    className="flex-1 overflow-y-auto p-4 mt-0"
-                  >
-                    {conversationsError ? (
-                      <ErrorAlert error={conversationsError} />
-                    ) : (
-                      <ConversationList
-                        conversations={conversations}
-                        isLoading={isLoadingConversations}
-                        onSelectConversation={handleSelectConversation}
-                        onCreateConversation={handleCreateConversation}
-                        onArchiveConversation={handleArchiveConversation}
-                        onRenameConversation={handleRenameConversation}
-                        onDeleteConversation={handleDeleteConversation}
-                      />
-                    )}
-                  </TabsContent>
-                </Tabs>
-              ) : (
-                <div className="flex flex-1 items-center justify-center p-6">
-                  <p className="text-sm text-muted-foreground">
-                    {t("chat.project.not_selected")}
-                  </p>
-                </div>
-              )}
-            </div>
+            <SidebarContent />
           </ResizablePanel>
 
-          <ResizableHandle withHandle />
+          <ResizableHandle withHandle className="hidden md:flex" />
 
-          <ResizablePanel id="chat-main" defaultSize="75%">
-            <div className="h-full overflow-hidden">
+          <ResizablePanel id="chat-main" defaultSize="75%" minSize="0%" maxSize="100%">
+            <div className="h-full overflow-hidden pt-[52px] md:pt-0">
               {selectedProjectId ? (
                 children
               ) : (

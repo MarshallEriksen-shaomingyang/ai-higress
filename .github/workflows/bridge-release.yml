@@ -1,0 +1,43 @@
+name: Release Bridge CLI
+
+on:
+  push:
+    tags:
+      - "bridge-v*"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    env:
+      TAG_NAME: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
+    if: startsWith(github.event_name == 'release' && github.event.release.tag_name || github.ref_name, 'bridge-v')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+
+      - name: Build dist artifacts
+        env:
+          VERSION: ${{ env.TAG_NAME }}
+          GOTOOLCHAIN: local
+        run: |
+          bash scripts/build-bridge-dist.sh --version "${VERSION}"
+          (cd dist/bridge && sha256sum * > sha256sums.txt)
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            dist/bridge/*
+          generate_release_notes: true
