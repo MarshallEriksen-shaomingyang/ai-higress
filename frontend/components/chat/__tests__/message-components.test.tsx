@@ -60,42 +60,19 @@ describe('MessageItem', () => {
       message_id: 'msg-3',
       conversation_id: 'conv-1',
       role: 'assistant',
-      content: '<think>Hidden reasoning</think>\n\nVisible answer.',
+      content: '<think>Hidden reasoning content that is long enough to be truncated in preview</think>\n\nVisible answer.',
       run_id: 'run-2',
       created_at: new Date().toISOString(),
     };
 
     render(<MessageItem message={messageWithThink} runs={[mockRun]} />);
 
-    expect(screen.queryByText('Hidden reasoning')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hidden reasoning content that is long enough to be truncated in preview')).not.toBeInTheDocument();
+    expect(screen.getByText(/Hidden reasoning/)).toBeInTheDocument();
     expect(screen.getByText('Visible answer.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'chat.message.show_thoughts' }));
-    expect(screen.getByText('Hidden reasoning')).toBeInTheDocument();
-  });
-
-  it('shows thoughts as carousel and can open full dialog', () => {
-    const messageWithThink: Message = {
-      message_id: 'msg-5',
-      conversation_id: 'conv-1',
-      role: 'assistant',
-      content: '<think>Step 1\n\nStep 2</think>\n\nVisible answer.',
-      run_id: 'run-4',
-      created_at: new Date().toISOString(),
-    };
-
-    render(<MessageItem message={messageWithThink} runs={[mockRun]} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'chat.message.show_thoughts' }));
-    expect(screen.getByText('Step 1')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'chat.message.thoughts_next' }));
-    expect(screen.getByText('Step 2')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'chat.message.thoughts_full' }));
-    expect(screen.getByText('chat.message.thoughts_full')).toBeInTheDocument();
-    expect(screen.getByText('Step 1')).toBeInTheDocument();
-    expect(screen.getByText('Step 2')).toBeInTheDocument();
+    expect(screen.getByText('Hidden reasoning content that is long enough to be truncated in preview')).toBeInTheDocument();
   });
 
   it('renders markdown image and auto-embeds standalone image url', () => {

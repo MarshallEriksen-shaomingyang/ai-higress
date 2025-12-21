@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Eye, EyeOff, Copy, Check, ChevronLeft, ChevronRight, Pause, Play, Maximize2 } from "lucide-react";
+import { Eye, EyeOff, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type MessageRole = "user" | "assistant" | "system";
 
@@ -247,121 +246,47 @@ function splitThinkForCarousel(think: string): string[] {
   return grouped;
 }
 
-function ThinkCarousel({
+function toThinkPreviewText(text: string, maxChars = 56) {
+  const normalized = (text ?? "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function ThinkChipPreview({
   items,
   className,
-  onOpenFull,
 }: {
   items: string[];
   className?: string;
-  onOpenFull: () => void;
 }) {
-  const { t } = useI18n();
   const [index, setIndex] = useState(0);
-  const [playing, setPlaying] = useState(() => items.length > 1);
 
   useEffect(() => {
     setIndex(0);
-    setPlaying(items.length > 1);
   }, [items]);
 
   useEffect(() => {
-    if (!playing || items.length <= 1) return;
+    if (items.length <= 1) return;
     const timer = window.setInterval(() => {
       setIndex((current) => (current + 1) % items.length);
     }, 1800);
     return () => window.clearInterval(timer);
-  }, [playing, items.length]);
+  }, [items.length]);
 
-  const current = items[index] ?? "";
-  const canNavigate = items.length > 1;
+  const current = toThinkPreviewText(items[index] ?? "");
 
   return (
-    <div className={cn("space-y-2", className)}>
-      <div
-        key={`${index}-${current.length}`}
-        className="animate-in fade-in-0 duration-200"
-        aria-live="polite"
-      >
-        <div className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90 line-clamp-4">
-          {current}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-        <div className="tabular-nums">
-          {items.length ? `${index + 1}/${items.length}` : "0/0"}
-        </div>
-        <div className="flex items-center gap-1">
-          {canNavigate ? (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="h-7 w-7"
-                    onClick={() => setIndex((v) => (v - 1 + items.length) % items.length)}
-                    aria-label={t("chat.message.thoughts_prev")}
-                  >
-                    <ChevronLeft className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent sideOffset={6}>{t("chat.message.thoughts_prev")}</TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="h-7 w-7"
-                    onClick={() => setIndex((v) => (v + 1) % items.length)}
-                    aria-label={t("chat.message.thoughts_next")}
-                  >
-                    <ChevronRight className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent sideOffset={6}>{t("chat.message.thoughts_next")}</TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="h-7 w-7"
-                    onClick={() => setPlaying((v) => !v)}
-                    aria-label={playing ? t("chat.message.thoughts_pause") : t("chat.message.thoughts_play")}
-                    aria-pressed={playing}
-                  >
-                    {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent sideOffset={6}>
-                  {playing ? t("chat.message.thoughts_pause") : t("chat.message.thoughts_play")}
-                </TooltipContent>
-              </Tooltip>
-            </>
-          ) : null}
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="h-7 w-7"
-                onClick={onOpenFull}
-                aria-label={t("chat.message.thoughts_full")}
-              >
-                <Maximize2 className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent sideOffset={6}>{t("chat.message.thoughts_full")}</TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-    </div>
+    <span
+      key={`${index}-${current.length}`}
+      className={cn(
+        "min-w-0 max-w-[220px] truncate animate-in fade-in-0 duration-200 text-foreground/70",
+        className
+      )}
+      aria-hidden="true"
+      title={current}
+    >
+      {current}
+    </span>
   );
 }
 
@@ -411,7 +336,6 @@ export function MessageContent({ content, role, options, className }: MessageCon
   const mergedThink = thinkSegments.map((s) => s.content).join("\n\n").trim();
 
   const [showThink, setShowThink] = useState(() => resolved.default_show_think);
-  const [thinkDialogOpen, setThinkDialogOpen] = useState(false);
 
   useEffect(() => {
     setShowThink(resolved.default_show_think);
@@ -426,6 +350,7 @@ export function MessageContent({ content, role, options, className }: MessageCon
           <div className="inline-flex items-center gap-2 rounded-full border bg-muted/10 px-2 py-1 text-xs text-muted-foreground">
             <span className="text-foreground/80">{t("chat.message.thoughts")}</span>
             <span className="h-3 w-px bg-border" aria-hidden="true" />
+            {!showThink ? <ThinkChipPreview items={thinkCarouselItems} /> : null}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -449,22 +374,11 @@ export function MessageContent({ content, role, options, className }: MessageCon
           {showThink ? (
             <div
               id={thinkPanelId}
-              className="mt-2 rounded-md border-l-2 bg-muted/10 px-3 py-2"
+              className="mt-2 rounded-md border-l-2 bg-muted/10 px-3 py-2 text-xs leading-relaxed"
             >
-              <ThinkCarousel items={thinkCarouselItems} onOpenFull={() => setThinkDialogOpen(true)} />
+              {renderBody(mergedThink, true)}
             </div>
           ) : null}
-
-          <Dialog open={thinkDialogOpen} onOpenChange={setThinkDialogOpen}>
-            <DialogContent className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>{t("chat.message.thoughts_full")}</DialogTitle>
-              </DialogHeader>
-              <div className="rounded-md border-l-2 bg-muted/10 px-3 py-2 text-xs leading-relaxed">
-                {renderBody(mergedThink, true)}
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       ) : null}
 

@@ -87,6 +87,8 @@ frontend/.pnpm-debug.log*
 # bridge
 bridge/bridge
 
+nginx/
+
 # ============================================
 # IDE & Tools
 # ============================================
