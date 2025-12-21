@@ -3,18 +3,16 @@
 """
 
 import secrets
-from typing import Dict, Tuple
 
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
 from app.models import User
-from app.settings import settings
 from app.schemas.api_key import APIKeyCreateRequest, APIKeyExpiry
 from app.schemas.user import UserCreateRequest
 from app.services.api_key_service import create_api_key
-from app.services.jwt_auth_service import hash_password
 from app.services.user_service import create_user
+from app.settings import settings
 
 
 class KeyManagementServiceError(Exception):
@@ -97,7 +95,7 @@ def create_user_with_api_key(
     is_superuser: bool = False,
     api_key_name: str = None,
     api_key_expiry: APIKeyExpiry = APIKeyExpiry.NEVER,
-) -> Tuple[User, str, str]:
+) -> tuple[User, str, str]:
     """
     创建用户并生成API密钥
     
@@ -122,7 +120,7 @@ def create_user_with_api_key(
         # 如果未提供密码，则生成一个
         if not password:
             password = generate_secure_random_password()
-        
+
         # 创建用户
         user_payload = UserCreateRequest(
             username=username,
@@ -130,27 +128,27 @@ def create_user_with_api_key(
             password=password,
             display_name=display_name or username,
         )
-        
+
         # 打印密码长度以调试
         if password and len(password.encode('utf-8')) > 72:
             print(f"Password too long: {len(password.encode('utf-8'))} bytes, truncating")
-        
+
         user = create_user(session, user_payload, is_superuser=is_superuser)
-        
+
         # 生成API密钥
         if not api_key_name:
             api_key_name = f"{username}-default-key"
-            
+
         api_key_payload = APIKeyCreateRequest(
             name=api_key_name,
             expiry=api_key_expiry,
         )
-        
+
         api_key, api_token = create_api_key(session, user=user, payload=api_key_payload)
-        
+
         logger.info(f"Created user {username} with API key {api_key_name}")
         return user, password, api_token
-        
+
     except Exception as exc:
         # 根据异常类型抛出相应的错误
         if "username" in str(exc).lower() or "email" in str(exc).lower():
@@ -164,7 +162,7 @@ def initialize_system_admin(
     username: str | None = None,
     email: str | None = None,
     display_name: str | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     初始化系统管理员账户
     
@@ -189,7 +187,7 @@ def initialize_system_admin(
         from app.services.user_service import has_any_user
         if has_any_user(session):
             raise KeyManagementServiceError("System already has users")
-        
+
         password = generate_secure_random_password()
         user_payload = UserCreateRequest(
             username=username,
@@ -214,9 +212,9 @@ def initialize_system_admin(
             username,
             email,
         )
-        
+
         return result
-        
+
     except KeyManagementServiceError:
         raise
     except Exception as exc:
@@ -238,12 +236,12 @@ def rotate_system_secret_key() -> str:
     """
     # 注意：在实际实现中，这里应该包含重新哈希所有密码和重新生成所有API密钥的逻辑
     # 这是一个非常危险的操作，应该谨慎实现
-    
+
     new_key = generate_system_secret_key()
     logger.warning("System secret key rotation initiated - all passwords and API keys will need to be reset")
-    
+
     # TODO: 实现完整的密钥轮换逻辑
-    
+
     return new_key
 
 
@@ -259,25 +257,25 @@ def validate_key_strength(key: str) -> bool:
     """
     if len(key) < 32:
         return False
-    
+
     # 检查密钥是否包含足够的熵
     # 这是一个简单的检查，实际应用中可能需要更复杂的逻辑
     entropy_chars = set(key)
     if len(entropy_chars) < 20:
         return False
-    
+
     return True
 
 
 __all__ = [
     "APIKeyGenerationError",
+    "KeyManagementServiceError",
+    "SystemKeyGenerationError",
+    "UserCreationError",
     "create_user_with_api_key",
     "generate_secure_random_password",
     "generate_system_secret_key",
     "initialize_system_admin",
-    "KeyManagementServiceError",
     "rotate_system_secret_key",
-    "SystemKeyGenerationError",
-    "UserCreationError",
     "validate_key_strength",
 ]

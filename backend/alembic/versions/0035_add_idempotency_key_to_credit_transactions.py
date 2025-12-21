@@ -8,8 +8,9 @@ Create Date: 2025-12-15
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0035_add_idempotency_key_to_credit_transactions"
 down_revision = "0034_add_user_probe_tables"

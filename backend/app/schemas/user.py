@@ -25,7 +25,7 @@ class UserUpdateRequest(BaseModel):
     avatar: str | None = Field(default=None, max_length=512)
 
     @model_validator(mode="after")
-    def ensure_any_field(self) -> "UserUpdateRequest":
+    def ensure_any_field(self) -> UserUpdateRequest:
         if (
             self.email is None
             and self.password is None
@@ -100,9 +100,9 @@ class UserLookupResponse(BaseModel):
 __all__ = [
     "AdminUserResponse",
     "UserCreateRequest",
+    "UserLookupResponse",
     "UserPermissionFlag",
     "UserResponse",
     "UserStatusUpdateRequest",
     "UserUpdateRequest",
-    "UserLookupResponse",
 ]

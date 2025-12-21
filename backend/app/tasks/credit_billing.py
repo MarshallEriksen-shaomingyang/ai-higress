@@ -14,7 +14,6 @@ from uuid import UUID
 
 from celery import shared_task
 
-from app.celery_app import celery_app
 from app.db import SessionLocal
 from app.logging_config import logger
 from app.services.credit_service import record_chat_completion_usage, record_streaming_request
@@ -33,8 +32,8 @@ def _to_datetime(value: str | None) -> dt.datetime | None:
     except Exception:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=dt.timezone.utc)
-    return parsed.astimezone(dt.timezone.utc)
+        return parsed.replace(tzinfo=dt.UTC)
+    return parsed.astimezone(dt.UTC)
 
 
 @shared_task(name="tasks.credits.record_chat_completion_usage")

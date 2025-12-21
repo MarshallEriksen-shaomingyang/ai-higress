@@ -1,9 +1,10 @@
 """Add provider submissions and user permissions, extend providers with ownership."""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0007_add_provider_submission_and_user_permissions"
 down_revision = "0006_add_api_key_provider_restrictions"

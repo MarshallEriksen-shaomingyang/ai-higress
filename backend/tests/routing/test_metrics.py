@@ -1,6 +1,6 @@
 
-from app.schemas import MetricsHistory, ProviderStatus
 from app.routing.metrics import aggregate_metrics
+from app.schemas import MetricsHistory, ProviderStatus
 
 
 def test_aggregate_metrics_basic():

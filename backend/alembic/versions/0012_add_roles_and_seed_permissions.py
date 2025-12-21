@@ -1,9 +1,12 @@
 """Add role tables and seed initial permissions."""
 from __future__ import annotations
 
-from alembic import op
+from datetime import UTC
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0012_add_roles_and_seed_permissions"
 down_revision = "0011_add_user_and_api_key_to_metrics_history"
@@ -145,10 +148,10 @@ def upgrade() -> None:
         ("view_routing_decisions", "查看路由决策及候选上游"),
     ]
 
+    from datetime import datetime
     from uuid import uuid4
-    from datetime import datetime, timezone
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     rows = [
         {

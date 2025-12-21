@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision = "0043_add_project_ai_eval_bandit_tables"
 down_revision = "0042_create_user_app_request_metrics_history"

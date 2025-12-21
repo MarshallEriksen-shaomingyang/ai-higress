@@ -7,9 +7,9 @@ Create Date: 2025-02-07 00:00:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0019_add_api_key_status_fields"

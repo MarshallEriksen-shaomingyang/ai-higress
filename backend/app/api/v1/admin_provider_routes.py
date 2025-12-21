@@ -21,13 +21,13 @@ from app.schemas import (
     AdminProviderResponse,
     AdminProvidersResponse,
     ModelPricingUpdateRequest,
-    ProviderModelPricingResponse,
     ProviderAuditActionRequest,
+    ProviderAuditLogResponse,
+    ProviderModelPricingResponse,
+    ProviderModelValidationResult,
+    ProviderProbeConfigUpdate,
     ProviderTestRequest,
     ProviderTestResult,
-    ProviderAuditLogResponse,
-    ProviderProbeConfigUpdate,
-    ProviderModelValidationResult,
     ProviderVisibilityUpdateRequest,
 )
 from app.services.provider_audit_service import (
@@ -40,7 +40,6 @@ from app.services.provider_audit_service import (
     reject_provider,
     trigger_provider_test,
     update_operation_status,
-    _get_provider,
 )
 from app.services.provider_validation_service import ProviderValidationService
 
@@ -174,7 +173,7 @@ async def update_provider_visibility_endpoint(
     db.add(provider)
     db.commit()
     db.refresh(provider)
-    
+
     # 失效逻辑模型缓存
     try:
         from app.storage.redis_service import invalidate_logical_models_cache
@@ -182,7 +181,7 @@ async def update_provider_visibility_endpoint(
         logger.info("Invalidated %d logical model cache keys after updating provider visibility %s", deleted, provider_id)
     except Exception:
         logger.exception("Failed to invalidate logical models cache")
-    
+
     return _build_admin_provider_response(db, provider)
 
 
@@ -217,7 +216,7 @@ async def update_provider_probe_config_endpoint(
     db.add(provider)
     db.commit()
     db.refresh(provider)
-    
+
     # 失效逻辑模型缓存
     try:
         from app.storage.redis_service import invalidate_logical_models_cache
@@ -225,7 +224,7 @@ async def update_provider_probe_config_endpoint(
         logger.info("Invalidated %d logical model cache keys after updating provider probe config %s", deleted, provider_id)
     except Exception:
         logger.exception("Failed to invalidate logical models cache")
-    
+
     return _build_admin_provider_response(db, provider)
 
 

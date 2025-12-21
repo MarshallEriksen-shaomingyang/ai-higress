@@ -3,12 +3,12 @@ from typing import Any
 import httpx
 import pytest
 
-from app.schemas import Model, ProviderConfig
 from app.provider.discovery import (
     ensure_provider_models_cached,
     fetch_models_from_provider,
 )
 from app.provider.key_pool import reset_key_pool
+from app.schemas import Model, ProviderConfig
 
 
 class DummyRedis:

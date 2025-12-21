@@ -21,7 +21,6 @@ except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is
     Redis = object  # type: ignore[misc,assignment]
 
 from app.logging_config import logger
-from app.schemas import Model, ModelCapability, ProviderConfig
 from app.provider.config import get_provider_config
 from app.provider.key_pool import (
     NoAvailableProviderKey,
@@ -30,6 +29,7 @@ from app.provider.key_pool import (
     record_key_success,
 )
 from app.provider.sdk_selector import get_sdk_driver, normalize_base_url
+from app.schemas import Model, ModelCapability, ProviderConfig
 from app.storage.redis_service import get_provider_models_json, set_provider_models
 
 
@@ -261,7 +261,7 @@ async def fetch_models_from_provider(
         # 根据 Provider 的 supported_api_styles 推断认证头格式
         # 如果支持 Claude 风格，优先使用 x-api-key；否则使用 Authorization: Bearer
         headers: dict[str, str] = {"Accept": "application/json"}
-        
+
         supported_styles = provider.supported_api_styles or []
         if "claude" in supported_styles:
             headers["x-api-key"] = key_selection.key
@@ -275,7 +275,7 @@ async def fetch_models_from_provider(
                 "discovery: using OpenAI auth format (Authorization: Bearer) for provider=%s",
                 provider.id,
             )
-        
+
         if provider.custom_headers:
             headers.update(provider.custom_headers)
 

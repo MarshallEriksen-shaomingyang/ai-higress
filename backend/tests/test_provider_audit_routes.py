@@ -3,12 +3,11 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.settings import settings
-
 from app.models import Provider, ProviderAPIKey
-from app.services.user_probe_executor import ProbeExecutionResult
 from app.services.encryption import encrypt_secret
 from app.services.provider_audit_service import trigger_provider_test
+from app.services.user_probe_executor import ProbeExecutionResult
+from app.settings import settings
 from tests.utils import InMemoryRedis, jwt_auth_headers, seed_user_and_key
 
 

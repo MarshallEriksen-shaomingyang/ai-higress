@@ -5,7 +5,6 @@ import math
 import random
 import threading
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
 from uuid import UUID
 
 from sqlalchemy import Float, cast
@@ -120,7 +119,7 @@ class BufferedMetricsRecorder:
         self.max_buffered_buckets = max_buffered_buckets
         self.success_sample_rate = max(0.0, min(1.0, success_sample_rate))
 
-        self._buffer: Dict[MetricsKey, MetricsStats] = {}
+        self._buffer: dict[MetricsKey, MetricsStats] = {}
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._flush_thread: threading.Thread | None = None
@@ -203,7 +202,7 @@ class BufferedMetricsRecorder:
             session.close()
         return flushed
 
-    def _drain_buffer(self) -> list[Tuple[MetricsKey, MetricsStats]]:
+    def _drain_buffer(self) -> list[tuple[MetricsKey, MetricsStats]]:
         with self._lock:
             if not self._buffer:
                 return []
@@ -351,7 +350,7 @@ class BufferedUserMetricsRecorder:
         self.max_buffered_buckets = max_buffered_buckets
         self.success_sample_rate = max(0.0, min(1.0, success_sample_rate))
 
-        self._buffer: Dict[UserMetricsKey, MetricsStats] = {}
+        self._buffer: dict[UserMetricsKey, MetricsStats] = {}
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._flush_thread: threading.Thread | None = None
@@ -432,7 +431,7 @@ class BufferedUserMetricsRecorder:
             session.close()
         return flushed
 
-    def _drain_buffer(self) -> list[Tuple[UserMetricsKey, MetricsStats]]:
+    def _drain_buffer(self) -> list[tuple[UserMetricsKey, MetricsStats]]:
         with self._lock:
             if not self._buffer:
                 return []
@@ -515,9 +514,9 @@ class BufferedUserMetricsRecorder:
 
 
 __all__ = [
-    "MetricsKey",
-    "MetricsStats",
     "BufferedMetricsRecorder",
     "BufferedUserMetricsRecorder",
+    "MetricsKey",
+    "MetricsStats",
     "UserMetricsKey",
 ]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -10,18 +10,18 @@ from sqlalchemy.orm import Session
 
 from app.http_client import CurlCffiClient
 from app.logging_config import logger
-from app.provider.config import get_provider_config
-from app.provider.health import HealthStatus
-from app.redis_client import get_redis_client
-from app.services.provider_health_service import persist_provider_health
-from app.services.user_probe_executor import execute_user_probe
-from app.schemas import ProviderStatus
-from app.settings import settings
 from app.models import (
     Provider,
     ProviderAuditLog,
     ProviderTestRecord,
 )
+from app.provider.config import get_provider_config
+from app.provider.health import HealthStatus
+from app.redis_client import get_redis_client
+from app.schemas import ProviderStatus
+from app.services.provider_health_service import persist_provider_health
+from app.services.user_probe_executor import execute_user_probe
+from app.settings import settings
 
 AUDIT_STATES = {"pending", "testing", "approved", "rejected", "approved_limited"}
 OPERATION_STATES = {"active", "paused", "offline"}
@@ -117,7 +117,7 @@ def trigger_provider_test(
     previous_status = provider.audit_status
     provider.audit_status = "testing"
 
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     probe_status = None
     latency_ms: int | None = None
     error_code: str | None = None
@@ -128,7 +128,7 @@ def trigger_provider_test(
     if cfg is None:
         # 无法构建可用配置（通常是缺少 API Key 或配置不完整），返回一条失败的测试记录避免 404。
         logger.warning("Provider %s config missing; skipping real probe", provider_id)
-        finished_at = datetime.now(timezone.utc)
+        finished_at = datetime.now(UTC)
         record = ProviderTestRecord(
             provider_uuid=provider.id,
             mode=mode,
@@ -169,7 +169,7 @@ def trigger_provider_test(
 
     probe_model = _pick_probe_model(provider, cfg)
     if not probe_model:
-        finished_at = datetime.now(timezone.utc)
+        finished_at = datetime.now(UTC)
         record = ProviderTestRecord(
             provider_uuid=provider.id,
             mode=mode,
@@ -225,7 +225,7 @@ def trigger_provider_test(
                 redis=redis,
             )
 
-            finished_at = datetime.now(timezone.utc)
+            finished_at = datetime.now(UTC)
             status = HealthStatus(
                 provider_id=provider.provider_id,
                 status=_status_from_probe_result(
@@ -261,7 +261,7 @@ def trigger_provider_test(
         error_code = "probe_failed"
         provider.audit_status = "testing"
 
-    finished_at = datetime.now(timezone.utc)
+    finished_at = datetime.now(UTC)
     record = ProviderTestRecord(
         provider_uuid=provider.id,
         mode=mode,
@@ -423,10 +423,10 @@ def list_audit_logs(
 
 
 __all__ = [
-    "approve_provider",
-    "get_latest_test_record",
     "ProviderAuditError",
     "ProviderNotFoundError",
+    "approve_provider",
+    "get_latest_test_record",
     "reject_provider",
     "trigger_provider_test",
     "update_operation_status",

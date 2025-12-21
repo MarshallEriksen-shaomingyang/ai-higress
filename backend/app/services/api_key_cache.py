@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.models import APIKey
 from app.logging_config import logger
+from app.models import APIKey
 from app.redis_client import get_redis_client, redis_delete, redis_get_json, redis_set_json
 
 CACHE_KEY_TEMPLATE = "auth:api-key:{key_hash}"
@@ -126,6 +126,6 @@ __all__ = [
     "cache_api_key",
     "cache_api_key_sync",
     "get_cached_api_key",
-    "invalidate_cached_api_key",
     "invalidate_api_key_cache_sync",
+    "invalidate_cached_api_key",
 ]

@@ -1,5 +1,5 @@
-import pytest
 import httpx
+import pytest
 
 from app.upstream import UpstreamStreamError, stream_upstream
 

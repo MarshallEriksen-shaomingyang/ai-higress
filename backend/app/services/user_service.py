@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import User
 from app.schemas.user import UserCreateRequest, UserUpdateRequest
 from app.services.credit_service import get_or_create_account_for_user
-from app.services.jwt_auth_service import hash_password, verify_password
+from app.services.jwt_auth_service import hash_password
 from app.services.registration_window_service import (
     claim_registration_slot,
     rollback_registration_slot,
@@ -109,7 +109,7 @@ def create_user(
     # 检查邮箱唯一性
     if _email_exists(session, payload.email):
         raise EmailAlreadyExistsError("email already in use")
-    
+
     # 如果提供了用户名，检查用户名唯一性
     username = payload.username
     if username is not None:
@@ -120,7 +120,7 @@ def create_user(
         username_prefix = payload.email.split("@")[0]
         # 确保用户名唯一性
         existing_user = session.execute(select(User).where(User.username == username_prefix)).scalar_one_or_none()
-        
+
         # 如果存在，添加数字后缀
         counter = 1
         username = username_prefix
@@ -229,13 +229,13 @@ def has_any_user(session: Session) -> bool:
 __all__ = [
     "DEFAULT_USER_ROLE_CODE",
     "EmailAlreadyExistsError",
-    "assign_default_role",
-    "has_any_user",
-    "register_user_with_window",
     "UserServiceError",
     "UsernameAlreadyExistsError",
+    "assign_default_role",
     "create_user",
     "get_user_by_id",
+    "has_any_user",
+    "register_user_with_window",
     "set_user_active",
     "update_user",
 ]

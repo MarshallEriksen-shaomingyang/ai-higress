@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 from fastapi import status
+from sqlalchemy.orm import Session as DbSession
 
 from app.auth import AuthenticatedAPIKey
 from app.logging_config import logger
@@ -17,21 +18,20 @@ from app.models import ProviderKey
 from app.provider.config import ProviderConfig
 from app.services.claude_cli_transformer import (
     build_claude_cli_headers,
-    transform_to_claude_cli_format,
     transform_claude_response_to_openai,
+    transform_to_claude_cli_format,
 )
 from app.services.metrics_service import (
     call_upstream_http_with_metrics,
     stream_upstream_with_metrics,
 )
-from sqlalchemy.orm import Session as DbSession
 
 from .base import Transport, TransportResult
 
 
 class ClaudeCliTransport(Transport):
     """Claude CLI 传输层实现"""
-    
+
     def __init__(
         self,
         *,
@@ -48,11 +48,11 @@ class ClaudeCliTransport(Transport):
         )
         self.client = client
         self.db = db
-    
+
     def supports_provider(self, provider_id: str) -> bool:
         """Claude CLI 传输支持所有 Claude Provider"""
         return "claude" in provider_id.lower()
-    
+
     async def send_request(
         self,
         *,
@@ -99,11 +99,11 @@ class ClaudeCliTransport(Transport):
                 error=f"Failed to build Claude CLI request: {exc}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
+
         # 构建 URL
         base_url = str(provider_config.base_url).rstrip("/")
         claude_url = f"{base_url}/v1/messages?beta=true"
-        
+
         logger.info(
             "claude_cli_transport: sending %s request provider=%s model=%s url=%s",
             "streaming" if is_stream else "non-streaming",
@@ -111,7 +111,7 @@ class ClaudeCliTransport(Transport):
             provider_model_id,
             claude_url,
         )
-        
+
         if is_stream:
             return await self._send_streaming_request(
                 provider_id=provider_id,
@@ -130,7 +130,7 @@ class ClaudeCliTransport(Transport):
                 payload=claude_payload,
                 original_model=payload.get("model", provider_model_id),
             )
-    
+
     async def _send_non_streaming_request(
         self,
         *,
@@ -165,10 +165,10 @@ class ClaudeCliTransport(Transport):
                 error=str(exc),
                 status_code=500,
             )
-        
+
         status_code = r.status_code
         text = r.text
-        
+
         logger.info(
             "claude_cli_transport: response status=%s provider=%s model=%s body_length=%d",
             status_code,
@@ -176,13 +176,13 @@ class ClaudeCliTransport(Transport):
             provider_model_id,
             len(text or ""),
         )
-        
+
         # 解析响应
         try:
             claude_response = r.json()
         except ValueError:
             claude_response = {"raw": text}
-        
+
         # 转换为 OpenAI 格式
         if isinstance(claude_response, dict) and "content" in claude_response:
             openai_response = transform_claude_response_to_openai(
@@ -191,13 +191,13 @@ class ClaudeCliTransport(Transport):
             )
         else:
             openai_response = claude_response
-        
+
         return TransportResult(
             response=openai_response,
             status_code=status_code,
             provider_model_id=provider_model_id,
         )
-    
+
     async def _send_streaming_request(
         self,
         *,
@@ -209,7 +209,7 @@ class ClaudeCliTransport(Transport):
         original_model: str,
     ) -> TransportResult:
         """发送流式 Claude CLI 请求"""
-        
+
         async def stream_wrapper() -> AsyncIterator[bytes]:
             try:
                 async for chunk in stream_upstream_with_metrics(
@@ -238,8 +238,8 @@ class ClaudeCliTransport(Transport):
                         "message": str(exc),
                     }
                 }
-                yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode("utf-8")
-        
+                yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
+
         return TransportResult(
             stream=stream_wrapper(),
             is_stream=True,

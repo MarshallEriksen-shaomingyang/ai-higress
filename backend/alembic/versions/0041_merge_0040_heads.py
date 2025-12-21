@@ -9,7 +9,6 @@ This merge revision makes `alembic upgrade head` unambiguous.
 
 from __future__ import annotations
 
-
 revision = "0041_merge_0040_heads"
 down_revision = (
     "0040_add_disabled_to_provider_models",

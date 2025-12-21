@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import fnmatch
-from typing import Callable
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.deps import get_db
-from app.deps import get_redis
 from app.db import get_db_session
+from app.deps import get_db, get_redis
 from app.models import APIKey, Base, User
 from app.services.api_key_service import (
     APIKeyExpiry,
@@ -45,7 +43,7 @@ def install_inmemory_db(app, *, token_plain: str = "timeline") -> sessionmaker[S
     app.dependency_overrides[get_db_session] = override_get_db
 
     redis = InMemoryRedis()
-    setattr(app.state, "_test_redis", redis)
+    app.state._test_redis = redis
 
     async def override_get_redis():
         return redis
@@ -288,4 +286,4 @@ class InMemoryRedis:
         return list(lst[s : e + 1])
 
 
-__all__ = ["InMemoryRedis", "auth_headers", "jwt_auth_headers", "install_inmemory_db", "seed_user_and_key"]
+__all__ = ["InMemoryRedis", "auth_headers", "install_inmemory_db", "jwt_auth_headers", "seed_user_and_key"]

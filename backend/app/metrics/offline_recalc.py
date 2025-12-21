@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.models import AggregateRoutingMetrics, ProviderRoutingMetricsHistory
@@ -13,10 +13,10 @@ from app.models import AggregateRoutingMetrics, ProviderRoutingMetricsHistory
 
 def _align_window(ts: dt.datetime, window_seconds: int) -> dt.datetime:
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=dt.timezone.utc)
+        ts = ts.replace(tzinfo=dt.UTC)
     epoch = int(ts.timestamp())
     start_epoch = epoch - (epoch % window_seconds)
-    return dt.datetime.fromtimestamp(start_epoch, tz=dt.timezone.utc)
+    return dt.datetime.fromtimestamp(start_epoch, tz=dt.UTC)
 
 
 def _normalize_ts(ts: dt.datetime) -> dt.datetime:
@@ -27,8 +27,8 @@ def _normalize_ts(ts: dt.datetime) -> dt.datetime:
     这里统一转换为 UTC-aware datetime。
     """
     if ts.tzinfo is None:
-        return ts.replace(tzinfo=dt.timezone.utc)
-    return ts.astimezone(dt.timezone.utc)
+        return ts.replace(tzinfo=dt.UTC)
+    return ts.astimezone(dt.UTC)
 
 
 def _status_from_metrics(error_rate: float, latency_p95_ms: float) -> str:
@@ -164,7 +164,7 @@ class OfflineMetricsRecalculator:
         # 为兼容不同数据库方言，这里不依赖 INSERT .. ON CONFLICT 语法，
         # 而是按窗口键在内存中做 upsert，再用 ORM 更新/插入。
         written = 0
-        now = dt.datetime.now(dt.timezone.utc)
+        now = dt.datetime.now(dt.UTC)
 
         for payload in payloads:
             key = self._key_from_payload(payload)

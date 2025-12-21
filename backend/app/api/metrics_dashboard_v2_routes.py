@@ -29,11 +29,11 @@ from app.redis_client import redis_get_json, redis_set_json
 from app.schemas.dashboard_v2 import (
     DashboardCostByProvider,
     DashboardCostByProviderItem,
-    DashboardProviderStatus,
-    DashboardProviderStatusItem,
     DashboardProviderMetricPoint,
     DashboardProviderMetrics,
     DashboardProviderMetricsItem,
+    DashboardProviderStatus,
+    DashboardProviderStatusItem,
     DashboardPulse,
     DashboardPulsePoint,
     DashboardTokenPoint,
@@ -55,7 +55,7 @@ V2_CACHE_TTL_SECONDS = 60
 
 
 def _utc_now() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(dt.UTC)
 
 
 def _resolve_time_range(
@@ -87,14 +87,14 @@ def _fill_time_buckets(
 ) -> list[DashboardPulsePoint]:
     # Align to UTC bucket boundaries.
     if start_at.tzinfo is None:
-        start_at = start_at.replace(tzinfo=dt.timezone.utc)
+        start_at = start_at.replace(tzinfo=dt.UTC)
     if end_at.tzinfo is None:
-        end_at = end_at.replace(tzinfo=dt.timezone.utc)
+        end_at = end_at.replace(tzinfo=dt.UTC)
 
     def _floor(ts: dt.datetime) -> dt.datetime:
         epoch = int(ts.timestamp())
         bucket = epoch - (epoch % step_seconds)
-        return dt.datetime.fromtimestamp(bucket, tz=dt.timezone.utc)
+        return dt.datetime.fromtimestamp(bucket, tz=dt.UTC)
 
     cur = _floor(start_at)
     end_floor = _floor(end_at)
@@ -665,7 +665,7 @@ def _cache_key_for_provider_ids(provider_ids: list[str] | None) -> str:
 
 def _parse_bucket_start(value: dt.datetime | str) -> dt.datetime:
     if isinstance(value, dt.datetime):
-        return value if value.tzinfo is not None else value.replace(tzinfo=dt.timezone.utc)
+        return value if value.tzinfo is not None else value.replace(tzinfo=dt.UTC)
     # sqlite: emit ISO8601 with 'Z'
     raw = value.replace("Z", "+00:00")
     return dt.datetime.fromisoformat(raw)
@@ -673,10 +673,10 @@ def _parse_bucket_start(value: dt.datetime | str) -> dt.datetime:
 
 def _floor_to_step(ts: dt.datetime, step_seconds: int) -> dt.datetime:
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=dt.timezone.utc)
+        ts = ts.replace(tzinfo=dt.UTC)
     epoch = int(ts.timestamp())
     bucket = epoch - (epoch % step_seconds)
-    return dt.datetime.fromtimestamp(bucket, tz=dt.timezone.utc)
+    return dt.datetime.fromtimestamp(bucket, tz=dt.UTC)
 
 
 @router.get(

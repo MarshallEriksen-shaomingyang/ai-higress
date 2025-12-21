@@ -51,7 +51,7 @@ def _status_penalty(metrics: RoutingMetrics | None, enable_check: bool = True) -
     """
     if not enable_check:
         return 0.0  # 健康检查关闭时不施加任何惩罚
-    
+
     if metrics is None:
         return 0.0
     if metrics.status.value == "down":
@@ -81,7 +81,7 @@ def score_upstreams(
         enable_health_check: 是否启用健康检查和最低分数过滤
     """
     from app.logging_config import logger
-    
+
     results: list[CandidateScore] = []
     for up in upstreams:
         metrics = metrics_by_provider.get(up.provider_id)

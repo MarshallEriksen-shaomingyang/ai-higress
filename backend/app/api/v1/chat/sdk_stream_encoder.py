@@ -16,7 +16,7 @@ from typing import Any
 
 
 def encode_openai_sse_event(payload: dict[str, Any]) -> bytes:
-    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
 
 
 def encode_openai_done() -> bytes:
@@ -26,7 +26,7 @@ def encode_openai_done() -> bytes:
 def encode_claude_sse_event(event_name: str, payload: dict[str, Any]) -> bytes:
     name = (event_name or "message_delta").strip()
     data = json.dumps(payload, ensure_ascii=False)
-    return f"event: {name}\ndata: {data}\n\n".encode("utf-8")
+    return f"event: {name}\ndata: {data}\n\n".encode()
 
 
 class GeminiDictToOpenAISSEAdapter:

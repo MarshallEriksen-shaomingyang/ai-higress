@@ -157,7 +157,7 @@ async def stream_upstream(
                     }
                     error_chunk = (
                         f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                    ).encode("utf-8")
+                    ).encode()
                 else:
                     payload = {
                         "id": None,
@@ -178,7 +178,7 @@ async def stream_upstream(
                     }
                     error_chunk = (
                         f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                    ).encode("utf-8")
+                    ).encode()
                 buffer.extend(error_chunk)
                 yield error_chunk
                 if output_style != "claude":

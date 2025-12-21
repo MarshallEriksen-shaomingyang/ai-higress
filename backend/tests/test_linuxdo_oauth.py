@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -89,8 +88,8 @@ def test_linuxdo_callback_creates_user_and_returns_tokens(app_with_inmemory_db, 
     app.dependency_overrides[get_http_client] = override_get_http_client
     _configure_linuxdo(monkeypatch)
 
-    start = datetime.now(timezone.utc) - timedelta(minutes=1)
-    end = datetime.now(timezone.utc) + timedelta(minutes=5)
+    start = datetime.now(UTC) - timedelta(minutes=1)
+    end = datetime.now(UTC) + timedelta(minutes=5)
     with SessionLocal() as session:
         create_registration_window(
             session,
@@ -117,12 +116,12 @@ def test_linuxdo_callback_creates_user_and_returns_tokens(app_with_inmemory_db, 
     assert callback_resp.status_code == 200, callback_resp.text
     data = callback_resp.json()
     assert data["access_token"]
-    
+
     # Refresh token should be in cookie, not body
     from app.api.auth_routes import REFRESH_TOKEN_COOKIE_NAME
     assert data.get("refresh_token") is None
     assert REFRESH_TOKEN_COOKIE_NAME in callback_resp.cookies
-    
+
     assert data["user"]["username"]
 
     with SessionLocal() as session:
@@ -235,8 +234,8 @@ def test_linuxdo_callback_manual_activation_window_requires_admin_activation(
     app.dependency_overrides[get_http_client] = override_get_http_client
     _configure_linuxdo(monkeypatch)
 
-    start = datetime.now(timezone.utc) - timedelta(minutes=1)
-    end = datetime.now(timezone.utc) + timedelta(minutes=5)
+    start = datetime.now(UTC) - timedelta(minutes=1)
+    end = datetime.now(UTC) + timedelta(minutes=5)
     with SessionLocal() as session:
         create_registration_window(
             session,
@@ -307,8 +306,8 @@ def test_linuxdo_callback_existing_user_not_blocked_by_closed_window(app_with_in
     app.dependency_overrides[get_http_client] = override_get_http_client
     _configure_linuxdo(monkeypatch)
 
-    start = datetime.now(timezone.utc) - timedelta(minutes=1)
-    end = datetime.now(timezone.utc) + timedelta(minutes=5)
+    start = datetime.now(UTC) - timedelta(minutes=1)
+    end = datetime.now(UTC) + timedelta(minutes=5)
     with SessionLocal() as session:
         create_registration_window(
             session,

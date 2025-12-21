@@ -32,11 +32,11 @@ class ProviderAllowedUser(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    provider: Mapped["Provider"] = relationship(
+    provider: Mapped[Provider] = relationship(
         "Provider",
         back_populates="shared_users",
     )
-    user: Mapped["User"] = relationship("User")
+    user: Mapped[User] = relationship("User")
 
 
 __all__ = ["ProviderAllowedUser"]

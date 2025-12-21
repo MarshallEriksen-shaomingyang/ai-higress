@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -9,25 +10,27 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-import os
 import httpx
-
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.v1.chat.billing import record_completion_usage
+from app.api.v1.chat.provider_selector import ProviderSelector
+from app.api.v1.chat.request_handler import RequestHandler
+from app.auth import AuthenticatedAPIKey
 from app.db import SessionLocal
 from app.errors import bad_request, forbidden, http_error, not_found
 from app.http_client import CurlCffiClient
 from app.jwt_auth import AuthenticatedUser
 from app.logging_config import logger
 from app.models import APIKey, AssistantPreset, Conversation, Eval, EvalRating, Message, Run, User
+from app.redis_client import get_redis_client
 from app.services import chat_run_service
-from app.services.credit_service import estimate_streaming_precharge_cost_credits
-from app.services.credit_service import compute_chat_completion_cost_credits
 from app.services.bandit_policy_service import recommend_challengers
 from app.services.chat_history_service import update_assistant_message_for_user_sequence
 from app.services.context_features_service import build_rule_context_features
+from app.services.credit_service import compute_chat_completion_cost_credits, estimate_streaming_precharge_cost_credits
 from app.services.project_ai_service import (
     build_project_ai_explanation,
     build_rule_explanation,
@@ -39,14 +42,8 @@ from app.services.project_eval_config_service import (
     get_or_default_project_eval_config,
     resolve_project_context,
 )
-from app.auth import AuthenticatedAPIKey
-from app.redis_client import get_redis_client
 from app.settings import settings
-from app.api.v1.chat.request_handler import RequestHandler
-from app.api.v1.chat.provider_selector import ProviderSelector
-from app.api.v1.chat.billing import record_completion_usage
 from app.upstream import detect_request_format
-
 
 try:
     from redis.asyncio import Redis
@@ -224,7 +221,7 @@ async def create_eval(
 
     user_text = _extract_user_text_from_run(baseline)
     candidate_models = list(cfg.candidate_logical_models or [])
-    
+
     selector = ProviderSelector(client=client, redis=redis, db=db)
     candidate_models = await selector.check_candidate_availability(
         candidate_logical_models=candidate_models,
@@ -445,7 +442,7 @@ async def execute_run_stream(
     """
     run_id_str = str(run.id)
     start = time.time()
-    
+
     # 状态置为 running
     run.status = "running"
     run.started_at = datetime.now(UTC)
@@ -482,7 +479,7 @@ async def execute_run_stream(
                 selected["model_id"] = model_id
 
         handler = RequestHandler(api_key=api_key, db=db, redis=redis, client=client)
-        
+
         async for chunk_bytes in handler.handle_stream(
             payload=payload,
             requested_model=requested_logical_model,
@@ -611,7 +608,7 @@ async def execute_run_stream(
 
         full_text = "".join(full_text_list)
         output_preview = full_text[:380].rstrip() if full_text else None
-        
+
         response_payload: dict[str, Any] = {
             "id": stream_id,
             "object": "chat.completion",

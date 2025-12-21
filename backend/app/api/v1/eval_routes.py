@@ -1,44 +1,41 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import asyncio
 import json
-from uuid import UUID
-
+import time
+from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db.session import SessionLocal as _AppSessionLocal
 from app.deps import get_db, get_http_client, get_redis
 from app.errors import not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
-from app.schemas import EvalCreateRequest, EvalRatingRequest, EvalRatingResponse, EvalResponse
+from app.logging_config import logger
 from app.models import Eval as EvalModel
-from app.models import Run as RunModel
 from app.models import Message as MessageModel
+from app.models import Run as RunModel
+from app.schemas import EvalCreateRequest, EvalRatingRequest, EvalRatingResponse, EvalResponse
+from app.services.chat_history_service import get_assistant, get_conversation
 from app.services.eval_service import (
-    create_eval,
-    submit_rating,
-    execute_run_stream,
+    _background_http_client,
     _maybe_mark_eval_ready,
     _to_authenticated_api_key,
-    _background_http_client,
+    create_eval,
+    execute_run_stream,
+    submit_rating,
 )
 from app.services.project_eval_config_service import (
-    resolve_project_context,
-    get_or_default_project_eval_config,
     DEFAULT_PROVIDER_SCOPES,
     get_effective_provider_ids_for_user,
+    get_or_default_project_eval_config,
+    resolve_project_context,
 )
-from app.services.chat_history_service import get_conversation, get_assistant
-
-
-from app.logging_config import logger
-from app.db.session import SessionLocal as _AppSessionLocal
-import asyncio
-import time
 
 router = APIRouter(
     tags=["evals"],
@@ -111,7 +108,7 @@ async def create_eval_endpoint(
         baseline_run_id=payload.baseline_run_id,
         start_background_runs=not bool(payload.streaming),
     )
-    
+
     if not payload.streaming:
         return EvalResponse(
             eval_id=eval_obj.id,
@@ -336,7 +333,7 @@ async def create_eval_endpoint(
 
             # 启动所有 queued run
             run_tasks = [asyncio.create_task(_run_task(run_id)) for run_id in to_execute]
-            
+
             num_tasks = len(run_tasks)
             while True:
                 finished_tasks = sum(1 for t in run_tasks if t.done())
@@ -356,7 +353,7 @@ async def create_eval_endpoint(
                             except Exception:
                                 pass
                     yield _encode_sse_event(event_type=event_type, data=item)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # best-effort：观察非本次请求启动的 running 任务，捕捉其最终态
                     if unfinished:
                         try:

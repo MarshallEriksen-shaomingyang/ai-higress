@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session as DbSession
 from app.logging_config import logger
 from app.services.credit_service import (
     record_chat_completion_usage as _record_chat_completion_usage,
+)
+from app.services.credit_service import (
     record_streaming_request as _record_streaming_request,
 )
 
@@ -96,7 +98,7 @@ def record_completion_usage(
     """
     if os.getenv("PYTEST_CURRENT_TEST"):
         try:
-            occurred_at = dt.datetime.now(tz=dt.timezone.utc)
+            occurred_at = dt.datetime.now(tz=dt.UTC)
             _record_chat_completion_usage(
                 db,
                 user_id=user_id,
@@ -121,7 +123,7 @@ def record_completion_usage(
             )
         return
 
-    occurred_at = dt.datetime.now(tz=dt.timezone.utc).isoformat()
+    occurred_at = dt.datetime.now(tz=dt.UTC).isoformat()
     _enqueue_celery_task(
         "tasks.credits.record_chat_completion_usage",
         kwargs={

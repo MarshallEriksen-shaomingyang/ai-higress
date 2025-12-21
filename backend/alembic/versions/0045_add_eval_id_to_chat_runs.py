@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision = "0045_add_eval_id_to_chat_runs"
 down_revision = "0044_add_project_ai_enabled_to_project_eval_configs"

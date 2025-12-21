@@ -53,8 +53,8 @@ class APIKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         doc="项目级会话标题生成逻辑模型；为空表示不自动命名",
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="api_keys")
-    allowed_provider_links: Mapped[list["APIKeyAllowedProvider"]] = relationship(
+    user: Mapped[User] = relationship("User", back_populates="api_keys")
+    allowed_provider_links: Mapped[list[APIKeyAllowedProvider]] = relationship(
         "APIKeyAllowedProvider",
         back_populates="api_key",
         cascade="all, delete-orphan",

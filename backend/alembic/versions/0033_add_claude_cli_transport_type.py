@@ -8,7 +8,6 @@ Create Date: 2025-12-15
 from __future__ import annotations
 
 from alembic import op
-import sqlalchemy as sa
 
 revision = "0033_add_claude_cli_transport_type"
 down_revision = "0032_make_provider_paths_nullable"

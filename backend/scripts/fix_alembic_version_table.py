@@ -20,7 +20,8 @@ backend_dir = Path(__file__).resolve().parents[1]
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import create_engine, inspect, text
+
 from app.settings import settings
 
 
@@ -28,12 +29,12 @@ def main():
     """主函数"""
     engine = create_engine(settings.database_url)
     inspector = inspect(engine)
-    
+
     with engine.begin() as conn:
         # 检查表是否存在
         if "alembic_version" in inspector.get_table_names():
             print("✓ alembic_version 表已存在")
-            
+
             # 检查字段长度
             result = conn.execute(text("""
                 SELECT character_maximum_length 
@@ -42,7 +43,7 @@ def main():
                 AND column_name='version_num'
             """))
             current_length = result.scalar()
-            
+
             if current_length and current_length < 64:
                 print(f"⚠ 当前 version_num 字段长度: {current_length}，需要扩展到 64")
                 conn.execute(text("""
@@ -61,7 +62,7 @@ def main():
                 )
             """))
             print("✓ alembic_version 表已创建 (version_num VARCHAR(64))")
-    
+
     print("\n✓ 修复完成！现在可以运行 'alembic upgrade head' 了")
 
 

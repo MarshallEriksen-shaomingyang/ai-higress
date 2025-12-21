@@ -2,13 +2,13 @@
 CLI 配置脚本动态生成端点
 为 Claude CLI 和 Codex CLI 提供一键配置脚本
 """
+import os
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
-from typing import Literal
-import os
 
 from app.deps import get_db
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
@@ -22,7 +22,7 @@ def generate_claude_config_script(
     platform: Literal["windows", "mac", "linux"]
 ) -> str:
     """生成 Claude Code CLI 配置脚本（用户级配置）"""
-    
+
     if platform == "windows":
         # PowerShell 脚本
         # Windows 路径: C:/Users/用户名/.claude (使用正斜杠)
@@ -157,10 +157,10 @@ def generate_codex_config_script(
     - auth.json: 存储 OPENAI_API_KEY
     - config.toml: 存储 model_providers 配置
     """
-    
+
     # 从 URL 中提取 provider 名称（简化处理）
     provider_name = "custom_provider"
-    
+
     if platform == "windows":
         # PowerShell 脚本
         # Windows 路径: C:/Users/用户名/.codex (使用正斜杠)
@@ -199,7 +199,7 @@ requires_openai_auth = true
 if (Test-Path $configFile) {{
     # 检查是否已存在该 provider
     $content = Get-Content $configFile -Raw
-    if ($content -notmatch "\[model_providers\.{provider_name}\]") {{
+    if ($content -notmatch "\\[model_providers\\.{provider_name}\\]") {{
         Add-Content -Path $configFile -Value $providerConfig
         Write-Host "✓ 已添加 provider 配置到 config.toml" -ForegroundColor Green
     }} else {{
@@ -301,21 +301,21 @@ async def get_install_script(
     - Mac/Linux: curl "https://your-domain.com/api/v1/cli/install?client=claude&platform=mac&key=YOUR_KEY" | bash
     - Windows: irm "https://your-domain.com/api/v1/cli/install?client=claude&platform=windows&key=YOUR_KEY" | iex
     """
-    
+
     # 如果没有提供 URL，使用环境变量或默认值
     if not url:
         url = os.getenv("API_BASE_URL", "http://localhost:8000")
-    
+
     # 验证 API Key 格式（基本验证）
     if not key or len(key) < 10:
         raise HTTPException(status_code=400, detail="无效的 API Key")
-    
+
     # 生成对应的配置脚本
     if client == "claude":
         script = generate_claude_config_script(url, key, platform)
     else:
         script = generate_codex_config_script(url, key, platform)
-    
+
     return script
 
 
@@ -329,17 +329,17 @@ async def get_install_command(
     """
     生成安装命令（供前端展示）
     """
-    
+
     if not url:
         url = os.getenv("API_BASE_URL", "http://localhost:8000")
-    
+
     script_url = f"{url}/api/v1/cli/install?client={client}&platform={platform}&key={key}"
-    
+
     if platform == "windows":
         command = f'irm "{script_url}" | iex'
     else:
         command = f'curl -fsSL "{script_url}" | bash'
-    
+
     return {
         "client": client,
         "platform": platform,
@@ -359,8 +359,9 @@ async def get_cli_config_info(
     
     需要用户认证，只能获取自己的 API Key 信息
     """
-    from app.models import APIKey as APIKeyModel, GatewayConfig as GatewayConfigModel
-    
+    from app.models import APIKey as APIKeyModel
+    from app.models import GatewayConfig as GatewayConfigModel
+
     # 查询 API Key
     api_key = (
         db.query(APIKeyModel)
@@ -370,10 +371,10 @@ async def get_cli_config_info(
         )
         .first()
     )
-    
+
     if not api_key:
         raise HTTPException(status_code=404, detail="API Key 不存在或无权访问")
-    
+
     # 从数据库获取 gateway config 中的 api_base_url
     gateway_config = db.query(GatewayConfigModel).first()
     if gateway_config is not None:
@@ -381,7 +382,7 @@ async def get_cli_config_info(
     else:
         # 如果数据库中没有配置，使用环境变量作为后备
         api_url = os.getenv("API_BASE_URL", "http://localhost:8000")
-    
+
     # 注意：系统不会（也无法从 hash 中）恢复完整 API Key；
     # 仅返回 key_prefix 用于提示用户填写完整密钥。
     return {

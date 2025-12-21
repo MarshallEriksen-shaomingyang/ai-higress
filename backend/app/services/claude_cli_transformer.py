@@ -12,7 +12,6 @@ from typing import Any
 
 from app.logging_config import logger
 
-
 # Cache for API key SHA-256 hashes to avoid repeated computation
 # Key: API key string, Value: SHA-256 hash (hex string)
 _user_hash_cache: dict[str, str] = {}
@@ -52,7 +51,7 @@ def get_user_hash(api_key: str) -> str:
             "claude_cli: using cached API key hash cache_size=%d",
             len(_user_hash_cache),
         )
-    
+
     return _user_hash_cache[api_key]
 
 
@@ -79,16 +78,16 @@ def generate_claude_cli_user_id(api_key: str, session_id: str | None = None) -> 
     """
     # Get SHA-256 hash of API key (with caching)
     user_hash = get_user_hash(api_key)
-    
+
     # Generate or use provided session ID
     generated_session = False
     if session_id is None:
         session_id = str(uuid.uuid4())
         generated_session = True
-    
+
     # Return formatted user_id
     user_id = f"user_{user_hash}_account__session_{session_id}"
-    
+
     # Log user_id generation (redacted for security)
     logger.debug(
         "claude_cli: generated user_id prefix=%s session_id=%s generated_session=%s",
@@ -96,7 +95,7 @@ def generate_claude_cli_user_id(api_key: str, session_id: str | None = None) -> 
         session_id,
         generated_session,
     )
-    
+
     return user_id
 
 
@@ -174,14 +173,14 @@ def transform_to_claude_cli_format(
         payload.get("stream", False),
         len(payload.get("messages", [])),
     )
-    
+
     # Create a copy to avoid modifying the original
     transformed = dict(payload)
-    
+
     # Track transformations for logging
     messages_transformed = 0
     system_transformed = False
-    
+
     # Ensure messages content is in array format
     if "messages" in transformed:
         for msg in transformed["messages"]:
@@ -194,7 +193,7 @@ def transform_to_claude_cli_format(
                     }
                 ]
                 messages_transformed += 1
-    
+
     # Ensure system is in array format
     if "system" in transformed and isinstance(transformed["system"], str):
         transformed["system"] = [
@@ -204,24 +203,24 @@ def transform_to_claude_cli_format(
             }
         ]
         system_transformed = True
-    
+
     # Add empty tools array if not present
     if "tools" not in transformed:
         transformed["tools"] = []
-    
+
     # Add temperature if not present (Claude CLI default)
     if "temperature" not in transformed:
         transformed["temperature"] = 1
         logger.debug("claude_cli: added default temperature=1")
-    
+
     # Generate and add user_id in metadata
     user_id = generate_claude_cli_user_id(api_key, session_id)
-    
+
     if "metadata" not in transformed:
         transformed["metadata"] = {}
-    
+
     transformed["metadata"]["user_id"] = user_id
-    
+
     logger.debug(
         "claude_cli: transformation complete messages_transformed=%d system_transformed=%s "
         "tools_added=%s temperature=%s user_id_prefix=%s",
@@ -231,7 +230,7 @@ def transform_to_claude_cli_format(
         transformed.get("temperature"),
         user_id[:20] + "...",
     )
-    
+
     return transformed
 
 
@@ -270,7 +269,7 @@ def transform_claude_response_to_openai(
             "claude_cli: response already in OpenAI format, skipping transformation"
         )
         return claude_response
-    
+
     logger.info(
         "claude_cli: transforming Claude response to OpenAI format response_id=%s "
         "stop_reason=%s has_usage=%s",
@@ -278,7 +277,7 @@ def transform_claude_response_to_openai(
         claude_response.get("stop_reason", "unknown"),
         "usage" in claude_response,
     )
-    
+
     # Transform Claude format to OpenAI format
     openai_response = {
         "id": claude_response.get("id", ""),
@@ -288,7 +287,7 @@ def transform_claude_response_to_openai(
         "choices": [],
         "usage": {}
     }
-    
+
     # Transform content
     content_blocks_count = 0
     text_blocks_count = 0
@@ -296,12 +295,12 @@ def transform_claude_response_to_openai(
         content_blocks = claude_response["content"]
         content_blocks_count = len(content_blocks)
         text_parts = []
-        
+
         for block in content_blocks:
             if block.get("type") == "text":
                 text_parts.append(block.get("text", ""))
                 text_blocks_count += 1
-        
+
         openai_response["choices"] = [
             {
                 "index": 0,
@@ -312,7 +311,7 @@ def transform_claude_response_to_openai(
                 "finish_reason": claude_response.get("stop_reason", "stop")
             }
         ]
-    
+
     # Transform usage
     if "usage" in claude_response:
         usage = claude_response["usage"]
@@ -321,7 +320,7 @@ def transform_claude_response_to_openai(
             "completion_tokens": usage.get("output_tokens", 0),
             "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         }
-    
+
     logger.debug(
         "claude_cli: response transformation complete content_blocks=%d text_blocks=%d "
         "prompt_tokens=%d completion_tokens=%d",
@@ -330,5 +329,5 @@ def transform_claude_response_to_openai(
         openai_response["usage"].get("prompt_tokens", 0),
         openai_response["usage"].get("completion_tokens", 0),
     )
-    
+
     return openai_response

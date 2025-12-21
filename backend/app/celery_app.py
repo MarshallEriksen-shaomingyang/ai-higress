@@ -17,11 +17,10 @@ CELERY_BROKER_URL / CELERY_RESULT_BACKEND 进行配置。
 """
 
 from celery import Celery
-from celery.signals import worker_process_init, beat_init
+from celery.signals import beat_init, worker_process_init
 
-from app.settings import settings
 from app.logging_config import setup_logging
-
+from app.settings import settings
 
 celery_app = Celery(
     "apiproxy",

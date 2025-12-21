@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID as PyUUID
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, text
@@ -39,9 +38,9 @@ class ProviderTestRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     summary: Mapped[str | None] = Column(Text, nullable=True)
     probe_results = Column(JSONBCompat(), nullable=True)
-    latency_ms: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    latency_ms: Mapped[int | None] = Column(Integer, nullable=True)
     error_code: Mapped[str | None] = Column(String(64), nullable=True)
-    cost: Mapped[Optional[float]] = Column(Float, nullable=True)
+    cost: Mapped[float | None] = Column(Float, nullable=True)
     started_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)
 

@@ -7,16 +7,12 @@ from typing import Any, Literal
 from uuid import UUID
 
 import httpx
-
 from sqlalchemy.orm import Session
 
 from app.http_client import CurlCffiClient
 from app.logging_config import logger
-from app.proxy_pool import pick_upstream_proxy
-from app.proxy_pool import report_upstream_proxy_failure
-from app.services.upstream_proxy_utils import mask_proxy_url
-from app.upstream import UpstreamStreamError, stream_upstream
-from app.settings import settings
+from app.models import ProviderRoutingMetricsHistory
+from app.proxy_pool import pick_upstream_proxy, report_upstream_proxy_failure
 from app.services.metrics_buffer import (
     BufferedMetricsRecorder,
     BufferedUserMetricsRecorder,
@@ -24,7 +20,9 @@ from app.services.metrics_buffer import (
     MetricsStats,
     UserMetricsKey,
 )
-from app.models import ProviderRoutingMetricsHistory
+from app.services.upstream_proxy_utils import mask_proxy_url
+from app.settings import settings
+from app.upstream import UpstreamStreamError, stream_upstream
 
 BucketSizeSeconds = Literal[60]
 
@@ -52,7 +50,7 @@ def _timeout_seconds(timeout_cfg: object) -> float:
     if isinstance(timeout_cfg, (int, float)):
         return float(timeout_cfg)
     if hasattr(timeout_cfg, "connect"):
-        connect = getattr(timeout_cfg, "connect")
+        connect = timeout_cfg.connect
         if isinstance(connect, (int, float)):
             return float(connect)
     return float(settings.upstream_timeout)
@@ -63,14 +61,14 @@ def _current_bucket_start(now: dt.datetime, bucket_seconds: int) -> dt.datetime:
     将当前时间截断到指定秒数的聚合桶起点（例如按分钟聚合）。
     """
     if now.tzinfo is None:
-        now = now.replace(tzinfo=dt.timezone.utc)
+        now = now.replace(tzinfo=dt.UTC)
     else:
-        now = now.astimezone(dt.timezone.utc)
+        now = now.astimezone(dt.UTC)
 
     # 使用 timestamp 截断，支持不同桶尺寸（默认 60s）。
     epoch_seconds = int(now.timestamp())
     bucket_start = epoch_seconds - (epoch_seconds % bucket_seconds)
-    return dt.datetime.fromtimestamp(bucket_start, tz=dt.timezone.utc)
+    return dt.datetime.fromtimestamp(bucket_start, tz=dt.UTC)
 
 
 def record_provider_call_metric(
@@ -95,7 +93,7 @@ def record_provider_call_metric(
     - 若关闭缓冲（METRICS_BUFFER_ENABLED=false），退化为立即 UPSERT。
     """
     try:
-        now = dt.datetime.now(tz=dt.timezone.utc)
+        now = dt.datetime.now(tz=dt.UTC)
         window_start = _current_bucket_start(now, bucket_seconds)
 
         resolved_error_kind = error_kind
@@ -208,7 +206,7 @@ def record_provider_token_usage(
         return
 
     try:
-        at = occurred_at or dt.datetime.now(tz=dt.timezone.utc)
+        at = occurred_at or dt.datetime.now(tz=dt.UTC)
         window_start = _current_bucket_start(at, bucket_seconds)
 
         in_tokens = int(input_tokens or 0)
@@ -874,12 +872,12 @@ async def stream_sdk_with_metrics(
 
 
 __all__ = [
-    "record_provider_call_metric",
-    "record_provider_token_usage",
+    "call_sdk_generate_with_metrics",
+    "call_upstream_http_with_metrics",
     "flush_metrics_buffer",
     "flush_user_metrics_buffer",
-    "call_upstream_http_with_metrics",
-    "stream_upstream_with_metrics",
-    "call_sdk_generate_with_metrics",
+    "record_provider_call_metric",
+    "record_provider_token_usage",
     "stream_sdk_with_metrics",
+    "stream_upstream_with_metrics",
 ]

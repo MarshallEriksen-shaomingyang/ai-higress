@@ -13,21 +13,22 @@ except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is
 from app.deps import get_db, get_http_client, get_redis
 from app.errors import bad_request, forbidden, not_found
 from app.http_client import CurlCffiClient
-from app.logging_config import logger
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
+from app.logging_config import logger
+from app.model_cache import MODELS_CACHE_KEY
 from app.schemas import (
-    ProviderSubmissionRequest,
-    ProviderSubmissionResponse,
-    UserProviderCreateRequest,
-    UserProviderResponse,
-    UserProviderUpdateRequest,
-    UserQuotaResponse,
     ProviderSharedUsersResponse,
     ProviderSharedUsersUpdateRequest,
+    ProviderSubmissionRequest,
+    ProviderSubmissionResponse,
     UserProbeRunResponse,
     UserProbeTaskCreateRequest,
     UserProbeTaskResponse,
     UserProbeTaskUpdateRequest,
+    UserProviderCreateRequest,
+    UserProviderResponse,
+    UserProviderUpdateRequest,
+    UserQuotaResponse,
 )
 from app.services.encryption import decrypt_secret
 from app.services.provider_submission_service import (
@@ -36,16 +37,6 @@ from app.services.provider_submission_service import (
 )
 from app.services.provider_validation_service import ProviderValidationService
 from app.services.user_permission_service import UserPermissionService
-from app.services.user_provider_service import (
-    UserProviderNotFoundError,
-    UserProviderServiceError,
-    count_user_private_providers,
-    create_private_provider,
-    get_private_provider_by_id,
-    list_private_providers,
-    update_private_provider,
-    update_provider_shared_users,
-)
 from app.services.user_probe_service import (
     UserProbeConflictError,
     UserProbeNotFoundError,
@@ -58,8 +49,17 @@ from app.services.user_probe_service import (
     run_user_probe_task_once,
     update_user_probe_task,
 )
+from app.services.user_provider_service import (
+    UserProviderNotFoundError,
+    UserProviderServiceError,
+    count_user_private_providers,
+    create_private_provider,
+    get_private_provider_by_id,
+    list_private_providers,
+    update_private_provider,
+    update_provider_shared_users,
+)
 from app.settings import settings
-from app.model_cache import MODELS_CACHE_KEY
 from app.storage.redis_service import PROVIDER_MODELS_KEY_TEMPLATE
 
 router = APIRouter(

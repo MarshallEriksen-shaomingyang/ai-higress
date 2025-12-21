@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import APIKey, User
 from app.schemas.api_key import APIKeyCreateRequest, APIKeyExpiry, APIKeyUpdateRequest
 from app.settings import settings
+
 from .api_key_provider_restriction import (
     APIKeyProviderRestrictionService,
     UnknownProviderError,
@@ -197,9 +198,9 @@ def delete_api_key(session: Session, api_key: APIKey) -> None:
 
 
 __all__ = [
+    "API_KEY_PREFIX_LENGTH",
     "APIKeyNameAlreadyExistsError",
     "APIKeyServiceError",
-    "API_KEY_PREFIX_LENGTH",
     "build_api_key_prefix",
     "create_api_key",
     "delete_api_key",

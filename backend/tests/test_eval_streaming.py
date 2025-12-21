@@ -1,15 +1,17 @@
 from __future__ import annotations
+
 import json
-import asyncio
-import pytest
-from uuid import uuid4, UUID
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
+
+import pytest
 from fastapi.testclient import TestClient
-from main import app
-from app.deps import get_db, get_redis, get_http_client
+
+from app.deps import get_db
 from app.jwt_auth import AuthenticatedUser
-from app.models import Eval, Run, Message
-from app.schemas import EvalCreateRequest
+from app.models import Eval, Message, Run
+from main import app
+
 
 @pytest.fixture
 def mock_user():
@@ -27,7 +29,7 @@ async def test_create_eval_streaming_flow():
     baseline_run_id = uuid4()
     challenger_run_id = uuid4()
     message_id = uuid4()
-    
+
     mock_eval = MagicMock(spec=Eval)
     mock_eval.id = eval_id
     mock_eval.baseline_run_id = baseline_run_id
@@ -35,7 +37,7 @@ async def test_create_eval_streaming_flow():
     mock_eval.challenger_run_ids = [str(challenger_run_id)]
     mock_eval.created_at = None
     mock_eval.updated_at = None
-    
+
     mock_run = MagicMock(spec=Run)
     mock_run.id = challenger_run_id
     mock_run.requested_logical_model = "gpt-4-test"
@@ -50,7 +52,7 @@ async def test_create_eval_streaming_flow():
 
     mock_db_session = MagicMock()
     mock_db_session.__enter__.return_value = mock_db_session
-    
+
     # We use a side_effect that returns appropriate objects based on what's being fetched
     def mock_first_side_effect():
         # This is a bit hacky but allows multiple calls to .scalars().first()
@@ -79,13 +81,13 @@ async def test_create_eval_streaming_flow():
 
         mock_create_eval.return_value = (mock_eval, [mock_run], {"summary": "test"})
         mock_session_local.return_value = mock_db_session
-        
+
         async def mock_stream_iter(*args, **kwargs):
             yield {"run_id": str(challenger_run_id), "type": "run.delta", "status": "running", "delta": "Hello"}
             yield {"run_id": str(challenger_run_id), "type": "run.completed", "status": "succeeded", "full_text": "Hello world"}
-        
+
         mock_execute_run_stream.side_effect = mock_stream_iter
-        
+
         mock_resolve_ctx.return_value = MagicMock(project_id=uuid4(), api_key=MagicMock())
         mock_get_cfg.return_value = MagicMock(provider_scopes=None)
         mock_get_pids.return_value = {"openai"}
@@ -96,8 +98,8 @@ async def test_create_eval_streaming_flow():
         app.dependency_overrides[get_db] = lambda: mock_db_session
         from app.jwt_auth import require_jwt_token
         app.dependency_overrides[require_jwt_token] = lambda: AuthenticatedUser(
-            id=str(uuid4()), 
-            username="admin", 
+            id=str(uuid4()),
+            username="admin",
             email="admin@example.com",
             is_superuser=True,
             is_active=True
@@ -116,30 +118,30 @@ async def test_create_eval_streaming_flow():
         with client_instance.stream("POST", "/v1/evals", json=payload) as response:
             assert response.status_code == 200
             events = []
-            
+
             for line in response.iter_lines():
                 if not line: continue
                 if isinstance(line, bytes):
                     line_str = line.decode("utf-8")
                 else:
                     line_str = line
-                
+
                 if line_str.startswith("data: "):
                     data_str = line_str[6:]
                     if data_str == "[DONE]": continue
                     data = json.loads(data_str)
                     events.append(data)
-            
+
             # Check for specific event types
             event_types = [e["type"] for e in events]
             assert "eval.created" in event_types
             assert "run.delta" in event_types
             assert "run.completed" in event_types
             assert "eval.completed" in event_types
-            
+
             # Verify run_id in run.delta
             delta_event = next(e for e in events if e["type"] == "run.delta")
             assert delta_event["run_id"] == str(challenger_run_id)
 
-    
+
     app.dependency_overrides.clear()

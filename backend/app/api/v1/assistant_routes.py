@@ -41,8 +41,8 @@ from app.services.chat_history_service import (
     list_assistants,
     list_conversations,
     list_messages_with_run_summaries,
-    update_conversation,
     update_assistant,
+    update_conversation,
 )
 
 router = APIRouter(

@@ -10,8 +10,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Awaitable, Sequence
-from typing import Any, Callable, TypeVar
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from typing import Any, TypeVar
 
 import httpx
 from fastapi import HTTPException, status
@@ -355,9 +355,7 @@ async def try_candidates_stream(
                     "provider_id": provider_id,
                 }
             }
-            error_chunk = f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode(
-                "utf-8"
-            )
+            error_chunk = f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
             await context_store.save_context(redis, session_id, payload, error_text)
             yield error_chunk
             return
@@ -372,7 +370,7 @@ async def try_candidates_stream(
         details.append(f"last_error={last_error_text}")
     detail_text = message if not details else f"{message}; " + ", ".join(details)
     error_payload = {"error": {"type": "all_providers_failed", "message": detail_text}}
-    error_chunk = f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode("utf-8")
+    error_chunk = f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
     await context_store.save_context(redis, session_id, payload, detail_text)
     yield error_chunk
 

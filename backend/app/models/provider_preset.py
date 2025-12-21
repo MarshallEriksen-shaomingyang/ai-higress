@@ -38,7 +38,7 @@ class ProviderPreset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     static_models = Column(JSONBCompat(), nullable=True)
     metadata_json = Column("metadata", JSONBCompat(), nullable=True)
 
-    providers: Mapped[list["Provider"]] = relationship(
+    providers: Mapped[list[Provider]] = relationship(
         "Provider",
         back_populates="preset",
         foreign_keys="Provider.preset_uuid",

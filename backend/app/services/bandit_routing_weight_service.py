@@ -11,7 +11,6 @@ from app.schemas import PhysicalModel
 from app.services.bandit_policy_service import BanditRecommendation, recommend_challengers
 from app.services.context_features_service import build_rule_context_features
 
-
 _ARM_PREFIX_LOGICAL_MODEL = "lm:"
 _ARM_PREFIX_PROVIDER = "provider:"
 

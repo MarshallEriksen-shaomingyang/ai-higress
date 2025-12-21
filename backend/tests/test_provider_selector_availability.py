@@ -1,10 +1,14 @@
 from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+
 from app.api.v1.chat.provider_selector import ProviderSelector
 from app.api.v1.chat.routing_state import RoutingStateService
-from app.schemas import LogicalModel, PhysicalModel, ProviderStatus
 from app.provider.health import HealthStatus
+from app.schemas import LogicalModel, PhysicalModel, ProviderStatus
+
 
 @pytest.fixture
 def mock_client():
@@ -70,15 +74,15 @@ async def test_check_candidate_availability(provider_selector, sample_logical_mo
     with patch.object(provider_selector, "_resolve_logical_model") as mock_resolve, \
          patch("app.api.v1.chat.provider_selector.select_candidate_upstreams") as mock_select_upstreams, \
          patch("app.api.v1.chat.provider_selector.settings") as mock_settings:
-        
+
         mock_settings.enable_provider_health_check = True
         mock_settings.candidate_availability_cache_ttl_seconds = 0
         mock_resolve.return_value = sample_logical_model
         mock_select_upstreams.return_value = list(sample_logical_model.upstreams)
-        
+
         # Test 1: All available
         provider_selector.routing_state.get_cached_health_status.return_value = None
-        
+
         available = await provider_selector.check_candidate_availability(
             candidate_logical_models=["model-a"],
             effective_provider_ids={"prov-1", "prov-2"}
@@ -105,7 +109,7 @@ async def test_check_candidate_availability(provider_selector, sample_logical_mo
              if pid == "prov-1":
                  return HealthStatus(provider_id="prov-1", status=ProviderStatus.DOWN, timestamp=0, error_message=None)
              return None
-        
+
         provider_selector.routing_state.get_cached_health_status.side_effect = health_side_effect
 
         available = await provider_selector.check_candidate_availability(
@@ -117,7 +121,7 @@ async def test_check_candidate_availability(provider_selector, sample_logical_mo
 
         # Test 5: All providers down
         provider_selector.routing_state.get_cached_health_status.return_value = HealthStatus(provider_id="dummy", status=ProviderStatus.DOWN, timestamp=0, error_message=None)
-        
+
         available = await provider_selector.check_candidate_availability(
             candidate_logical_models=["model-a"],
             effective_provider_ids={"prov-1", "prov-2"}
@@ -127,13 +131,13 @@ async def test_check_candidate_availability(provider_selector, sample_logical_mo
 
         # Test 6: Disabled pair
         provider_selector._load_disabled_pairs.return_value = {("prov-1", "model-a-1")}
-        
+
         available = await provider_selector.check_candidate_availability(
             candidate_logical_models=["model-a"],
             effective_provider_ids={"prov-1"} # Only prov-1 allowed, but disabled
         )
         assert available == []
-        
+
         # Test 7: Disabled pair (but other provider available)
         available = await provider_selector.check_candidate_availability(
             candidate_logical_models=["model-a"],

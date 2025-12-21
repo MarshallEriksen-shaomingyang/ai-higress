@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.registration_window import RegistrationWindowStatus
 
@@ -21,7 +21,7 @@ class RegistrationWindowCreateRequest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _check_range(self) -> "RegistrationWindowCreateRequest":
+    def _check_range(self) -> RegistrationWindowCreateRequest:
         if self.end_time <= self.start_time:
             raise ValueError("结束时间必须晚于开始时间")
         return self

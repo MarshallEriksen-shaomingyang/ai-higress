@@ -20,7 +20,7 @@ class Identity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     external_id: Mapped[str] = Column(String(255), nullable=False)
     display_name: Mapped[str | None] = Column(String(255), nullable=True)
 
-    user: Mapped["User"] = relationship("User", back_populates="identities")
+    user: Mapped[User] = relationship("User", back_populates="identities")
 
 
 __all__ = ["Identity"]

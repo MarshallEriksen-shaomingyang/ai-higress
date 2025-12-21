@@ -4,7 +4,8 @@ Request validation middleware to detect and block malicious requests.
 
 import re
 import time
-from typing import Callable, Pattern
+from collections.abc import Callable
+from re import Pattern
 from urllib.parse import unquote_plus
 
 from fastapi import Request, status

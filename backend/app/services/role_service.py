@@ -232,9 +232,9 @@ class RoleService:
 
 
 __all__ = [
+    "RoleCodeAlreadyExistsError",
     "RoleService",
     "RoleServiceError",
-    "RoleCodeAlreadyExistsError",
     "UnknownPermissionCodeError",
     "UnknownRoleIdError",
 ]

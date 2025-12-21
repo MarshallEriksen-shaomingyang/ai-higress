@@ -24,7 +24,7 @@ class ProviderAPIKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     label: Mapped[str | None] = Column(String(50), nullable=True)
     status: Mapped[str] = Column(String(20), nullable=False, default="active")
 
-    provider: Mapped["Provider"] = relationship("Provider", back_populates="api_keys")
+    provider: Mapped[Provider] = relationship("Provider", back_populates="api_keys")
 
     @property
     def provider_id(self) -> str:

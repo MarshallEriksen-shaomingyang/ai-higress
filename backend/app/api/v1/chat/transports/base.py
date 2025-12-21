@@ -16,32 +16,32 @@ from app.models import ProviderKey
 @dataclass
 class TransportResult:
     """传输层返回结果"""
-    
+
     # 响应数据
     response: dict[str, Any] | None = None
-    
+
     # 流式响应迭代器
     stream: AsyncIterator[bytes] | None = None
-    
+
     # 是否为流式响应
     is_stream: bool = False
-    
+
     # HTTP 状态码
     status_code: int = 200
-    
+
     # 实际使用的 Provider Key
     provider_key: ProviderKey | None = None
-    
+
     # 实际使用的模型 ID
     provider_model_id: str | None = None
-    
+
     # 错误信息（如果有）
     error: str | None = None
 
 
 class Transport(ABC):
     """传输层基类"""
-    
+
     def __init__(
         self,
         *,
@@ -52,7 +52,7 @@ class Transport(ABC):
         self.api_key = api_key
         self.session_id = session_id
         self.logical_model = logical_model
-    
+
     @abstractmethod
     async def send_request(
         self,
@@ -79,7 +79,7 @@ class Transport(ABC):
             TransportResult: 传输结果
         """
         pass
-    
+
     @abstractmethod
     def supports_provider(self, provider_id: str) -> bool:
         """

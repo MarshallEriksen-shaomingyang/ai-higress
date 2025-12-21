@@ -1,11 +1,11 @@
 import httpx
 import pytest
 
-from app.upstream import UpstreamStreamError
 from app.services.metrics_service import (
     call_upstream_http_with_metrics,
     stream_upstream_with_metrics,
 )
+from app.upstream import UpstreamStreamError
 
 
 @pytest.mark.asyncio

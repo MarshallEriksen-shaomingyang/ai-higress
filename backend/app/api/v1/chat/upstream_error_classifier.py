@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-
 _UNSUPPORTED_MARKERS = (
     "does not support",
     "do not support",

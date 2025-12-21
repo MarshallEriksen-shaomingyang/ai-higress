@@ -5,7 +5,6 @@ from typing import Any
 
 from app.services.bandit_policy_service import infer_language, length_bucket
 
-
 _CODE_FENCE_RE = re.compile(r"```")
 _CODE_LIKE_RE = re.compile(
     r"(^|\n)\s*(def |class |import |from |return |async |await |try:|except |raise |if __name__|#include|SELECT |INSERT |UPDATE |DELETE )",

@@ -44,20 +44,20 @@ import json
 import re
 import time
 import uuid
-from uuid import UUID
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+from uuid import UUID
 
 import httpx
-from fastapi import HTTPException, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import AuthenticatedAPIKey
+from app.context_store import save_context
 from app.logging_config import logger
 from app.model_cache import get_models_from_cache, set_models_cache
 from app.models import Provider, ProviderModel
@@ -68,39 +68,25 @@ from app.provider.config import (
 )
 from app.provider.discovery import ensure_provider_models_cached
 from app.provider.key_pool import (
-    NoAvailableProviderKey,
     SelectedProviderKey,
     acquire_provider_key,
-    record_key_failure,
-    record_key_success,
 )
-from app.provider.sdk_selector import get_sdk_driver, normalize_base_url
 from app.routing.exceptions import NoAllowedProvidersAvailable
-from app.routing.mapper import select_candidate_upstreams
-from app.routing.provider_weight import (
-    load_dynamic_weights,
-    record_provider_failure,
-    record_provider_success,
-)
-from app.routing.scheduler import CandidateScore, choose_upstream
+from app.routing.scheduler import CandidateScore
 from app.schemas import (
     LogicalModel,
     ModelCapability,
     PhysicalModel,
     ProviderConfig,
     RoutingMetrics,
-    SchedulingStrategy,
 )
 from app.services.metrics_service import (
     call_upstream_http_with_metrics,
-    call_sdk_generate_with_metrics,
-    stream_sdk_with_metrics,
     stream_upstream_with_metrics,
 )
-from app.storage.redis_service import get_logical_model, get_routing_metrics
 from app.settings import settings
-from app.context_store import save_context
-from app.upstream import UpstreamStreamError, stream_upstream
+from app.storage.redis_service import get_routing_metrics
+from app.upstream import UpstreamStreamError
 
 
 class HealthResponse(BaseModel):
@@ -197,7 +183,7 @@ def _select_provider_endpoint(
 
     priorities = _STYLE_PRIORITY.get(requested_style, ["openai"])
     base = str(cfg.base_url).rstrip("/")
-    
+
     for style in priorities:
         if not _provider_supports_api_style(cfg, style):
             continue
@@ -231,10 +217,10 @@ async def _build_provider_headers(
         Tuple of (headers dict, key selection)
     """
     key_selection = await acquire_provider_key(provider_cfg, redis)
-    
+
     # Choose authentication header format based on API style
     headers: dict[str, str] = {"Accept": "application/json"}
-    
+
     if api_style == "claude":
         # Claude API uses x-api-key header
         headers["x-api-key"] = key_selection.key
@@ -946,7 +932,7 @@ async def _responses_streaming_fallback_iterator(
                 decoded = chunk.decode("utf-8")
             except UnicodeDecodeError:
                 continue
-            
+
             buffer += decoded
             while "\n\n" in buffer:
                 raw_event, buffer = buffer.split("\n\n", 1)
@@ -965,12 +951,12 @@ async def _responses_streaming_fallback_iterator(
                         created_payload = _build_created_event_payload(rid, model_name, created)
                         yield _encode_sse_payload(created_payload)
                         created_emitted = True
-                    
+
                     # Emit output done events
                     for idx in sorted(index_to_text):
                         rid = _ensure_response_id(response_id)
                         yield _encode_sse_payload(_build_output_done_event_payload(rid, idx))
-                    
+
                     # Emit completed event
                     rid = _ensure_response_id(response_id)
                     completed = _build_completed_event_payload(
@@ -1002,11 +988,11 @@ async def _responses_streaming_fallback_iterator(
                     delta = choice.get("delta") or {}
                     delta_content = delta.get("content")
                     text_delta = _flatten_responses_content(delta_content)
-                    
+
                     if text_delta:
                         existing = index_to_text.get(idx, "")
                         index_to_text[idx] = existing + text_delta
-                        
+
                         # Emit created event on first content
                         if not created_emitted:
                             rid = _ensure_response_id(response_id)
@@ -1014,7 +1000,7 @@ async def _responses_streaming_fallback_iterator(
                             created_payload = _build_created_event_payload(rid, model_name, created)
                             yield _encode_sse_payload(created_payload)
                             created_emitted = True
-                        
+
                         # Emit delta event
                         rid = _ensure_response_id(response_id)
                         yield _encode_sse_payload({

@@ -207,8 +207,8 @@ async def invalidate_provider_weights(
 __all__ = [
     "adjust_provider_weight",
     "clamp_provider_weight",
+    "invalidate_provider_weights",
     "load_dynamic_weights",
     "record_provider_failure",
     "record_provider_success",
-    "invalidate_provider_weights",
 ]

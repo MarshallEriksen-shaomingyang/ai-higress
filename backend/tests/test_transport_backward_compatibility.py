@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Provider
@@ -54,7 +54,7 @@ def test_provider_default_transport_is_http(session_factory):
         session.add(provider)
         session.commit()
         session.refresh(provider)
-        
+
         # 验证默认值为 'http'
         assert provider.transport == "http"
         assert provider.transport == TransportType.HTTP.value
@@ -82,7 +82,7 @@ def test_provider_explicit_http_transport(session_factory):
         session.add(provider)
         session.commit()
         session.refresh(provider)
-        
+
         # 验证 transport 为 'http'
         assert provider.transport == "http"
         assert provider.transport == TransportType.HTTP.value
@@ -111,7 +111,7 @@ def test_provider_sdk_transport_unchanged(session_factory):
         session.add(provider)
         session.commit()
         session.refresh(provider)
-        
+
         # 验证 transport 为 'sdk'
         assert provider.transport == "sdk"
         assert provider.transport == TransportType.SDK.value
@@ -140,7 +140,7 @@ def test_provider_claude_cli_transport_new_feature(session_factory):
         session.add(provider)
         session.commit()
         session.refresh(provider)
-        
+
         # 验证 transport 为 'claude_cli'
         assert provider.transport == "claude_cli"
         assert provider.transport == TransportType.CLAUDE_CLI.value
@@ -187,16 +187,16 @@ def test_multiple_providers_with_different_transports(session_factory):
                 status="healthy",
             ),
         ]
-        
+
         for provider in providers:
             session.add(provider)
         session.commit()
-        
+
         # 查询并验证每个 Provider 的 transport
         http_provider = session.query(Provider).filter_by(provider_id="provider-http").first()
         sdk_provider = session.query(Provider).filter_by(provider_id="provider-sdk").first()
         cli_provider = session.query(Provider).filter_by(provider_id="provider-claude-cli").first()
-        
+
         assert http_provider.transport == "http"
         assert sdk_provider.transport == "sdk"
         assert cli_provider.transport == "claude_cli"
@@ -224,14 +224,14 @@ def test_provider_transport_field_in_api_response(session_factory):
         session.add(provider)
         session.commit()
         session.refresh(provider)
-        
+
         # 验证 Provider 对象有 transport 属性
         assert hasattr(provider, "transport")
         assert provider.transport == "http"
-        
+
         # 模拟 API 响应序列化
         from app.schemas.provider import ProviderResponse
-        
+
         response = ProviderResponse.model_validate(provider)
         assert response.transport == "http"
 
@@ -256,24 +256,24 @@ def test_provider_update_transport_field(session_factory):
         session.add(provider)
         session.commit()
         session.refresh(provider)
-        
+
         # 验证初始值
         assert provider.transport == "http"
-        
+
         # 更新为 claude_cli
         provider.transport = "claude_cli"
         session.commit()
         session.refresh(provider)
-        
+
         # 验证更新成功
         assert provider.transport == "claude_cli"
-        
+
         # 再次更新为 sdk
         provider.transport = "sdk"
         provider.sdk_vendor = "openai"
         session.commit()
         session.refresh(provider)
-        
+
         # 验证再次更新成功
         assert provider.transport == "sdk"
         assert provider.sdk_vendor == "openai"

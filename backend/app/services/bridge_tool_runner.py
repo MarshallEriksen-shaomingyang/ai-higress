@@ -5,7 +5,6 @@ import json
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -58,7 +57,7 @@ def _sanitize_name(value: str) -> str:
 def _make_tool_alias(*, agent_id: str, tool_name: str, max_len: int = 64) -> str:
     agent_part = _sanitize_name(agent_id)[:16]
     tool_part = _sanitize_name(tool_name)[:32]
-    h = hashlib.sha1(f"{agent_id}:{tool_name}".encode("utf-8")).hexdigest()[:10]
+    h = hashlib.sha1(f"{agent_id}:{tool_name}".encode()).hexdigest()[:10]
 
     base = f"bridge__{agent_part}__{tool_part}__{h}"
     if len(base) <= max_len:

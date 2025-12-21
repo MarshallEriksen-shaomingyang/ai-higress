@@ -1,5 +1,6 @@
 import json
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from fastapi.testclient import TestClient
 
@@ -110,7 +111,7 @@ def _make_sample_models() -> list[LogicalModel]:
 
 def test_logical_model_routes_list_and_get():
     from app.models import Provider, User
-    
+
     app = create_app()
     # logical_model_routes is already included by create_app via app.include_router
 
@@ -121,13 +122,13 @@ def test_logical_model_routes_list_and_get():
     with SessionLocal() as session:
         user = session.query(User).filter_by(username="admin").first()
         user_id = str(user.id)
-    
+
     # 使用真实的用户 ID 来 override JWT token
     app.dependency_overrides[require_jwt_token] = make_override_require_jwt_token(user_id)
 
     # Clear Redis before seeding
     fake_redis._data.clear()
-    
+
     # 创建 Provider，使得用户有权限访问
     with SessionLocal() as session:
         provider1 = Provider(
@@ -142,7 +143,7 @@ def test_logical_model_routes_list_and_get():
         )
         session.add(provider1)
         session.commit()
-    
+
     # Seed Redis with two logical models.
     for lm in _make_sample_models():
         _store_logical_model(lm)
@@ -168,8 +169,7 @@ def test_logical_model_routes_list_and_get():
 
 def test_logical_model_routes_upstreams():
     from app.models import Provider, User
-    from app.deps import get_db
-    
+
     app = create_app()
     SessionLocal = install_inmemory_db(app)
     app.dependency_overrides[get_redis] = override_get_redis
@@ -178,14 +178,14 @@ def test_logical_model_routes_upstreams():
     with SessionLocal() as session:
         user = session.query(User).filter_by(username="admin").first()
         user_id = str(user.id)
-    
+
     # 使用真实的用户 ID 来 override JWT token
     app.dependency_overrides[require_jwt_token] = make_override_require_jwt_token(user_id)
 
     fake_redis._data.clear()
     logical = _make_sample_models()[0]
     _store_logical_model(logical)
-    
+
     # 创建一个 Provider，使得用户有权限访问
     with SessionLocal() as session:
         provider = Provider(

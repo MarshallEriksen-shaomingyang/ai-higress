@@ -7,9 +7,9 @@ aggregation without deleting the model row.
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0040_add_disabled_to_provider_models"
 down_revision = "0039_add_composite_indexes_for_metrics_history"

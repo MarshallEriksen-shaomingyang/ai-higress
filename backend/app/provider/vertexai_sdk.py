@@ -42,7 +42,7 @@ def _extract_location_from_base_url(base_url: str | None) -> str | None:
         return None
     host = (parsed.hostname or "").lower()
     suffix = "-aiplatform.googleapis.com"
-    if host.endswith(suffix) and host != f"aiplatform.googleapis.com":
+    if host.endswith(suffix) and host != "aiplatform.googleapis.com":
         candidate = host[: -len(suffix)]
         if candidate:
             return candidate

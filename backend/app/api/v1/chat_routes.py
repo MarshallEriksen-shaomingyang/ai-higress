@@ -21,16 +21,21 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - 运行环境缺少 redis 时的兜底类型
     Redis = object  # type: ignore[misc,assignment]
 
+from app.api.v1.chat.middleware import (
+    enforce_request_moderation,
+    wrap_stream_with_moderation,
+)
+from app.api.v1.chat.request_handler import RequestHandler
 from app.auth import AuthenticatedAPIKey, require_api_key
 from app.deps import get_db, get_http_client, get_redis
 from app.errors import forbidden
-from app.logging_config import logger
 from app.log_sanitizer import sanitize_headers_for_log
-from app.services.client_app_fingerprint import infer_client_app_name
+from app.logging_config import logger
 from app.services.chat_routing_service import (
     _normalize_payload_by_model,
     _strip_model_group_prefix,
 )
+from app.services.client_app_fingerprint import infer_client_app_name
 from app.services.credit_service import (
     InsufficientCreditsError,
     ensure_account_usable,
@@ -39,12 +44,6 @@ from app.services.user_app_metrics_service import record_user_app_request_metric
 from app.services.user_provider_service import get_accessible_provider_ids
 from app.settings import settings
 from app.upstream import detect_request_format
-
-from app.api.v1.chat.middleware import (
-    enforce_request_moderation,
-    wrap_stream_with_moderation,
-)
-from app.api.v1.chat.request_handler import RequestHandler
 
 router = APIRouter(tags=["chat"])
 
@@ -231,7 +230,7 @@ async def chat_completions(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(exc)}",
+            detail=f"Internal server error: {exc!s}",
         )
 
 

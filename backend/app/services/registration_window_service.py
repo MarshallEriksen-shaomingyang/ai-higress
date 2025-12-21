@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import os
+from datetime import UTC, datetime
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
@@ -29,14 +29,14 @@ class RegistrationQuotaExceededError(RegistrationWindowError):
 def _ensure_utc(dt: datetime) -> datetime:
     """Normalize datetimes to timezone-aware UTC to avoid naive/aware comparison issues."""
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def _now(now: datetime | None = None) -> datetime:
     """Return a timezone-aware UTC 'now' value."""
     if now is None:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
     return _ensure_utc(now)
 
 

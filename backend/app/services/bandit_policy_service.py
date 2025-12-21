@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from app.models import BanditArmStats
 from app.settings import settings
 
-
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 

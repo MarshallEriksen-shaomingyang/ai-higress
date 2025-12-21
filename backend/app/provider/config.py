@@ -13,7 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import SessionLocal
@@ -184,16 +184,16 @@ def _build_provider_config(provider: Provider) -> ProviderConfig | None:
     if provider.models_path:
         trimmed = provider.models_path.strip()
         data["models_path"] = trimmed if trimmed else None
-    
+
     if provider.messages_path:
         trimmed = provider.messages_path.strip()
         data["messages_path"] = trimmed if trimmed else None
-    
+
     chat_path = getattr(provider, "chat_completions_path", None)
     if chat_path:
         trimmed = chat_path.strip()
         data["chat_completions_path"] = trimmed if trimmed else None
-    
+
     responses_path = getattr(provider, "responses_path", None)
     if responses_path:
         trimmed = responses_path.strip()

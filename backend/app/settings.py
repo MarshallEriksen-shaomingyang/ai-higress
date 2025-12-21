@@ -1,5 +1,4 @@
 
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,7 +28,7 @@ else:
     # 类型检查时使用的简化版本
     class BaseSettings:  # type: ignore[no-redef]
         pass
-    
+
     class SettingsConfigDict(dict):  # type: ignore[no-redef]
         pass
 
@@ -51,19 +50,19 @@ class Settings(BaseSettings):
         alias="CORS_ALLOW_ORIGINS",
         description="允许的跨域来源，多个来源用逗号分隔"
     )
-    
+
     cors_allow_credentials: bool = Field(
         True,
         alias="CORS_ALLOW_CREDENTIALS",
         description="是否允许跨域请求携带凭证"
     )
-    
+
     cors_allow_methods: str = Field(
         "*",
         alias="CORS_ALLOW_METHODS",
         description="允许的跨域请求方法，多个方法用逗号分隔，* 表示所有方法"
     )
-    
+
     cors_allow_headers: str = Field(
         "*",
         alias="CORS_ALLOW_HEADERS",
@@ -230,7 +229,7 @@ class Settings(BaseSettings):
         alias="ENABLE_PROVIDER_HEALTH_CHECK",
         description="是否启用 Provider 健康状态检查和路由过滤（关闭后将忽略 Provider 状态和最低分数过滤）",
     )
-    
+
     # Provider 实时故障标记（用于快速跳过故障 Provider）
     provider_failure_cooldown_seconds: int = Field(
         60,

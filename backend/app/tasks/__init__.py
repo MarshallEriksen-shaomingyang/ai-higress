@@ -10,9 +10,10 @@ Celery 任务定义入口。
 """
 
 import asyncio
-from typing import Sequence
+from collections.abc import Sequence
 
 from celery import shared_task
+
 from app.logging_config import logger
 from app.redis_client import get_redis_client
 from app.services.logical_model_sync import sync_logical_models

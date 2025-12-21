@@ -16,8 +16,9 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, relationship
 
-from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.db.types import JSONBCompat
+
+from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class UpstreamProxyConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -138,7 +139,7 @@ class UpstreamProxySource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         doc="解析提示（预留），用于支持更多远程列表格式",
     )
 
-    endpoints: Mapped[list["UpstreamProxyEndpoint"]] = relationship(
+    endpoints: Mapped[list[UpstreamProxyEndpoint]] = relationship(
         "UpstreamProxyEndpoint",
         back_populates="source",
         cascade="all, delete-orphan",

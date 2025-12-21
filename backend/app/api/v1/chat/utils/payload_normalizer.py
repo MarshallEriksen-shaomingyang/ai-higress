@@ -20,15 +20,15 @@ def detect_api_style(payload: dict[str, Any]) -> str:
         return "claude"
     if "anthropic_version" in payload:
         return "claude"
-    
+
     # Gemini 风格：使用 contents 而不是 messages
     if "contents" in payload and "messages" not in payload:
         return "gemini"
-    
+
     # OpenAI 新 API 使用 max_completion_tokens
     if "max_completion_tokens" in payload and "anthropic_version" not in payload:
         return "openai"
-    
+
     # 默认：OpenAI 风格
     return "openai"
 
@@ -52,13 +52,13 @@ def normalize_payload(
     """
     if api_style is None:
         api_style = detect_api_style(payload)
-    
+
     # 创建副本
     normalized = dict(payload)
-    
+
     # 替换模型名称
     normalized["model"] = provider_model_id
-    
+
     return normalized
 
 

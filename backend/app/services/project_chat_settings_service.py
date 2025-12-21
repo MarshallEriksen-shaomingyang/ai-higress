@@ -8,7 +8,6 @@ from app.jwt_auth import AuthenticatedUser
 from app.schemas import ProjectChatSettingsResponse, ProjectChatSettingsUpdateRequest
 from app.services.project_eval_config_service import resolve_project_context
 
-
 DEFAULT_PROJECT_CHAT_MODEL = "auto"
 
 

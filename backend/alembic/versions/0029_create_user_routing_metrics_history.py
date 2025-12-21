@@ -1,10 +1,10 @@
 """Create user routing metrics history table for per-user analytics."""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision = "0029_create_user_routing_metrics_history"
 down_revision = "0028_add_provider_fields_to_credit_transactions"

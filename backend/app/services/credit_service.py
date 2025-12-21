@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from app.logging_config import logger
 from app.models import (
     CreditAccount,
-    CreditTransaction,
     CreditAutoTopupRule,
+    CreditTransaction,
     ModelBillingConfig,
     Provider,
     ProviderModel,

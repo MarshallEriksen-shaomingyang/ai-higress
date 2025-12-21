@@ -58,7 +58,7 @@ def test_recalculate_and_persist_merges_window() -> None:
     SessionLocal = _setup_session()
     with SessionLocal() as session:
         # 固定一个时间点，避免基于当前时间导致的窗口对齐随机性（否则不同分钟会落到不同 5 分钟桶里，测试会变得不稳定）
-        base = dt.datetime(2024, 1, 1, 0, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2024, 1, 1, 0, 0, tzinfo=dt.UTC)
         _seed_history(
             session,
             window_start=base - dt.timedelta(minutes=2),
@@ -107,7 +107,7 @@ def test_recalculate_skips_when_no_diff() -> None:
     SessionLocal = _setup_session()
     with SessionLocal() as session:
         # 与上一个测试保持一致，使用固定的窗口基准时间，确保聚合窗口稳定
-        base = dt.datetime(2024, 1, 1, 0, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2024, 1, 1, 0, 0, tzinfo=dt.UTC)
         _seed_history(
             session,
             window_start=base - dt.timedelta(minutes=2),

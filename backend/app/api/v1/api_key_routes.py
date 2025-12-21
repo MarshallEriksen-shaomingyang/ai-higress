@@ -55,7 +55,7 @@ def _ensure_user_exists(session: Session, user_id: UUID):
     return user
 
 
-def _get_api_key_or_404(session: Session, key_id: UUID, *, user_id: UUID) -> "APIKey":
+def _get_api_key_or_404(session: Session, key_id: UUID, *, user_id: UUID) -> APIKey:
     api_key = get_api_key_by_id(session, key_id, user_id=user_id)
     if api_key is None:
         raise not_found(f"API key {key_id} not found")

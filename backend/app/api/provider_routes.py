@@ -15,16 +15,21 @@ from app.deps import get_db, get_http_client, get_redis
 from app.errors import bad_request, forbidden, http_error, not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.logging_config import logger
+from app.model_cache import MODELS_CACHE_KEY
 from app.models import Provider, ProviderModel, ProviderSubmission
+from app.provider.config import get_provider_config, load_provider_configs
+from app.provider.discovery import ensure_provider_models_cached
+from app.provider.health import HealthStatus
+from app.provider.sdk_selector import list_registered_sdk_vendors
 from app.schemas import (
+    ModelAliasUpdateRequest,
+    ModelDisableUpdateRequest,
     ProviderAPIKey,
     ProviderConfig,
-    RoutingMetrics,
-    ModelAliasUpdateRequest,
     ProviderModelAliasResponse,
-    ModelDisableUpdateRequest,
     ProviderModelDisabledResponse,
     ProviderSubmissionStatus,
+    RoutingMetrics,
 )
 from app.schemas.provider_routes import (
     ProviderMetricsResponse,
@@ -32,14 +37,9 @@ from app.schemas.provider_routes import (
     ProvidersResponse,
     SDKVendorsResponse,
 )
-from app.provider.config import get_provider_config, load_provider_configs
-from app.provider.discovery import ensure_provider_models_cached
-from app.provider.health import HealthStatus
-from app.provider.sdk_selector import list_registered_sdk_vendors
 from app.services.provider_health_service import get_health_status_with_fallback
 from app.services.user_provider_service import get_accessible_provider_ids
-from app.storage.redis_service import get_routing_metrics, get_all_provider_metrics
-from app.model_cache import MODELS_CACHE_KEY
+from app.storage.redis_service import get_all_provider_metrics, get_routing_metrics
 
 router = APIRouter(
     tags=["providers"],

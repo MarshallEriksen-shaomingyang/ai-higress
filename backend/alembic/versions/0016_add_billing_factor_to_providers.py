@@ -8,8 +8,9 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0016_add_billing_factor_to_providers"
 down_revision = "0015_add_credit_and_billing_tables"

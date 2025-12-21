@@ -19,22 +19,22 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = Column(Boolean, server_default=text("TRUE"), nullable=False)
     is_superuser: Mapped[bool] = Column(Boolean, server_default=text("FALSE"), nullable=False)
 
-    identities: Mapped[list["Identity"]] = relationship(
+    identities: Mapped[list[Identity]] = relationship(
         "Identity",
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    api_keys: Mapped[list["APIKey"]] = relationship(
+    api_keys: Mapped[list[APIKey]] = relationship(
         "APIKey",
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    user_roles: Mapped[list["UserRole"]] = relationship(
+    user_roles: Mapped[list[UserRole]] = relationship(
         "UserRole",
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    credit_account: Mapped["CreditAccount"] = relationship(
+    credit_account: Mapped[CreditAccount] = relationship(
         "CreditAccount",
         back_populates="user",
         uselist=False,

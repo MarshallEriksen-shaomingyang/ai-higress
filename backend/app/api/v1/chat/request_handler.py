@@ -345,7 +345,7 @@ class RequestHandler:
                     is_stream=True,
                     user_id=user_uuid,
                     api_key_id=api_key_uuid,
-                    occurred_at=dt.datetime.now(tz=dt.timezone.utc),
+                    occurred_at=dt.datetime.now(tz=dt.UTC),
                     input_tokens=None,
                     output_tokens=None,
                     total_tokens=approx_tokens,

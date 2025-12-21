@@ -18,12 +18,18 @@ except ModuleNotFoundError:  # pragma: no cover
 
 from sqlalchemy.orm import Session as DbSession
 
-from app.auth import AuthenticatedAPIKey
 from app.api.v1.chat.header_builder import build_upstream_headers
 from app.api.v1.chat.protocol_adapter import adapt_request_payload
 from app.api.v1.chat.protocol_stream_adapter import adapt_stream
-from app.api.v1.chat.upstream_error_classifier import classify_capability_mismatch
 from app.api.v1.chat.provider_endpoint_resolver import resolve_http_upstream_target
+from app.api.v1.chat.sdk_stream_encoder import (
+    GeminiDictToOpenAISSEAdapter,
+    encode_claude_sdk_event_dict,
+    encode_openai_done,
+    encode_openai_sdk_chunk_dict,
+)
+from app.api.v1.chat.upstream_error_classifier import classify_capability_mismatch
+from app.auth import AuthenticatedAPIKey
 from app.provider import config as provider_config
 from app.provider.key_pool import (
     NoAvailableProviderKey,
@@ -39,12 +45,6 @@ from app.services.chat_routing_service import (
 from app.services.claude_cli_transformer import build_claude_cli_headers, transform_to_claude_cli_format
 from app.services.metrics_service import stream_sdk_with_metrics, stream_upstream_with_metrics
 from app.upstream import UpstreamStreamError
-from app.api.v1.chat.sdk_stream_encoder import (
-    GeminiDictToOpenAISSEAdapter,
-    encode_claude_sdk_event_dict,
-    encode_openai_done,
-    encode_openai_sdk_chunk_dict,
-)
 
 
 async def execute_http_stream(
@@ -137,8 +137,8 @@ async def execute_http_stream(
         mismatch = classify_capability_mismatch(err.status_code, getattr(err, "text", None))
         retryable = True if mismatch else _is_retryable_upstream_status(provider_id, err.status_code)
         if mismatch:
-            setattr(err, "retryable", True)
-            setattr(err, "penalize", False)
+            err.retryable = True
+            err.penalize = False
             raise
         record_key_failure(
             key_selection,
@@ -338,8 +338,8 @@ async def execute_claude_cli_stream(
         mismatch = classify_capability_mismatch(err.status_code, getattr(err, "text", None))
         retryable = True if mismatch else _is_retryable_upstream_status(provider_id, err.status_code)
         if mismatch:
-            setattr(err, "retryable", True)
-            setattr(err, "penalize", False)
+            err.retryable = True
+            err.penalize = False
             raise
         record_key_failure(
             key_selection,

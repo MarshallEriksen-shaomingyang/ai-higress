@@ -4,7 +4,7 @@ Rate limiting middleware to prevent brute force and DDoS attacks.
 
 import time
 from collections import defaultdict
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
@@ -113,20 +113,20 @@ class RedisRateLimiter:
 
         # 使用 Redis 的 ZSET 实现滑动窗口
         pipe = self.redis.pipeline()
-        
+
         # 移除过期的请求记录
         cutoff = now - window_seconds
         pipe.zremrangebyscore(redis_key, 0, cutoff)
-        
+
         # 获取当前窗口内的请求数
         pipe.zcard(redis_key)
-        
+
         # 添加当前请求
         pipe.zadd(redis_key, {str(now): now})
-        
+
         # 设置过期时间
         pipe.expire(redis_key, window_seconds + 10)
-        
+
         results = await pipe.execute()
         current_count = results[1]  # ZCARD 的结果
 
@@ -174,7 +174,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             get_client_ip: 自定义获取客户端 IP 的函数
         """
         super().__init__(app)
-        
+
         if redis_client:
             self.limiter = RedisRateLimiter(redis_client)
         else:

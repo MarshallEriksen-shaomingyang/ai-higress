@@ -560,6 +560,7 @@ def get_run_detail(db: Session, *, run_id: UUID, user_id: UUID) -> Run:
 
 
 __all__ = [
+    "clear_conversation_messages",
     "create_assistant",
     "create_assistant_message_after_user",
     "create_assistant_message_placeholder_after_user",
@@ -567,7 +568,6 @@ __all__ = [
     "create_user_message",
     "delete_assistant",
     "delete_conversation",
-    "clear_conversation_messages",
     "finalize_assistant_message_after_user_sequence",
     "get_assistant",
     "get_conversation",
@@ -576,7 +576,7 @@ __all__ = [
     "list_assistants",
     "list_conversations",
     "list_messages_with_run_summaries",
-    "update_conversation",
     "update_assistant",
     "update_assistant_message_for_user_sequence",
+    "update_conversation",
 ]

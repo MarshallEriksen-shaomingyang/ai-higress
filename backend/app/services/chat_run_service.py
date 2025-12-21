@@ -19,9 +19,9 @@ from app.api.v1.chat.request_handler import RequestHandler
 from app.auth import AuthenticatedAPIKey
 from app.logging_config import logger
 from app.models import AssistantPreset, Conversation, Message, Run
+from app.services.credit_service import compute_chat_completion_cost_credits
 from app.settings import settings
 from app.upstream import detect_request_format
-from app.services.credit_service import compute_chat_completion_cost_credits
 
 
 def _safe_text_from_message_content(content: dict) -> str:

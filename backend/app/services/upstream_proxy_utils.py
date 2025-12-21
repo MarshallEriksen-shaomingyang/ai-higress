@@ -41,7 +41,7 @@ def compute_identity_hash(
     We avoid using encrypted fields in unique constraints; instead we compute a
     deterministic identity from non-sensitive fields + username (if any).
     """
-    msg = f"{scheme}://{host}:{port}|{username or ''}".encode("utf-8")
+    msg = f"{scheme}://{host}:{port}|{username or ''}".encode()
     secret = settings.secret_key.encode("utf-8")
     return hmac.new(secret, msg, hashlib.sha256).hexdigest()
 
@@ -152,8 +152,8 @@ def safe_json_dumps(value: Any) -> str:
 
 
 __all__ = [
-    "ParsedProxy",
     "VALID_PROXY_SCHEMES",
+    "ParsedProxy",
     "build_proxy_url",
     "compute_identity_hash",
     "compute_url_fingerprint",

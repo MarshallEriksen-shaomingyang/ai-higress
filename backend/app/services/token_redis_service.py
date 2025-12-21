@@ -3,10 +3,7 @@ JWT Token Redis 存储服务
 提供 token 的存储、验证、撤销等功能
 """
 
-import json
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
-import uuid
+from datetime import UTC, datetime, timedelta
 
 try:
     from redis.asyncio import Redis
@@ -42,7 +39,7 @@ class TokenRedisService:
         user_id: str,
         jti: str,
         expires_in: int,
-        device_info: Optional[DeviceInfo] = None,
+        device_info: DeviceInfo | None = None,
     ) -> None:
         """
         存储 access token 到 Redis
@@ -55,7 +52,7 @@ class TokenRedisService:
             device_info: 设备信息
         """
         # 使用带时区的 UTC 时间，避免 datetime.utcnow() 的弃用警告
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires_at = now + timedelta(seconds=expires_in)
 
         token_record = TokenRecord(
@@ -90,8 +87,8 @@ class TokenRedisService:
         jti: str,
         family_id: str,
         expires_in: int,
-        parent_jti: Optional[str] = None,
-        device_info: Optional[DeviceInfo] = None,
+        parent_jti: str | None = None,
+        device_info: DeviceInfo | None = None,
     ) -> None:
         """
         存储 refresh token 到 Redis
@@ -106,7 +103,7 @@ class TokenRedisService:
             device_info: 设备信息
         """
         # 使用带时区的 UTC 时间
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires_at = now + timedelta(seconds=expires_in)
 
         token_record = TokenRecord(
@@ -156,11 +153,11 @@ class TokenRedisService:
         user_id: str,
         token_id: str,
         refresh_token_jti: str,
-        device_info: Optional[DeviceInfo],
+        device_info: DeviceInfo | None,
         ttl_seconds: int,
     ) -> None:
         """添加用户会话"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         session = UserSession(
             session_id=token_id,
             refresh_token_jti=refresh_token_jti,
@@ -178,7 +175,7 @@ class TokenRedisService:
         sessions_data["sessions"].append(session.model_dump(mode="json"))
         await redis_set_json(self.redis, sessions_key, sessions_data, ttl_seconds=ttl_seconds)
 
-    async def verify_access_token(self, jti: str) -> Optional[TokenRecord]:
+    async def verify_access_token(self, jti: str) -> TokenRecord | None:
         """
         验证 access token 是否有效
 
@@ -207,7 +204,7 @@ class TokenRedisService:
 
         return TokenRecord.model_validate(data)
 
-    async def verify_refresh_token(self, jti: str) -> Optional[TokenRecord]:
+    async def verify_refresh_token(self, jti: str) -> TokenRecord | None:
         """
         验证 refresh token 是否有效
 
@@ -278,7 +275,7 @@ class TokenRedisService:
         token_record = TokenRecord.model_validate(data)
 
         # 计算剩余 TTL（使用带时区的 UTC 时间）
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         remaining_seconds = int((token_record.expires_at - now).total_seconds())
         if remaining_seconds <= 0:
             return False
@@ -294,7 +291,7 @@ class TokenRedisService:
             # 黑名单的 TTL 需要考虑宽限期
             blacklist_ttl = remaining_seconds + grace_period_seconds
             blacklist_key = TOKEN_BLACKLIST_KEY.format(jti=jti)
-            
+
             # 存储黑名单条目，但在验证时会检查 revoked_at 时间
             await redis_set_json(
                 self.redis,
@@ -408,7 +405,7 @@ class TokenRedisService:
 
         return count
 
-    async def get_user_sessions(self, user_id: str) -> List[UserSession]:
+    async def get_user_sessions(self, user_id: str) -> list[UserSession]:
         """
         获取用户所有活跃会话
 
@@ -503,19 +500,19 @@ class TokenRedisService:
         """
         blacklist_key = TOKEN_BLACKLIST_KEY.format(jti=jti)
         data = await redis_get_json(self.redis, blacklist_key)
-        
+
         if data is None:
             return False
-        
+
         # 检查是否在宽限期内
         try:
             entry = TokenBlacklistEntry.model_validate(data)
-            now = datetime.now(timezone.utc)
-            
+            now = datetime.now(UTC)
+
             # 如果撤销时间还未到，token 仍然有效
             if entry.revoked_at > now:
                 return False
-            
+
             return True
         except Exception:
             # 如果解析失败，保守地认为已被撤销
@@ -536,7 +533,7 @@ class TokenRedisService:
             return
 
         # 使用带时区的 UTC 时间
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         sessions = sessions_data.get("sessions", [])
 
         for session in sessions:

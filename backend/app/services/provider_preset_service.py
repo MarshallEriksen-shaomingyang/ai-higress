@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -31,7 +29,7 @@ class ProviderPresetNotFoundError(ProviderPresetServiceError):
     """Raised when preset_id cannot be found."""
 
 
-def list_provider_presets(session: Session) -> List[ProviderPreset]:
+def list_provider_presets(session: Session) -> list[ProviderPreset]:
     stmt: Select[tuple[ProviderPreset]] = select(ProviderPreset).order_by(ProviderPreset.created_at.desc())
     return list(session.execute(stmt).scalars().all())
 
@@ -173,14 +171,14 @@ def import_provider_presets(session: Session, payload: ProviderPresetImportReque
 
 
 __all__ = [
-    "ProviderPresetServiceError",
     "ProviderPresetIdExistsError",
     "ProviderPresetNotFoundError",
+    "ProviderPresetServiceError",
     "create_provider_preset",
-    "update_provider_preset",
     "delete_provider_preset",
-    "list_provider_presets",
-    "get_provider_preset",
     "export_provider_presets",
+    "get_provider_preset",
     "import_provider_presets",
+    "list_provider_presets",
+    "update_provider_preset",
 ]

@@ -40,11 +40,11 @@ class CreditAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default="active",
     )
 
-    user: Mapped["User"] = relationship(
+    user: Mapped[User] = relationship(
         "User",
         back_populates="credit_account",
     )
-    transactions: Mapped[list["CreditTransaction"]] = relationship(
+    transactions: Mapped[list[CreditTransaction]] = relationship(
         "CreditTransaction",
         back_populates="account",
         cascade="all, delete-orphan",
@@ -106,12 +106,12 @@ class CreditTransaction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     output_tokens: Mapped[int | None] = Column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = Column(Integer, nullable=True)
 
-    account: Mapped["CreditAccount"] = relationship(
+    account: Mapped[CreditAccount] = relationship(
         "CreditAccount",
         back_populates="transactions",
     )
-    user: Mapped["User"] = relationship("User")
-    api_key: Mapped["APIKey"] = relationship("APIKey")
+    user: Mapped[User] = relationship("User")
+    api_key: Mapped[APIKey] = relationship("APIKey")
 
 
 class ModelBillingConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -171,7 +171,7 @@ class CreditAutoTopupRule(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 __all__ = [
     "CreditAccount",
+    "CreditAutoTopupRule",
     "CreditTransaction",
     "ModelBillingConfig",
-    "CreditAutoTopupRule",
 ]

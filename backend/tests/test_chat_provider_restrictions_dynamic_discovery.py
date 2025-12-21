@@ -3,12 +3,12 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.auth import AuthenticatedAPIKey, require_api_key
 from app.deps import get_redis
 from app.routes import create_app
-from fastapi import HTTPException
 from tests.utils import InMemoryRedis, install_inmemory_db
 
 

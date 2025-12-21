@@ -8,9 +8,9 @@ Adds:
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0036_add_dashboard_v2_metrics_fields"
 down_revision = "0035_add_idempotency_key_to_credit_transactions"

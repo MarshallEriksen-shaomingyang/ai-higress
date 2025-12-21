@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
@@ -50,20 +50,20 @@ class UserProviderCreateRequest(BaseModel):
     cost_input: float | None = Field(default=None, gt=0)
     cost_output: float | None = Field(default=None, gt=0)
     max_qps: int | None = Field(default=None, gt=0)
-    retryable_status_codes: List[int] | None = Field(default=None)
-    custom_headers: Dict[str, str] | None = Field(default=None)
+    retryable_status_codes: list[int] | None = Field(default=None)
+    custom_headers: dict[str, str] | None = Field(default=None)
     models_path: str | None = Field(default=None)
     messages_path: str | None = Field(default=None)
     chat_completions_path: str | None = Field(default=None)
     responses_path: str | None = Field(default=None)
-    supported_api_styles: List[ApiStyleValue] | None = Field(default=None)
-    static_models: List[Dict[str, Any]] | None = Field(
+    supported_api_styles: list[ApiStyleValue] | None = Field(default=None)
+    static_models: list[dict[str, Any]] | None = Field(
         default=None,
         description="当上游不提供 /models 时可手动配置的模型列表",
     )
 
     @model_validator(mode="after")
-    def ensure_required_fields(self) -> "UserProviderCreateRequest":
+    def ensure_required_fields(self) -> UserProviderCreateRequest:
         if self.preset_id:
             return self
         required = {
@@ -76,7 +76,7 @@ class UserProviderCreateRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_paths(self) -> "UserProviderCreateRequest":
+    def validate_paths(self) -> UserProviderCreateRequest:
         # 验证路径格式并规范化
         for field_name in (
             "models_path",
@@ -94,7 +94,7 @@ class UserProviderCreateRequest(BaseModel):
             if not trimmed.startswith("/"):
                 raise ValueError(f"{field_name} 必须以 / 开头")
             setattr(self, field_name, trimmed)
-        
+
         # 至少需要一个 API 路径（messages_path、chat_completions_path 或 responses_path）
         has_api_path = any([
             self.messages_path,
@@ -103,11 +103,11 @@ class UserProviderCreateRequest(BaseModel):
         ])
         if not has_api_path:
             raise ValueError("messages_path、chat_completions_path、responses_path 至少需要填写一个")
-        
+
         return self
 
     @model_validator(mode="after")
-    def validate_sdk_vendor(self) -> "UserProviderCreateRequest":
+    def validate_sdk_vendor(self) -> UserProviderCreateRequest:
         # 明确约束：仅当 transport=sdk 时才需要 sdk_vendor
         if self.transport == "sdk":
             if self.sdk_vendor is None:
@@ -151,17 +151,17 @@ class UserProviderUpdateRequest(BaseModel):
     cost_input: float | None = Field(default=None, gt=0)
     cost_output: float | None = Field(default=None, gt=0)
     max_qps: int | None = Field(default=None, gt=0)
-    retryable_status_codes: List[int] | None = None
-    custom_headers: Dict[str, str] | None = None
+    retryable_status_codes: list[int] | None = None
+    custom_headers: dict[str, str] | None = None
     models_path: str | None = None
     messages_path: str | None = None
     chat_completions_path: str | None = None
     responses_path: str | None = None
-    supported_api_styles: List[ApiStyleValue] | None = None
-    static_models: List[Dict[str, Any]] | None = None
+    supported_api_styles: list[ApiStyleValue] | None = None
+    static_models: list[dict[str, Any]] | None = None
 
     @model_validator(mode="after")
-    def ensure_any_field(self) -> "UserProviderUpdateRequest":
+    def ensure_any_field(self) -> UserProviderUpdateRequest:
         if all(
             getattr(self, field) is None
             for field in (
@@ -189,7 +189,7 @@ class UserProviderUpdateRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def normalize_paths(self) -> "UserProviderUpdateRequest":
+    def normalize_paths(self) -> UserProviderUpdateRequest:
         for field_name in (
             "models_path",
             "messages_path",
@@ -210,7 +210,7 @@ class UserProviderUpdateRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_sdk_vendor(self) -> "UserProviderUpdateRequest":
+    def validate_sdk_vendor(self) -> UserProviderUpdateRequest:
         if self.sdk_vendor is not None:
             self.sdk_vendor = _validate_sdk_vendor_value(self.sdk_vendor)
         # 如果显式切换到 HTTP 或 Claude CLI，则清空 sdk_vendor
@@ -235,13 +235,13 @@ class UserProviderResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-    
+
     # API 路径配置
     models_path: str | None = None
     messages_path: str | None = None
     chat_completions_path: str | None = None
     responses_path: str | None = None
-    
+
     # 其他配置
     weight: float | None = None
     region: str | None = None
@@ -270,7 +270,7 @@ class ProviderSharedUsersUpdateRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def deduplicate(self) -> "ProviderSharedUsersUpdateRequest":
+    def deduplicate(self) -> ProviderSharedUsersUpdateRequest:
         # 保持顺序不重要，去重即可
         self.user_ids = list(dict.fromkeys(self.user_ids))
         return self
@@ -293,7 +293,7 @@ class ProviderSubmissionRequest(BaseModel):
     provider_type: Literal["native", "aggregator"] = "native"
     api_key: str = Field(..., min_length=1, description="上游厂商 API Key")
     description: str | None = Field(default=None, max_length=2000)
-    extra_config: Dict[str, Any] | None = Field(
+    extra_config: dict[str, Any] | None = Field(
         default=None,
         description="可选的扩展配置，例如自定义 header、模型路径等",
     )
@@ -332,7 +332,7 @@ class ProviderReviewRequest(BaseModel):
     review_notes: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
-    def ensure_decision(self) -> "ProviderReviewRequest":
+    def ensure_decision(self) -> ProviderReviewRequest:
         if self.decision is None and self.approved is None:
             raise ValueError("必须提供 approved 或 decision")
         return self
@@ -343,7 +343,7 @@ class ProviderValidationResult(BaseModel):
 
     is_valid: bool
     error_message: str | None = None
-    metadata: Dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class ProviderTestRequest(BaseModel):
@@ -468,7 +468,7 @@ class AdminProviderResponse(BaseModel):
 
 
 class AdminProvidersResponse(BaseModel):
-    providers: List[AdminProviderResponse]
+    providers: list[AdminProviderResponse]
     total: int
 
 
@@ -491,13 +491,13 @@ class ProviderPresetBase(BaseModel):
     messages_path: str | None = Field(default=None)
     chat_completions_path: str | None = Field(default=None)
     responses_path: str | None = Field(default=None)
-    supported_api_styles: List[ApiStyleValue] | None = Field(default=None)
-    retryable_status_codes: List[int] | None = Field(default=None)
-    custom_headers: Dict[str, str] | None = Field(default=None)
-    static_models: List[Dict[str, Any]] | None = Field(default=None)
+    supported_api_styles: list[ApiStyleValue] | None = Field(default=None)
+    retryable_status_codes: list[int] | None = Field(default=None)
+    custom_headers: dict[str, str] | None = Field(default=None)
+    static_models: list[dict[str, Any]] | None = Field(default=None)
 
     @model_validator(mode="after")
-    def ensure_paths(self) -> "ProviderPresetBase":
+    def ensure_paths(self) -> ProviderPresetBase:
         # 验证路径格式并规范化
         for field_name in (
             "models_path",
@@ -515,7 +515,7 @@ class ProviderPresetBase(BaseModel):
             if not trimmed.startswith("/"):
                 raise ValueError(f"{field_name} 必须以 / 开头")
             setattr(self, field_name, trimmed)
-        
+
         # 至少需要一个 API 路径（messages_path、chat_completions_path 或 responses_path）
         has_api_path = any([
             self.messages_path,
@@ -524,11 +524,11 @@ class ProviderPresetBase(BaseModel):
         ])
         if not has_api_path:
             raise ValueError("messages_path、chat_completions_path、responses_path 至少需要填写一个")
-        
+
         return self
 
     @model_validator(mode="after")
-    def validate_sdk_vendor(self) -> "ProviderPresetBase":
+    def validate_sdk_vendor(self) -> ProviderPresetBase:
         if self.transport == "sdk":
             if self.sdk_vendor is None:
                 raise ValueError("当 transport=sdk 时，必须指定 sdk_vendor")
@@ -555,13 +555,13 @@ class ProviderPresetUpdateRequest(BaseModel):
     messages_path: str | None = None
     chat_completions_path: str | None = None
     responses_path: str | None = None
-    supported_api_styles: List[ApiStyleValue] | None = None
-    retryable_status_codes: List[int] | None = None
-    custom_headers: Dict[str, str] | None = None
-    static_models: List[Dict[str, Any]] | None = None
+    supported_api_styles: list[ApiStyleValue] | None = None
+    retryable_status_codes: list[int] | None = None
+    custom_headers: dict[str, str] | None = None
+    static_models: list[dict[str, Any]] | None = None
 
     @model_validator(mode="after")
-    def ensure_any_field(self) -> "ProviderPresetUpdateRequest":
+    def ensure_any_field(self) -> ProviderPresetUpdateRequest:
         if all(
             getattr(self, attr) is None
             for attr in (
@@ -585,7 +585,7 @@ class ProviderPresetUpdateRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def normalize_paths(self) -> "ProviderPresetUpdateRequest":
+    def normalize_paths(self) -> ProviderPresetUpdateRequest:
         for field_name in (
             "models_path",
             "messages_path",
@@ -602,7 +602,7 @@ class ProviderPresetUpdateRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_sdk_vendor(self) -> "ProviderPresetUpdateRequest":
+    def validate_sdk_vendor(self) -> ProviderPresetUpdateRequest:
         if self.sdk_vendor is not None:
             self.sdk_vendor = _validate_sdk_vendor_value(self.sdk_vendor)
         if self.transport in ("http", "claude_cli"):
@@ -619,7 +619,7 @@ class ProviderPresetResponse(ProviderPresetBase):
 
 
 class ProviderPresetListResponse(BaseModel):
-    items: List[ProviderPresetResponse]
+    items: list[ProviderPresetResponse]
     total: int
 
 
@@ -629,14 +629,14 @@ class ProviderPresetImportError(BaseModel):
 
 
 class ProviderPresetImportResult(BaseModel):
-    created: List[str] = Field(default_factory=list, description="成功创建的预设ID列表")
-    updated: List[str] = Field(default_factory=list, description="成功覆盖更新的预设ID列表")
-    skipped: List[str] = Field(default_factory=list, description="因已存在且未开启覆盖而跳过的预设ID列表")
-    failed: List[ProviderPresetImportError] = Field(default_factory=list, description="导入失败的预设及原因")
+    created: list[str] = Field(default_factory=list, description="成功创建的预设ID列表")
+    updated: list[str] = Field(default_factory=list, description="成功覆盖更新的预设ID列表")
+    skipped: list[str] = Field(default_factory=list, description="因已存在且未开启覆盖而跳过的预设ID列表")
+    failed: list[ProviderPresetImportError] = Field(default_factory=list, description="导入失败的预设及原因")
 
 
 class ProviderPresetImportRequest(BaseModel):
-    presets: List[ProviderPresetBase] = Field(default_factory=list, min_length=1, description="要导入的预设列表")
+    presets: list[ProviderPresetBase] = Field(default_factory=list, min_length=1, description="要导入的预设列表")
     overwrite: bool = Field(
         default=False,
         description="是否覆盖已存在的同名预设；默认不覆盖，若为false则同名预设会被跳过",
@@ -644,7 +644,7 @@ class ProviderPresetImportRequest(BaseModel):
 
 
 class ProviderPresetExportResponse(BaseModel):
-    presets: List[ProviderPresetBase]
+    presets: list[ProviderPresetBase]
     total: int
 
 
@@ -686,7 +686,7 @@ class RoleUpdateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
-    def ensure_any_field(self) -> "RoleUpdateRequest":
+    def ensure_any_field(self) -> RoleUpdateRequest:
         if self.name is None and self.description is None:
             raise ValueError("至少需要提供一个可更新字段")
         return self
@@ -695,18 +695,18 @@ class RoleUpdateRequest(BaseModel):
 class RolePermissionsResponse(BaseModel):
     role_id: UUID
     role_code: str
-    permission_codes: List[str]
+    permission_codes: list[str]
 
 
 class RolePermissionsUpdateRequest(BaseModel):
-    permission_codes: List[str] = Field(
+    permission_codes: list[str] = Field(
         default_factory=list,
         description="要设置到该角色上的权限 code 列表（全量覆盖）",
     )
 
 
 class UserRolesUpdateRequest(BaseModel):
-    role_ids: List[UUID] = Field(
+    role_ids: list[UUID] = Field(
         default_factory=list,
         description="要设置给用户的角色 ID 列表（全量覆盖）",
     )
@@ -715,37 +715,37 @@ class UserRolesUpdateRequest(BaseModel):
 __all__ = [
     "AdminProviderResponse",
     "AdminProvidersResponse",
+    "PermissionResponse",
+    "ProviderAuditActionRequest",
+    "ProviderAuditLogResponse",
     "ProviderPresetBase",
     "ProviderPresetCreateRequest",
-    "ProviderPresetUpdateRequest",
-    "ProviderPresetResponse",
-    "ProviderPresetListResponse",
+    "ProviderPresetExportResponse",
+    "ProviderPresetImportError",
     "ProviderPresetImportRequest",
     "ProviderPresetImportResult",
-    "ProviderPresetImportError",
-    "ProviderPresetExportResponse",
+    "ProviderPresetListResponse",
+    "ProviderPresetResponse",
+    "ProviderPresetUpdateRequest",
+    "ProviderProbeConfigUpdate",
     "ProviderReviewRequest",
+    "ProviderSharedUsersResponse",
+    "ProviderSharedUsersUpdateRequest",
     "ProviderSubmissionRequest",
     "ProviderSubmissionResponse",
     "ProviderTestRequest",
     "ProviderTestResult",
-    "ProviderAuditActionRequest",
-    "ProviderAuditLogResponse",
-    "ProviderProbeConfigUpdate",
-    "ProviderSharedUsersResponse",
-    "ProviderSharedUsersUpdateRequest",
     "ProviderValidationResult",
     "ProviderVisibilityUpdateRequest",
-    "PermissionResponse",
     "RoleCreateRequest",
     "RolePermissionsResponse",
     "RolePermissionsUpdateRequest",
     "RoleResponse",
-    "UserRolesUpdateRequest",
     "UserPermissionGrantRequest",
     "UserPermissionResponse",
     "UserProviderCreateRequest",
-    "UserProviderUpdateRequest",
     "UserProviderResponse",
+    "UserProviderUpdateRequest",
     "UserQuotaResponse",
+    "UserRolesUpdateRequest",
 ]

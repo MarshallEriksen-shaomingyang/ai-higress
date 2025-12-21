@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
-from typing import List, Literal, Tuple
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -25,15 +25,15 @@ from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.models import CreditAccount, CreditTransaction, Provider
 from app.schemas import (
     CreditAccountResponse,
-    CreditAutoTopupConfig,
-    CreditAutoTopupConfigResponse,
     CreditAutoTopupBatchRequest,
     CreditAutoTopupBatchResponse,
-    CreditTopupRequest,
-    CreditTransactionResponse,
+    CreditAutoTopupConfig,
+    CreditAutoTopupConfigResponse,
     CreditConsumptionSummary,
     CreditProviderUsageItem,
     CreditProviderUsageResponse,
+    CreditTopupRequest,
+    CreditTransactionResponse,
     CreditUsageTimeseriesPoint,
     CreditUsageTimeseriesResponse,
 )
@@ -51,13 +51,13 @@ router = APIRouter(
     dependencies=[Depends(require_jwt_token)],
 )
 
-USAGE_REASONS: Tuple[str, ...] = ("usage", "stream_usage", "stream_estimate")
+USAGE_REASONS: tuple[str, ...] = ("usage", "stream_usage", "stream_estimate")
 
 
 def _resolve_time_range(
     time_range: Literal["today", "7d", "30d", "90d", "all"],
 ) -> tuple[dt.datetime | None, dt.datetime]:
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
 
     if time_range == "today":
         return (
@@ -164,7 +164,7 @@ def get_my_credit_account(
     return CreditAccountResponse.model_validate(account)
 
 
-@router.get("/me/transactions", response_model=List[CreditTransactionResponse])
+@router.get("/me/transactions", response_model=list[CreditTransactionResponse])
 def list_my_transactions(
     limit: int = Query(50, ge=1, le=100, description="返回的最大记录数"),
     offset: int = Query(0, ge=0, description="起始偏移量"),
@@ -173,7 +173,7 @@ def list_my_transactions(
     reason: str | None = Query(None, description="流水原因过滤（如：usage、stream_estimate、admin_topup 等）"),
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
-) -> List[CreditTransactionResponse]:
+) -> list[CreditTransactionResponse]:
     """
     分页返回当前用户的积分流水记录（按时间倒序）。
     
@@ -182,14 +182,14 @@ def list_my_transactions(
     - reason: 流水原因（usage、stream_estimate、admin_topup、adjust 等）
     """
     from datetime import datetime
-    
+
     # 通过 user_id 维度过滤，避免暴露其他用户数据。
     q = (
         db.query(CreditTransaction)
         .join(CreditAccount, CreditTransaction.account_id == CreditAccount.id)
         .filter(CreditAccount.user_id == UUID(current_user.id))
     )
-    
+
     # 按日期范围过滤
     if start_date:
         try:
@@ -197,18 +197,18 @@ def list_my_transactions(
             q = q.filter(CreditTransaction.created_at >= start_dt)
         except ValueError:
             raise bad_request(f"无效的 start_date 格式：{start_date}")
-    
+
     if end_date:
         try:
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             q = q.filter(CreditTransaction.created_at <= end_dt)
         except ValueError:
             raise bad_request(f"无效的 end_date 格式：{end_date}")
-    
+
     # 按原因过滤
     if reason:
         q = q.filter(CreditTransaction.reason == reason)
-    
+
     q = q.order_by(CreditTransaction.created_at.desc()).offset(offset).limit(limit)
     items = q.all()
     return [CreditTransactionResponse.model_validate(item) for item in items]
@@ -410,12 +410,12 @@ def get_my_consumption_timeseries(
             bucket_dt = dt.datetime.combine(
                 bucket_start,
                 dt.time.min,
-                tzinfo=dt.timezone.utc,
+                tzinfo=dt.UTC,
             )
         elif isinstance(bucket_start, dt.datetime):
             bucket_dt = bucket_start
         else:
-            bucket_dt = dt.datetime.now(dt.timezone.utc)
+            bucket_dt = dt.datetime.now(dt.UTC)
 
         points.append(
             CreditUsageTimeseriesPoint(

@@ -1,8 +1,9 @@
 """Extend provider routing metrics history with counters and avg latency."""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0009_extend_provider_routing_metrics_history"
 down_revision = "0008_add_provider_routing_metrics_history"

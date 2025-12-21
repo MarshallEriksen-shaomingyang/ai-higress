@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import Select, select
@@ -12,7 +11,6 @@ from app.logging_config import logger
 from app.models import Provider, ProviderAPIKey, ProviderSubmission
 from app.schemas.notification import NotificationCreateRequest
 from app.schemas.provider_control import (
-    ProviderReviewRequest,
     ProviderSubmissionRequest,
 )
 from app.services.encryption import encrypt_secret
@@ -108,8 +106,8 @@ def create_submission(
 
 def list_submissions(
     session: Session,
-    status: Optional[str] = None,
-) -> List[ProviderSubmission]:
+    status: str | None = None,
+) -> list[ProviderSubmission]:
     """按可选状态过滤列出提交记录。"""
     stmt: Select[tuple[ProviderSubmission]] = select(ProviderSubmission).order_by(
         ProviderSubmission.created_at.desc()
@@ -122,8 +120,8 @@ def list_submissions(
 def list_user_submissions(
     session: Session,
     user_id: UUID,
-    status: Optional[str] = None,
-) -> List[ProviderSubmission]:
+    status: str | None = None,
+) -> list[ProviderSubmission]:
     """按用户和可选状态过滤列出提交记录。"""
     stmt: Select[tuple[ProviderSubmission]] = (
         select(ProviderSubmission)
@@ -135,7 +133,7 @@ def list_user_submissions(
     return list(session.execute(stmt).scalars().all())
 
 
-def get_submission(session: Session, submission_id: UUID) -> Optional[ProviderSubmission]:
+def get_submission(session: Session, submission_id: UUID) -> ProviderSubmission | None:
     return session.get(ProviderSubmission, submission_id)
 
 
@@ -232,7 +230,7 @@ def approve_submission(
     submission.approval_status = status or "approved"
     submission.reviewed_by = reviewer_id
     submission.review_notes = review_notes
-    submission.reviewed_at = datetime.now(timezone.utc)
+    submission.reviewed_at = datetime.now(UTC)
 
     try:
         session.commit()
@@ -301,7 +299,7 @@ def reject_submission(
     submission.approval_status = "rejected"
     submission.reviewed_by = reviewer_id
     submission.review_notes = review_notes
-    submission.reviewed_at = datetime.now(timezone.utc)
+    submission.reviewed_at = datetime.now(UTC)
 
     session.add(submission)
     session.commit()
@@ -354,11 +352,11 @@ def cancel_submission(
     submission = get_submission(session, submission_id)
     if submission is None:
         raise ProviderSubmissionNotFoundError(f"Submission {submission_id} not found")
-    
+
     # 验证权限：只能取消自己的提交
     if submission.user_id != user_id:
         raise ProviderSubmissionServiceError("无权取消他人的提交")
-    
+
     # 根据状态执行不同的删除逻辑
     if submission.approval_status == "approved":
         # 已批准：需要删除对应的公共 Provider
@@ -377,10 +375,10 @@ def cancel_submission(
                 "Approved submission %s has no approved_provider_uuid",
                 submission_id,
             )
-    
+
     # 删除提交记录（pending、approved、rejected 都删除）
     session.delete(submission)
-    
+
     try:
         session.commit()
         logger.info(
@@ -396,8 +394,8 @@ def cancel_submission(
 
 
 __all__ = [
-    "ProviderSubmissionServiceError",
     "ProviderSubmissionNotFoundError",
+    "ProviderSubmissionServiceError",
     "approve_submission",
     "cancel_submission",
     "create_submission",

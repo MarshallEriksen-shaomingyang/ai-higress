@@ -2,7 +2,6 @@ import asyncio
 
 import pytest
 
-from app.schemas import ProviderAPIKey, ProviderConfig
 from app.provider.key_pool import (
     NoAvailableProviderKey,
     acquire_provider_key,
@@ -10,6 +9,7 @@ from app.provider.key_pool import (
     record_key_success,
     reset_key_pool,
 )
+from app.schemas import ProviderAPIKey, ProviderConfig
 
 
 def _make_provider(provider_id: str = "multi") -> ProviderConfig:

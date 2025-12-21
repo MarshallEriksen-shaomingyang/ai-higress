@@ -213,7 +213,7 @@ def cancel_submission_endpoint(
     - approved: 删除对应的公共 Provider 和提交记录
     - rejected: 直接删除提交记录
     """
-    
+
     try:
         cancel_submission(db, submission_id, UUID(current_user.id))
     except ProviderSubmissionNotFoundError:

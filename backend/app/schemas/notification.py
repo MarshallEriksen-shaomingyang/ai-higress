@@ -6,7 +6,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 NotificationLevel = Literal["info", "success", "warning", "error"]
 NotificationTargetType = Literal["all", "users", "roles"]
 
@@ -41,7 +40,7 @@ class NotificationCreateRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_targets(self) -> "NotificationCreateRequest":
+    def validate_targets(self) -> NotificationCreateRequest:
         if self.target_type == "users" and not self.target_user_ids:
             raise ValueError("target_user_ids 不能为空")
         if self.target_type == "roles" and not self.target_role_codes:
@@ -106,12 +105,12 @@ class UnreadCountResponse(BaseModel):
 
 
 __all__ = [
-    "NotificationCreateRequest",
     "NotificationAdminResponse",
+    "NotificationCreateRequest",
+    "NotificationLevel",
     "NotificationMarkReadRequest",
     "NotificationMarkReadResponse",
     "NotificationResponse",
-    "UnreadCountResponse",
-    "NotificationLevel",
     "NotificationTargetType",
+    "UnreadCountResponse",
 ]

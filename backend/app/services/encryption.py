@@ -25,7 +25,7 @@ def _derive_fernet_key(secret: str) -> bytes:
     return base64.urlsafe_b64encode(digest)
 
 
-@lru_cache()
+@lru_cache
 def _get_fernet() -> Fernet:
     return Fernet(_derive_fernet_key(settings.secret_key))
 

@@ -32,8 +32,8 @@ class UserRole(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="user_roles")
-    role: Mapped["Role"] = relationship("Role", back_populates="user_roles")
+    user: Mapped[User] = relationship("User", back_populates="user_roles")
+    role: Mapped[Role] = relationship("Role", back_populates="user_roles")
 
 
 __all__ = ["UserRole"]

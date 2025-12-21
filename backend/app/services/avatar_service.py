@@ -128,6 +128,6 @@ def ensure_avatar_storage_dir() -> Path:
 
 __all__ = [
     "build_avatar_url",
-    "get_avatar_file_path",
     "ensure_avatar_storage_dir",
+    "get_avatar_file_path",
 ]

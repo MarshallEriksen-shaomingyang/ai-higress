@@ -11,8 +11,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.routes import create_app  # noqa: E402
-from app.settings import settings  # noqa: E402
+from datetime import UTC
+
 from app.models import (  # noqa: E402
     CreditAccount,
     CreditTransaction,
@@ -21,6 +21,7 @@ from app.models import (  # noqa: E402
     ProviderModel,
     User,
 )
+from app.routes import create_app  # noqa: E402
 from app.services.credit_service import (  # noqa: E402
     InsufficientCreditsError,
     ensure_account_usable,
@@ -29,6 +30,7 @@ from app.services.credit_service import (  # noqa: E402
     record_chat_completion_usage,
     run_daily_auto_topups,
 )
+from app.settings import settings  # noqa: E402
 from tests.utils import (  # noqa: E402
     install_inmemory_db,
     jwt_auth_headers,
@@ -539,8 +541,8 @@ def test_transaction_filtering_by_reason_and_date(monkeypatch):
     - 按 reason（原因）过滤
     - 按日期范围过滤
     """
-    from datetime import datetime, timedelta, timezone
-    
+    from datetime import datetime, timedelta
+
     app = create_app()
     SessionLocal = install_inmemory_db(app)
 
@@ -603,7 +605,7 @@ def test_transaction_filtering_by_reason_and_date(monkeypatch):
         assert len(empty_transactions) == 0
 
         # 6) 按日期范围过滤：获取 ISO 格式的日期
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         future_date = (now + timedelta(days=1)).isoformat()
 

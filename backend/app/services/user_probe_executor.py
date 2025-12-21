@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 import httpx
 
+from app.api.v1.chat.header_builder import build_upstream_headers
 from app.logging_config import logger
 from app.provider.key_pool import (
     NoAvailableProviderKey,
@@ -16,12 +17,10 @@ from app.provider.key_pool import (
 )
 from app.provider.sdk_selector import get_sdk_driver, normalize_base_url
 from app.schemas import ProviderConfig
-from app.api.v1.chat.header_builder import build_upstream_headers
 from app.services.claude_cli_transformer import (
     build_claude_cli_headers,
     transform_to_claude_cli_format,
 )
-from app.settings import settings
 
 try:
     from redis.asyncio import Redis

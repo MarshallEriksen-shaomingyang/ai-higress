@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0044_add_project_ai_enabled_to_project_eval_configs"
 down_revision = "0043_add_project_ai_eval_bandit_tables"

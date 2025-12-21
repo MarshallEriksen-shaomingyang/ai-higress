@@ -5,12 +5,14 @@ HTTP 客户端抽象层，使用 curl-cffi 支持 TLS 指纹伪装。
 主要用于 Claude CLI 传输模式，支持浏览器 TLS 指纹伪装。
 """
 
-from typing import AsyncIterator, Any, Optional
-from curl_cffi.requests import AsyncSession, Response
-from curl_cffi.curl import CurlError
-from curl_cffi.const import CurlECode, CurlHttpVersion
-import httpx
 import logging
+from collections.abc import AsyncIterator
+from typing import Any
+
+import httpx
+from curl_cffi.const import CurlECode, CurlHttpVersion
+from curl_cffi.curl import CurlError
+from curl_cffi.requests import AsyncSession, Response
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,7 @@ class StreamResponse:
         async for chunk in resp.aiter_bytes():
             ...
     """
-    
+
     def __init__(self, response: Response):
         """
         初始化流式响应包装器。
@@ -104,16 +106,16 @@ class StreamResponse:
         self._response = response
         self.status_code = response.status_code
         self.headers = response.headers
-    
+
     async def __aenter__(self) -> "StreamResponse":
         """进入异步上下文管理器。"""
         return self
-    
+
     async def __aexit__(self, *args) -> None:
         """退出异步上下文管理器，关闭响应。"""
         # curl-cffi 的 Response 会在 stream context 退出时自动关闭
         pass
-    
+
     async def aiter_bytes(self, chunk_size: int = 8192) -> AsyncIterator[bytes]:
         """
         异步迭代响应数据块。
@@ -126,7 +128,7 @@ class StreamResponse:
         """
         async for chunk in self._response.aiter_content(chunk_size=chunk_size):
             yield chunk
-    
+
     async def aread(self) -> bytes:
         """
         读取完整的响应体。
@@ -156,13 +158,13 @@ class CurlCffiClient:
                 headers={"Authorization": "Bearer token"}
             )
     """
-    
+
     def __init__(
         self,
         timeout: float = 30.0,
         impersonate: str = "chrome120",
         trust_env: bool = True,
-        proxies: Optional[dict[str, str] | str] = None,
+        proxies: dict[str, str] | str | None = None,
     ):
         """
         初始化 CurlCffiClient。
@@ -178,8 +180,8 @@ class CurlCffiClient:
         self.impersonate = impersonate
         self.trust_env = trust_env
         self.proxies = proxies
-        self._session: Optional[AsyncSession] = None
-        
+        self._session: AsyncSession | None = None
+
         logger.debug(
             "CurlCffiClient initialized: timeout=%s, impersonate=%s, trust_env=%s, proxies=%s",
             timeout,
@@ -187,7 +189,7 @@ class CurlCffiClient:
             trust_env,
             "***" if proxies else None,  # 不记录完整代理 URL（可能包含密码）
         )
-    
+
     async def __aenter__(self) -> "CurlCffiClient":
         """
         进入 async context manager，创建 AsyncSession。
@@ -198,7 +200,7 @@ class CurlCffiClient:
         self._session = AsyncSession()
         logger.debug("CurlCffiClient session created")
         return self
-    
+
     async def __aexit__(self, *args) -> None:
         """
         退出 async context manager，关闭 AsyncSession。
@@ -210,7 +212,7 @@ class CurlCffiClient:
             await self._session.close()
             logger.debug("CurlCffiClient session closed")
             self._session = None
-    
+
     def _ensure_session(self) -> AsyncSession:
         """
         确保 session 已创建，否则抛出异常。
@@ -279,10 +281,10 @@ class CurlCffiClient:
         self,
         url: str,
         *,
-        json: Optional[dict[str, Any]] = None,
-        data: Optional[Any] = None,
-        headers: Optional[dict[str, str]] = None,
-        timeout: Optional[float] = None,
+        json: dict[str, Any] | None = None,
+        data: Any | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
         **kwargs
     ) -> Response:
         """
@@ -303,7 +305,7 @@ class CurlCffiClient:
             RuntimeError: 如果 session 未创建
         """
         effective_timeout = timeout if timeout is not None else self.timeout
-        
+
         logger.debug(
             "POST request: url=%s, timeout=%s, impersonate=%s, proxy=%s",
             url,
@@ -311,7 +313,7 @@ class CurlCffiClient:
             self.impersonate,
             "configured" if self.proxies else "none",
         )
-        
+
         # 合并 proxies 参数
         request_kwargs = {
             "json": json,
@@ -326,14 +328,14 @@ class CurlCffiClient:
         return await self._request_with_optional_http2_downgrade(
             "POST", url, request_kwargs
         )
-    
+
     async def get(
         self,
         url: str,
         *,
-        headers: Optional[dict[str, str]] = None,
-        params: Optional[dict[str, Any]] = None,
-        timeout: Optional[float] = None,
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
         **kwargs
     ) -> Response:
         """
@@ -353,7 +355,7 @@ class CurlCffiClient:
             RuntimeError: 如果 session 未创建
         """
         effective_timeout = timeout if timeout is not None else self.timeout
-        
+
         logger.debug(
             "GET request: url=%s, timeout=%s, impersonate=%s, proxy=%s",
             url,
@@ -361,7 +363,7 @@ class CurlCffiClient:
             self.impersonate,
             "configured" if self.proxies else "none",
         )
-        
+
         # 合并 proxies 参数
         request_kwargs = {
             "headers": headers,
@@ -375,16 +377,16 @@ class CurlCffiClient:
         return await self._request_with_optional_http2_downgrade(
             "GET", url, request_kwargs
         )
-    
+
     def stream(
         self,
         method: str,
         url: str,
         *,
-        json: Optional[dict[str, Any]] = None,
-        data: Optional[Any] = None,
-        headers: Optional[dict[str, str]] = None,
-        timeout: Optional[float] = None,
+        json: dict[str, Any] | None = None,
+        data: Any | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
         **kwargs
     ) -> "StreamContextManager":
         """
@@ -411,9 +413,9 @@ class CurlCffiClient:
             RuntimeError: 如果 session 未创建
         """
         session = self._ensure_session()
-        
+
         effective_timeout = timeout if timeout is not None else self.timeout
-        
+
         logger.debug(
             "STREAM request: method=%s, url=%s, timeout=%s, impersonate=%s, proxy=%s",
             method,
@@ -422,7 +424,7 @@ class CurlCffiClient:
             self.impersonate,
             "configured" if self.proxies else "none",
         )
-        
+
         # 合并 proxies 参数
         request_kwargs = {
             "json": json,
@@ -433,7 +435,7 @@ class CurlCffiClient:
             **kwargs
         }
         self._apply_proxy_kwargs(request_kwargs)
-        
+
         return StreamContextManager(session, method, url, request_kwargs)
 
 
@@ -450,7 +452,7 @@ class StreamContextManager:
         async for chunk in resp.aiter_bytes():
             ...
     """
-    
+
     def __init__(
         self,
         session: AsyncSession,
@@ -472,8 +474,8 @@ class StreamContextManager:
         self._url = url
         self._request_kwargs = request_kwargs
         self._stream_context = None
-        self._response: Optional[StreamResponse] = None
-    
+        self._response: StreamResponse | None = None
+
     async def __aenter__(self) -> StreamResponse:
         """
         进入异步上下文管理器，发起流式请求。
@@ -516,7 +518,7 @@ class StreamContextManager:
 
         self._response = StreamResponse(response)
         return self._response
-    
+
     async def __aexit__(self, *args) -> None:
         """
         退出异步上下文管理器，关闭流式连接。

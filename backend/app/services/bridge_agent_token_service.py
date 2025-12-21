@@ -9,7 +9,6 @@ from jose import jwt
 
 from app.settings import settings
 
-
 _AGENT_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$")
 
 

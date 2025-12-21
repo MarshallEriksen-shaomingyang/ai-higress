@@ -1,9 +1,10 @@
 """Add api_keys table."""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0003_add_api_keys_table"
 down_revision = "0002_add_user_profile_fields"

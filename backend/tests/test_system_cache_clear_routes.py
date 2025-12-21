@@ -4,10 +4,9 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
-from app.api.system_routes import _delete_pattern  # type: ignore[attr-defined]
 from app.deps import get_redis
 from app.routes import create_app
-from tests.utils import InMemoryRedis, jwt_auth_headers, install_inmemory_db, seed_user_and_key
+from tests.utils import InMemoryRedis, install_inmemory_db, jwt_auth_headers, seed_user_and_key
 
 
 def _setup_app_with_redis() -> tuple[TestClient, InMemoryRedis, str, str]:

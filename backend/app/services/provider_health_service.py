@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -69,7 +69,7 @@ def _provider_to_health_status(provider: Provider) -> HealthStatus | None:
     # 再退回到当前时间，避免因为 last_check 为空而让上层误判为「不存在」。
     timestamp = provider.last_check or getattr(provider, "created_at", None)
     if timestamp is None:
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
 
     return HealthStatus(
         provider_id=provider.provider_id,
@@ -106,7 +106,7 @@ async def persist_provider_health(
     cache_ttl_seconds: int | None = None,
 ) -> None:
     provider.status = status.status.value
-    provider.last_check = datetime.fromtimestamp(status.timestamp, tz=timezone.utc)
+    provider.last_check = datetime.fromtimestamp(status.timestamp, tz=UTC)
     provider.metadata_json = {
         "response_time_ms": status.response_time_ms,
         "error_message": status.error_message,

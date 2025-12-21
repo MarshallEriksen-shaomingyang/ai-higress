@@ -7,8 +7,9 @@ Create Date: 2025-12-13
 """
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0032_make_provider_paths_nullable"
 down_revision = "0031_add_upstream_proxy_management"
@@ -29,7 +30,7 @@ def upgrade() -> None:
         nullable=True,
         existing_server_default=sa.text("'/v1/models'"),
     )
-    
+
     op.alter_column(
         "providers",
         "chat_completions_path",
@@ -37,7 +38,7 @@ def upgrade() -> None:
         nullable=True,
         existing_server_default=sa.text("'/v1/chat/completions'"),
     )
-    
+
     # 修改 provider_presets 表
     op.alter_column(
         "provider_presets",
@@ -46,7 +47,7 @@ def upgrade() -> None:
         nullable=True,
         existing_server_default=sa.text("'/v1/models'"),
     )
-    
+
     op.alter_column(
         "provider_presets",
         "chat_completions_path",
@@ -73,7 +74,7 @@ def downgrade() -> None:
     op.execute(
         "UPDATE provider_presets SET chat_completions_path = '/v1/chat/completions' WHERE chat_completions_path IS NULL"
     )
-    
+
     # 修改 providers 表
     op.alter_column(
         "providers",
@@ -82,7 +83,7 @@ def downgrade() -> None:
         nullable=False,
         existing_server_default=sa.text("'/v1/models'"),
     )
-    
+
     op.alter_column(
         "providers",
         "chat_completions_path",
@@ -90,7 +91,7 @@ def downgrade() -> None:
         nullable=False,
         existing_server_default=sa.text("'/v1/chat/completions'"),
     )
-    
+
     # 修改 provider_presets 表
     op.alter_column(
         "provider_presets",
@@ -99,7 +100,7 @@ def downgrade() -> None:
         nullable=False,
         existing_server_default=sa.text("'/v1/models'"),
     )
-    
+
     op.alter_column(
         "provider_presets",
         "chat_completions_path",

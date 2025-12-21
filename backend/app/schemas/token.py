@@ -4,14 +4,14 @@ Token 相关的 Schema 定义
 """
 
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
 class DeviceInfo(BaseModel):
     """设备信息"""
-    user_agent: Optional[str] = Field(None, description="用户代理字符串")
-    ip_address: Optional[str] = Field(None, description="IP 地址")
+    user_agent: str | None = Field(None, description="用户代理字符串")
+    ip_address: str | None = Field(None, description="IP 地址")
 
 
 class TokenRecord(BaseModel):
@@ -22,11 +22,11 @@ class TokenRecord(BaseModel):
     jti: str = Field(..., description="JWT ID (JTI)")
     issued_at: datetime = Field(..., description="签发时间")
     expires_at: datetime = Field(..., description="过期时间")
-    device_info: Optional[DeviceInfo] = Field(None, description="设备信息")
-    
+    device_info: DeviceInfo | None = Field(None, description="设备信息")
+
     # Refresh token 特有字段
-    family_id: Optional[str] = Field(None, description="Token 家族 ID（用于追踪轮换链）")
-    parent_jti: Optional[str] = Field(None, description="父 token 的 JTI（用于检测重放）")
+    family_id: str | None = Field(None, description="Token 家族 ID（用于追踪轮换链）")
+    parent_jti: str | None = Field(None, description="父 token 的 JTI（用于检测重放）")
     revoked: bool = Field(False, description="是否已被撤销")
 
 
@@ -44,7 +44,7 @@ class UserSession(BaseModel):
     refresh_token_jti: str = Field(..., description="Refresh token 的 JTI")
     created_at: datetime = Field(..., description="创建时间")
     last_used_at: datetime = Field(..., description="最后使用时间")
-    device_info: Optional[DeviceInfo] = Field(None, description="设备信息")
+    device_info: DeviceInfo | None = Field(None, description="设备信息")
 
 
 class SessionResponse(BaseModel):
@@ -52,7 +52,7 @@ class SessionResponse(BaseModel):
     session_id: str = Field(..., description="会话 ID")
     created_at: datetime = Field(..., description="创建时间")
     last_used_at: datetime = Field(..., description="最后使用时间")
-    device_info: Optional[DeviceInfo] = Field(None, description="设备信息")
+    device_info: DeviceInfo | None = Field(None, description="设备信息")
     is_current: bool = Field(..., description="是否为当前会话")
 
 
@@ -67,9 +67,9 @@ class TokenPair(BaseModel):
 
 __all__ = [
     "DeviceInfo",
-    "TokenRecord",
-    "TokenBlacklistEntry",
-    "UserSession",
     "SessionResponse",
+    "TokenBlacklistEntry",
     "TokenPair",
+    "TokenRecord",
+    "UserSession",
 ]

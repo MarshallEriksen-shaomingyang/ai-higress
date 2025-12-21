@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.deps import get_db, get_redis
 from app.errors import bad_request, forbidden, not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
+from app.models import User
 from app.schemas import (
     UserCreateRequest,
     UserLookupResponse,
@@ -20,11 +21,12 @@ from app.schemas import (
     UserStatusUpdateRequest,
     UserUpdateRequest,
 )
-from app.models import User
 from app.services.api_key_cache import invalidate_cached_api_key
-from app.services.role_service import RoleCodeAlreadyExistsError, RoleService
-from app.services.user_permission_service import UserPermissionService
 from app.services.avatar_service import build_avatar_url, get_avatar_file_path
+from app.services.credit_service import get_or_create_account_for_user
+from app.services.role_service import RoleCodeAlreadyExistsError, RoleService
+from app.services.token_redis_service import TokenRedisService
+from app.services.user_permission_service import UserPermissionService
 from app.services.user_service import (
     EmailAlreadyExistsError,
     UsernameAlreadyExistsError,
@@ -33,8 +35,6 @@ from app.services.user_service import (
     set_user_active,
     update_user,
 )
-from app.services.credit_service import get_or_create_account_for_user
-from app.services.token_redis_service import TokenRedisService
 
 router = APIRouter(
     tags=["users"],
@@ -304,7 +304,7 @@ def update_user_endpoint(
     current_user: AuthenticatedUser = Depends(require_jwt_token),
 ) -> UserResponse:
     """更新可编辑的用户资料字段和密码。"""
-    
+
     # 检查权限：用户只能更新自己的信息，除非是超级用户
     if not current_user.is_superuser and current_user.id != str(user_id):
         raise forbidden("无权修改其他用户信息")

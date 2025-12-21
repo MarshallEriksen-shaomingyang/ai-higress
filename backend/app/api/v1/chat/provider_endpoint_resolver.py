@@ -15,7 +15,6 @@ from urllib.parse import urlsplit
 from app.schemas import ProviderConfig
 from app.services.chat_routing_service import _apply_upstream_path_override, _select_provider_endpoint
 
-
 ApiStyle = Literal["openai", "claude", "responses"]
 
 

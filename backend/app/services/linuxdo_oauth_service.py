@@ -22,18 +22,18 @@ from app.models import Identity, User
 from app.redis_client import redis_delete, redis_get_json, redis_set_json
 from app.services.credit_service import get_or_create_account_for_user
 from app.services.key_management_service import generate_secure_random_password
-from app.services.user_service import (
-    EmailAlreadyExistsError,
-    UsernameAlreadyExistsError,
-    assign_default_role,
-    create_user,
-)
 from app.services.registration_window_service import (
     RegistrationQuotaExceededError,
     RegistrationWindowClosedError,
     RegistrationWindowNotFoundError,
     claim_registration_slot,
     rollback_registration_slot,
+)
+from app.services.user_service import (
+    EmailAlreadyExistsError,
+    UsernameAlreadyExistsError,
+    assign_default_role,
+    create_user,
 )
 from app.settings import settings
 

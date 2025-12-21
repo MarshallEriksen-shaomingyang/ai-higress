@@ -11,13 +11,13 @@ from app.models import UserAppRequestMetricsHistory
 
 def _current_bucket_start(now: dt.datetime, bucket_seconds: int) -> dt.datetime:
     if now.tzinfo is None:
-        now = now.replace(tzinfo=dt.timezone.utc)
+        now = now.replace(tzinfo=dt.UTC)
     else:
-        now = now.astimezone(dt.timezone.utc)
+        now = now.astimezone(dt.UTC)
 
     epoch_seconds = int(now.timestamp())
     bucket_start = epoch_seconds - (epoch_seconds % bucket_seconds)
-    return dt.datetime.fromtimestamp(bucket_start, tz=dt.timezone.utc)
+    return dt.datetime.fromtimestamp(bucket_start, tz=dt.UTC)
 
 
 def record_user_app_request_metric(
@@ -39,7 +39,7 @@ def record_user_app_request_metric(
         app_name = "unknown"
 
     try:
-        at = occurred_at or dt.datetime.now(dt.timezone.utc)
+        at = occurred_at or dt.datetime.now(dt.UTC)
         window_start = _current_bucket_start(at, bucket_seconds)
 
         dialect_name = getattr(db.get_bind(), "dialect", None)

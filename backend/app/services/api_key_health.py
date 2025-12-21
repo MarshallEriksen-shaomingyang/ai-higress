@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from app.logging_config import logger
 from app.models import APIKey, ProviderRoutingMetricsHistory
 from app.schemas.notification import NotificationCreateRequest
-from app.services.notification_service import create_notification
 from app.services.api_key_cache import invalidate_api_key_cache_sync
+from app.services.notification_service import create_notification
 
 
 def disable_expired_api_keys(session: Session, *, now: datetime | None = None) -> int:

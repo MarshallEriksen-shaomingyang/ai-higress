@@ -11,9 +11,9 @@ from app.schemas import (
     RegistrationWindowResponse,
 )
 from app.services.registration_window_service import (
+    close_window_by_id,
     create_registration_window,
     get_active_registration_window,
-    close_window_by_id,
 )
 
 router = APIRouter(

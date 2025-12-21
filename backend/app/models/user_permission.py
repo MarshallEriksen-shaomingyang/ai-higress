@@ -32,7 +32,7 @@ class UserPermission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = Column(Text, nullable=True)
 
-    user: Mapped["User"] = relationship("User")
+    user: Mapped[User] = relationship("User")
 
 
 __all__ = ["UserPermission"]

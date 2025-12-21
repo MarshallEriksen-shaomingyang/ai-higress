@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, relationship
-from uuid import UUID
 
 from app.db.types import JSONBCompat
 
 from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from .provider_preset import ProviderPreset
 from .provider_allowed_user import ProviderAllowedUser
+from .provider_preset import ProviderPreset
 
 
 class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -111,43 +112,43 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default="public",
     )
 
-    api_keys: Mapped[list["ProviderAPIKey"]] = relationship(
+    api_keys: Mapped[list[ProviderAPIKey]] = relationship(
         "ProviderAPIKey",
         back_populates="provider",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    models: Mapped[list["ProviderModel"]] = relationship(
+    models: Mapped[list[ProviderModel]] = relationship(
         "ProviderModel",
         back_populates="provider",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    api_key_restrictions: Mapped[list["APIKeyAllowedProvider"]] = relationship(
+    api_key_restrictions: Mapped[list[APIKeyAllowedProvider]] = relationship(
         "APIKeyAllowedProvider",
         back_populates="provider",
         cascade="all, delete-orphan",
         passive_deletes=True,
         lazy="selectin",
     )
-    shared_users: Mapped[list["ProviderAllowedUser"]] = relationship(
+    shared_users: Mapped[list[ProviderAllowedUser]] = relationship(
         "ProviderAllowedUser",
         back_populates="provider",
         cascade="all, delete-orphan",
         passive_deletes=True,
         lazy="selectin",
     )
-    owner: Mapped["User"] = relationship("User")
+    owner: Mapped[User] = relationship("User")
     preset: Mapped[ProviderPreset | None] = relationship(
         "ProviderPreset", back_populates="providers", foreign_keys=[preset_uuid]
     )
-    audit_logs: Mapped[list["ProviderAuditLog"]] = relationship(
+    audit_logs: Mapped[list[ProviderAuditLog]] = relationship(
         "ProviderAuditLog",
         back_populates="provider",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    test_records: Mapped[list["ProviderTestRecord"]] = relationship(
+    test_records: Mapped[list[ProviderTestRecord]] = relationship(
         "ProviderTestRecord",
         back_populates="provider",
         cascade="all, delete-orphan",

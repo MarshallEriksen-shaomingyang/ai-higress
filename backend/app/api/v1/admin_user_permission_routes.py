@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.deps import get_db
-from app.errors import forbidden, not_found
+from app.errors import forbidden
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.schemas import UserPermissionGrantRequest, UserPermissionResponse
 from app.services.user_permission_service import UserPermissionService

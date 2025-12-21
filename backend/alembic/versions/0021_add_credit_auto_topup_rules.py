@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision = "0021_add_credit_auto_topup_rules"
 down_revision = "0020_create_aggregate_metrics"

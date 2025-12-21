@@ -3,13 +3,13 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
+from app.deps import get_redis
 from app.models import Notification, Provider, ProviderSubmission, User
 from app.schemas import ProviderValidationResult, UserProviderCreateRequest
 from app.schemas.provider_control import ProviderSubmissionRequest
 from app.services.provider_submission_service import create_submission
 from app.services.user_permission_service import UserPermissionService
 from app.services.user_provider_service import create_private_provider
-from app.deps import get_redis
 from tests.utils import InMemoryRedis, jwt_auth_headers, seed_user_and_key
 
 

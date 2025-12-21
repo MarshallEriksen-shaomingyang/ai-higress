@@ -1,9 +1,10 @@
 """Add API key provider restriction tables and flags."""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0006_add_api_key_provider_restrictions"
 down_revision = "0005_add_provider_type"

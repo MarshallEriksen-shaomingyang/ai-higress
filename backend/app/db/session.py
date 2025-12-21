@@ -21,4 +21,4 @@ def get_db_session() -> Generator[Session, None, None]:
         db.close()
 
 
-__all__ = ["engine", "SessionLocal", "get_db_session"]
+__all__ = ["SessionLocal", "engine", "get_db_session"]

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
+import time
+from datetime import UTC, datetime
 from typing import Any
 
-from datetime import datetime, timezone
-import time
-
-from app.logging_config import logger
 from app.http_client import CurlCffiClient
+from app.logging_config import logger
 from app.schemas.provider_control import ProviderModelValidationResult, ProviderValidationResult
-from app.settings import settings
 
 
 class ProviderValidationService:
@@ -163,7 +161,7 @@ class ProviderValidationService:
                     start = time.perf_counter()
                     response = await client.post(url, json=payload, headers=headers)
                     latency_ms = int((time.perf_counter() - start) * 1000.0)
-                    timestamp = datetime.now(timezone.utc)
+                    timestamp = datetime.now(UTC)
                     if response.status_code < 300:
                         results.append(
                             ProviderModelValidationResult(
@@ -186,7 +184,7 @@ class ProviderValidationService:
                         )
                 except Exception as exc:  # pragma: no cover - 网络/超时异常
                     logger.warning("Model validation failed for %s: %s", model_id, exc)
-                    timestamp = datetime.now(timezone.utc)
+                    timestamp = datetime.now(UTC)
                     results.append(
                         ProviderModelValidationResult(
                             model_id=model_id,

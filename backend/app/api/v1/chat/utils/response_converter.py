@@ -26,13 +26,13 @@ def convert_claude_response(
     if "choices" in claude_response:
         logger.debug("Response already in OpenAI format, skipping transformation")
         return claude_response
-    
+
     logger.info(
         "Transforming Claude response to OpenAI format response_id=%s stop_reason=%s",
         claude_response.get("id", "unknown"),
         claude_response.get("stop_reason", "unknown"),
     )
-    
+
     # 转换为 OpenAI 格式
     openai_response = {
         "id": claude_response.get("id", ""),
@@ -42,16 +42,16 @@ def convert_claude_response(
         "choices": [],
         "usage": {}
     }
-    
+
     # 转换 content
     if "content" in claude_response:
         content_blocks = claude_response["content"]
         text_parts = []
-        
+
         for block in content_blocks:
             if block.get("type") == "text":
                 text_parts.append(block.get("text", ""))
-        
+
         openai_response["choices"] = [
             {
                 "index": 0,
@@ -62,7 +62,7 @@ def convert_claude_response(
                 "finish_reason": claude_response.get("stop_reason", "stop")
             }
         ]
-    
+
     # 转换 usage
     if "usage" in claude_response:
         usage = claude_response["usage"]
@@ -71,7 +71,7 @@ def convert_claude_response(
             "completion_tokens": usage.get("output_tokens", 0),
             "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         }
-    
+
     return openai_response
 
 
@@ -88,7 +88,7 @@ def convert_gemini_usage(source: dict[str, Any]) -> dict[str, Any]:
     usage = source.get("usageMetadata") or {}
     if not isinstance(usage, dict):
         return {}
-    
+
     mapped = {
         "prompt_tokens": usage.get("promptTokenCount") or usage.get("promptTokens"),
         "completion_tokens": usage.get("candidatesTokenCount") or usage.get("completionTokens"),
@@ -109,16 +109,16 @@ def convert_gemini_content_to_segments(content: Any) -> list[dict[str, Any]]:
     """
     if not isinstance(content, dict):
         return []
-    
+
     parts = content.get("parts") or []
     if not isinstance(parts, list):
         return []
-    
+
     segments = []
     for part in parts:
         if not isinstance(part, dict):
             continue
-        
+
         if "text" in part:
             segments.append({"type": "text", "text": part["text"]})
         elif "inlineData" in part:
@@ -130,7 +130,7 @@ def convert_gemini_content_to_segments(content: Any) -> list[dict[str, Any]]:
                         "url": f"data:{inline.get('mimeType', 'image/jpeg')};base64,{inline.get('data', '')}"
                     }
                 })
-    
+
     return segments
 
 
@@ -169,41 +169,41 @@ def convert_gemini_response(
     if "choices" in gemini_response:
         logger.debug("Response already in OpenAI format, skipping transformation")
         return gemini_response
-    
+
     logger.info(
         "Transforming Gemini response to OpenAI format response_id=%s",
         gemini_response.get("id", "unknown"),
     )
-    
+
     response_id = gemini_response.get("id", f"chatcmpl-{int(time.time())}")
     created_ts = int(time.time())
-    
+
     create_time = gemini_response.get("createTime") or gemini_response.get("created")
     if isinstance(create_time, (int, float)):
         created_ts = int(create_time)
-    
+
     choices: list[dict[str, Any]] = []
     candidates = gemini_response.get("candidates") or []
-    
+
     if isinstance(candidates, list):
         for idx, cand in enumerate(candidates):
             if not isinstance(cand, dict):
                 continue
-            
+
             content = cand.get("content")
             segments = convert_gemini_content_to_segments(content)
-            
+
             # 检查是否有非文本内容
             has_non_text = any(seg.get("type") != "text" for seg in segments)
             if has_non_text and segments:
                 message_content: Any = segments
             else:
                 message_content = segments_to_plain_text(segments)
-            
+
             finish_reason = cand.get("finishReason")
             if isinstance(finish_reason, str):
                 finish_reason = finish_reason.lower()
-            
+
             choices.append({
                 "index": idx,
                 "message": {
@@ -212,7 +212,7 @@ def convert_gemini_response(
                 },
                 "finish_reason": finish_reason or "stop",
             })
-    
+
     return {
         "id": response_id,
         "object": "chat.completion",

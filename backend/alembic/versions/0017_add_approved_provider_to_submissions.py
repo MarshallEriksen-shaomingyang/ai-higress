@@ -1,9 +1,10 @@
 """Add approved_provider_uuid to provider_submissions for tracking."""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0017_add_approved_provider_to_submissions"
 down_revision = "0016_add_billing_factor_to_providers"

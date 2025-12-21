@@ -1,9 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
+
+import app.services.logical_model_sync as logical_sync
 from app.schemas.logical_model import LogicalModel, PhysicalModel
 from app.schemas.model import ModelCapability
-import app.services.logical_model_sync as logical_sync
 
 
 def _logical_model(provider_id: str) -> LogicalModel:

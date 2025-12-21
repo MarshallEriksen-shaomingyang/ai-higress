@@ -55,8 +55,8 @@ class Notification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    creator: Mapped["User | None"] = relationship("User")
-    receipts: Mapped[list["NotificationReceipt"]] = relationship(
+    creator: Mapped[User | None] = relationship("User")
+    receipts: Mapped[list[NotificationReceipt]] = relationship(
         "NotificationReceipt",
         back_populates="notification",
         cascade="all, delete-orphan",
@@ -90,7 +90,7 @@ class NotificationReceipt(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     read_at = Column(DateTime(timezone=True), nullable=True)
 
-    notification: Mapped["Notification"] = relationship(
+    notification: Mapped[Notification] = relationship(
         "Notification", back_populates="receipts"
     )
 

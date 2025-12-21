@@ -4,7 +4,7 @@ JWT认证服务，用于用户登录令牌的管理和验证
 
 import datetime
 import uuid
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import bcrypt
 from jose import JWTError, jwt
@@ -33,7 +33,7 @@ def hash_password(password: str) -> str:
     if len(password_bytes) > 72:
         # 按字节截断
         password_bytes = password_bytes[:72]
-    
+
     # 直接使用 bcrypt 库，避免 passlib 的初始化问题
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password_bytes, salt)
@@ -55,13 +55,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     password_bytes = plain_password.encode('utf-8')
     if len(password_bytes) > 72:
         password_bytes = password_bytes[:72]
-    
+
     # 直接使用 bcrypt 库
     hashed_bytes = hashed_password.encode('utf-8')
     return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
-def create_access_token(data: Dict[str, Any], expires_delta: Optional[datetime.timedelta] = None) -> str:
+def create_access_token(data: dict[str, Any], expires_delta: datetime.timedelta | None = None) -> str:
     """
     创建访问令牌
     
@@ -86,7 +86,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[datetime.t
     return encoded_jwt
 
 
-def create_refresh_token(data: Dict[str, Any]) -> str:
+def create_refresh_token(data: dict[str, Any]) -> str:
     """
     创建刷新令牌
     
@@ -106,7 +106,7 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     return encoded_jwt
 
 
-def decode_token(token: str) -> Dict[str, Any]:
+def decode_token(token: str) -> dict[str, Any]:
     """
     解码JWT令牌
     
@@ -126,7 +126,7 @@ def decode_token(token: str) -> Dict[str, Any]:
         raise
 
 
-def verify_token(token: str, token_type: str = "access") -> Dict[str, Any]:
+def verify_token(token: str, token_type: str = "access") -> dict[str, Any]:
     """
     验证JWT令牌
     
@@ -141,18 +141,18 @@ def verify_token(token: str, token_type: str = "access") -> Dict[str, Any]:
         JWTError: 如果令牌无效或类型不匹配
     """
     payload = decode_token(token)
-    
+
     # 检查令牌类型
     if payload.get("type") != token_type:
         raise JWTError(f"Invalid token type: expected {token_type}")
-    
+
     # 检查过期时间（由jwt.decode自动处理）
     return payload
 
 
 def create_access_token_with_jti(
-    data: Dict[str, Any], expires_delta: Optional[datetime.timedelta] = None
-) -> Tuple[str, str, str]:
+    data: dict[str, Any], expires_delta: datetime.timedelta | None = None
+) -> tuple[str, str, str]:
     """
     创建带 JTI 的 access token
     
@@ -180,8 +180,8 @@ def create_access_token_with_jti(
 
 
 def create_refresh_token_with_jti(
-    data: Dict[str, Any], family_id: Optional[str] = None
-) -> Tuple[str, str, str, str]:
+    data: dict[str, Any], family_id: str | None = None
+) -> tuple[str, str, str, str]:
     """
     创建带 JTI 的 refresh token
     
@@ -214,7 +214,7 @@ def create_refresh_token_with_jti(
     return encoded_jwt, jti, token_id, family_id
 
 
-def extract_jti_from_token(token: str) -> Optional[str]:
+def extract_jti_from_token(token: str) -> str | None:
     """
     从 token 中提取 JTI
     
@@ -231,7 +231,7 @@ def extract_jti_from_token(token: str) -> Optional[str]:
         return None
 
 
-def extract_token_id_from_token(token: str) -> Optional[str]:
+def extract_token_id_from_token(token: str) -> str | None:
     """
     从 token 中提取 token_id
     
@@ -248,7 +248,7 @@ def extract_token_id_from_token(token: str) -> Optional[str]:
         return None
 
 
-def extract_family_id_from_token(token: str) -> Optional[str]:
+def extract_family_id_from_token(token: str) -> str | None:
     """
     从 refresh token 中提取 family_id
     
@@ -266,17 +266,17 @@ def extract_family_id_from_token(token: str) -> Optional[str]:
 
 
 __all__ = [
-    "hash_password",
-    "verify_password",
-    "create_access_token",
-    "create_refresh_token",
-    "create_access_token_with_jti",
-    "create_refresh_token_with_jti",
-    "decode_token",
-    "verify_token",
-    "extract_jti_from_token",
-    "extract_token_id_from_token",
-    "extract_family_id_from_token",
     "JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
     "JWT_REFRESH_TOKEN_EXPIRE_DAYS",
+    "create_access_token",
+    "create_access_token_with_jti",
+    "create_refresh_token",
+    "create_refresh_token_with_jti",
+    "decode_token",
+    "extract_family_id_from_token",
+    "extract_jti_from_token",
+    "extract_token_id_from_token",
+    "hash_password",
+    "verify_password",
+    "verify_token",
 ]

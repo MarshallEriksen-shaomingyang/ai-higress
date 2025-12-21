@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision = "0026_add_provider_audit_tables"
 down_revision = "0025_add_provider_allowed_users"

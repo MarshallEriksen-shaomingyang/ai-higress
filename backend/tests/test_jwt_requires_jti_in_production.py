@@ -30,7 +30,7 @@ def test_jwt_with_jti_and_redis_record_accepted_in_production(client, db_session
     monkeypatch.setattr(settings, "environment", "production", raising=False)
 
     access_token, access_jti, access_token_id = create_access_token_with_jti({"sub": str(user.id)})
-    redis = getattr(client.app.state, "_test_redis")
+    redis = client.app.state._test_redis
     token_service = TokenRedisService(redis)
 
     asyncio.run(

@@ -4,9 +4,8 @@ from __future__ import annotations
 Celery 任务：自动探针与巡检。
 """
 
-import logging
-from datetime import datetime, timezone
-from typing import Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from celery import shared_task
 from sqlalchemy import select
@@ -45,7 +44,7 @@ def _auto_probe_provider(session, provider: Provider, mode: str, remark: str | N
             else settings.provider_audit_cron_interval_seconds
         )
     if provider.last_check and interval_seconds:
-        delta = (datetime.now(timezone.utc) - provider.last_check).total_seconds()
+        delta = (datetime.now(UTC) - provider.last_check).total_seconds()
         if delta < interval_seconds:
             logger.info(
                 "Skip probe for %s: %.1fs < interval %ss",

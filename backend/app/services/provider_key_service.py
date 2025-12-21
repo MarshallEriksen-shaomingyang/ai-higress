@@ -4,9 +4,6 @@
 
 from __future__ import annotations
 
-import datetime
-from typing import Any, Dict, List, Optional
-
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -61,14 +58,15 @@ def _hash_provider_key(provider_id: str, raw_key: str) -> str:
     """
     import hashlib
     import hmac
+
     from app.settings import settings
-    
+
     secret = settings.secret_key.encode("utf-8")
     msg = f"{provider_id}:{raw_key}".encode()
     return hmac.new(secret, msg, hashlib.sha256).hexdigest()
 
 
-def list_provider_keys(session: Session, provider_id: str) -> List[ProviderAPIKey]:
+def list_provider_keys(session: Session, provider_id: str) -> list[ProviderAPIKey]:
     """
     列出指定厂商的所有 API 密钥。
 
@@ -89,10 +87,10 @@ def list_provider_keys(session: Session, provider_id: str) -> List[ProviderAPIKe
 
 
 def get_provider_key_by_id(
-    session: Session, 
-    provider_id: str, 
+    session: Session,
+    provider_id: str,
     key_id: str
-) -> Optional[ProviderAPIKey]:
+) -> ProviderAPIKey | None:
     """
     根据 ID 获取厂商 API 密钥。
 
@@ -124,10 +122,10 @@ def validate_provider_key(provider_id: str, raw_key: str) -> bool:
     """
     if not raw_key or not raw_key.strip():
         return False
-    
+
     # 这里可以添加针对特定厂商的验证逻辑
     # 例如，检查密钥格式是否符合特定厂商的要求
-    
+
     return True
 
 
@@ -300,7 +298,7 @@ def get_provider_key_by_hash(
     session: Session,
     provider_id: str,
     key_hash: str,
-) -> Optional[ProviderAPIKey]:
+) -> ProviderAPIKey | None:
     """
     根据哈希值获取厂商 API 密钥。
 
@@ -376,16 +374,16 @@ def rotate_provider_key(
 
 
 __all__ = [
-    "create_provider_key",
-    "delete_provider_key",
     "DuplicateProviderKeyLabelError",
-    "get_provider_key_by_hash",
-    "get_provider_key_by_id",
-    "get_plaintext_key",
     "InvalidProviderKeyError",
-    "list_provider_keys",
     "ProviderKeyServiceError",
     "ProviderNotFoundError",
+    "create_provider_key",
+    "delete_provider_key",
+    "get_plaintext_key",
+    "get_provider_key_by_hash",
+    "get_provider_key_by_id",
+    "list_provider_keys",
     "rotate_provider_key",
     "update_provider_key",
     "validate_provider_key",

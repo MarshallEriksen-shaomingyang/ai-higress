@@ -42,7 +42,7 @@ class ClaudeToOpenAIStreamAdapter:
         self.had_error = False
 
     def _encode_openai(self, payload: dict[str, Any]) -> bytes:
-        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
 
     def _emit_role_once(self) -> list[bytes]:
         if self.sent_role:

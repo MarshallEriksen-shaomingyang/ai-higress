@@ -2,8 +2,9 @@
 测试 SessionManager 模块
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.api.v1.chat.session_manager import SessionManager
 from app.schemas import Session
@@ -26,7 +27,7 @@ def session_manager(mock_redis):
 async def test_get_session_exists(session_manager, mock_redis):
     """测试获取存在的 Session"""
     from datetime import datetime
-    
+
     # 准备测试数据
     now = datetime.now().timestamp()
     expected_session = Session(
@@ -37,14 +38,14 @@ async def test_get_session_exists(session_manager, mock_redis):
         created_at=now,
         last_accessed=now,
     )
-    
+
     # Mock routing_get_session
     with patch("app.api.v1.chat.session_manager.routing_get_session") as mock_get:
         mock_get.return_value = expected_session
-        
+
         # 执行测试
         result = await session_manager.get_session("test-session-123")
-        
+
         # 验证结果
         assert result == expected_session
         mock_get.assert_called_once_with(mock_redis, "test-session-123")
@@ -56,10 +57,10 @@ async def test_get_session_not_exists(session_manager, mock_redis):
     # Mock routing_get_session 返回 None
     with patch("app.api.v1.chat.session_manager.routing_get_session") as mock_get:
         mock_get.return_value = None
-        
+
         # 执行测试
         result = await session_manager.get_session("non-existent-session")
-        
+
         # 验证结果
         assert result is None
         mock_get.assert_called_once_with(mock_redis, "non-existent-session")
@@ -69,7 +70,7 @@ async def test_get_session_not_exists(session_manager, mock_redis):
 async def test_bind_session(session_manager, mock_redis):
     """测试绑定 Session"""
     from datetime import datetime
-    
+
     # 准备测试数据
     now = datetime.now().timestamp()
     expected_session = Session(
@@ -80,11 +81,11 @@ async def test_bind_session(session_manager, mock_redis):
         created_at=now,
         last_accessed=now,
     )
-    
+
     # Mock routing_bind_session
     with patch("app.api.v1.chat.session_manager.routing_bind_session") as mock_bind:
         mock_bind.return_value = expected_session
-        
+
         # 执行测试
         result = await session_manager.bind_session(
             session_id="test-session-456",
@@ -92,7 +93,7 @@ async def test_bind_session(session_manager, mock_redis):
             provider_id="anthropic",
             model_id="claude-3-opus",
         )
-        
+
         # 验证结果
         assert result == expected_session
         mock_bind.assert_called_once_with(
@@ -110,14 +111,14 @@ async def test_save_context_with_session(session_manager, mock_redis):
     # Mock save_context
     with patch("app.api.v1.chat.session_manager.save_context") as mock_save:
         mock_save.return_value = None
-        
+
         # 执行测试
         await session_manager.save_context(
             session_id="test-session-789",
             request_payload={"messages": [{"role": "user", "content": "Hello"}]},
             response_text="Hi there!",
         )
-        
+
         # 验证调用
         mock_save.assert_called_once_with(
             mock_redis,
@@ -133,13 +134,13 @@ async def test_save_context_without_session(session_manager, mock_redis):
     # Mock save_context
     with patch("app.api.v1.chat.session_manager.save_context") as mock_save:
         mock_save.return_value = None
-        
+
         # 执行测试
         await session_manager.save_context(
             session_id=None,
             request_payload={"messages": [{"role": "user", "content": "Hello"}]},
             response_text="Hi there!",
         )
-        
+
         # 验证不调用 save_context
         mock_save.assert_not_called()

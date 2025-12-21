@@ -2,10 +2,10 @@
 Bridge Agent token routes tests.
 """
 
+from fastapi.testclient import TestClient
 from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from fastapi.testclient import TestClient
 
 from app.models import User
 from app.settings import settings

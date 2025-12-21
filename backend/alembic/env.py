@@ -3,10 +3,11 @@ from __future__ import annotations
 import pathlib
 import sys
 
-from alembic import context
+import sqlalchemy as sa
 from alembic.config import Config as AlembicConfig
 from sqlalchemy import engine_from_config, pool
-import sqlalchemy as sa
+
+from alembic import context
 
 BASE_DIR = pathlib.Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
@@ -14,7 +15,6 @@ if str(BASE_DIR) not in sys.path:
 
 from app.models import Base  # noqa: E402
 from app.settings import settings  # noqa: E402
-
 
 target_metadata = Base.metadata
 

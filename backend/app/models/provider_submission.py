@@ -47,9 +47,9 @@ class ProviderSubmission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
-    reviewer: Mapped["User"] = relationship("User", foreign_keys=[reviewed_by])
-    approved_provider: Mapped["Provider | None"] = relationship(
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    reviewer: Mapped[User] = relationship("User", foreign_keys=[reviewed_by])
+    approved_provider: Mapped[Provider | None] = relationship(
         "Provider", foreign_keys=[approved_provider_uuid]
     )
 

@@ -32,11 +32,11 @@ class APIKeyAllowedProvider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    api_key: Mapped["APIKey"] = relationship(
+    api_key: Mapped[APIKey] = relationship(
         "APIKey",
         back_populates="allowed_provider_links",
     )
-    provider: Mapped["Provider"] = relationship(
+    provider: Mapped[Provider] = relationship(
         "Provider",
         back_populates="api_key_restrictions",
     )

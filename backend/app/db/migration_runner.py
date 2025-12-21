@@ -3,9 +3,9 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 
+from alembic import command
 from app.logging_config import logger
 from app.settings import settings
 

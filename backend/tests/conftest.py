@@ -29,12 +29,12 @@ from tests.utils import auth_headers, install_inmemory_db
 def app_with_inmemory_db() -> tuple[FastAPI, sessionmaker[Session]]:
     fastapi_app = create_app()
     SessionLocal: sessionmaker[Session] = install_inmemory_db(fastapi_app)
-    
+
     # Patch app.routes.SessionLocal to use in-memory DB during lifespan
     import app.routes
     original_session_local = app.routes.SessionLocal
     app.routes.SessionLocal = SessionLocal
-    
+
     try:
         yield fastapi_app, SessionLocal
     finally:

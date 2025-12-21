@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import asyncio
-import json
 
 import pytest
 from fastapi import HTTPException

@@ -15,13 +15,11 @@ except ModuleNotFoundError:  # pragma: no cover
     Redis = object  # type: ignore
 
 from app.logging_config import logger
-from app.routing.provider_weight import record_provider_failure, record_provider_success
+from app.routing.provider_weight import load_dynamic_weights, record_provider_failure, record_provider_success
 from app.schemas import PhysicalModel, RoutingMetrics
 from app.services.provider_health_service import get_cached_health_status
 from app.settings import settings
 from app.storage.redis_service import get_routing_metrics
-from app.routing.provider_weight import load_dynamic_weights
-
 
 FAILURE_KEY_PREFIX = "provider:failure:"
 

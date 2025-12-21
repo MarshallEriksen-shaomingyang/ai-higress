@@ -117,11 +117,11 @@ class CacheClearResponse(BaseModel):
 
 
 __all__ = [
-    "GatewayConfig",
-    "GatewayConfigUpdateRequest",
-    "CacheSegment",
     "CacheClearRequest",
     "CacheClearResponse",
+    "CacheSegment",
+    "GatewayConfig",
+    "GatewayConfigUpdateRequest",
     "KeyValidationRequest",
     "KeyValidationResponse",
     "ProviderLimitsResponse",

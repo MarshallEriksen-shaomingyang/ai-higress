@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import datetime as dt
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0040_partition_provider_routing_metrics_history_by_day"
 down_revision = "0039_add_composite_indexes_for_metrics_history"
@@ -32,7 +32,7 @@ depends_on = None
 
 
 def _utc_today() -> dt.date:
-    return dt.datetime.now(dt.timezone.utc).date()
+    return dt.datetime.now(dt.UTC).date()
 
 
 def _iter_days(start: dt.date, end_exclusive: dt.date):
@@ -67,8 +67,8 @@ def upgrade() -> None:
         end_day = today + dt.timedelta(days=3)
     else:
         # Cover the whole historical range plus a small future buffer.
-        start_day = min_ts.astimezone(dt.timezone.utc).date()
-        end_day = (max_ts.astimezone(dt.timezone.utc).date() + dt.timedelta(days=1))
+        start_day = min_ts.astimezone(dt.UTC).date()
+        end_day = (max_ts.astimezone(dt.UTC).date() + dt.timedelta(days=1))
         end_day = max(end_day, today + dt.timedelta(days=3))
 
     # 1) Rename old table out of the way and rename its constraint/index names to avoid collisions.
@@ -167,8 +167,8 @@ def upgrade() -> None:
     # 3) Create day partitions.
     for day in _iter_days(start_day, end_day):
         part = _partition_name(day)
-        start = dt.datetime.combine(day, dt.time(0, 0, 0), tzinfo=dt.timezone.utc).isoformat()
-        end = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(0, 0, 0), tzinfo=dt.timezone.utc).isoformat()
+        start = dt.datetime.combine(day, dt.time(0, 0, 0), tzinfo=dt.UTC).isoformat()
+        end = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(0, 0, 0), tzinfo=dt.UTC).isoformat()
         op.execute(
             f"CREATE TABLE IF NOT EXISTS {part} "
             f"PARTITION OF provider_routing_metrics_history "

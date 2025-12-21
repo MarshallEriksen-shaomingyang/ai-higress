@@ -1,5 +1,4 @@
-import asyncio
-from datetime import timedelta, datetime, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -73,7 +72,7 @@ async def test_enforce_session_limit_evicts_oldest_sessions(monkeypatch):
     expires_in = 3600
 
     # 创建 3 个会话，并人为设置 last_used_at 以区分新旧
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     async def _add_session(token_id: str, jti: str, offset_seconds: int):
         await service.store_refresh_token(

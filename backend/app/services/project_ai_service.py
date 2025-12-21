@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -9,11 +10,9 @@ from sqlalchemy.orm import Session
 from app.api.v1.chat.request_handler import RequestHandler
 from app.auth import AuthenticatedAPIKey
 from app.logging_config import logger
-from app.services.prompt_loader import load_prompt
-from app.services.chat_routing_service import _strip_model_group_prefix
-from dataclasses import dataclass
-
 from app.services.bandit_policy_service import BanditRecommendation
+from app.services.chat_routing_service import _strip_model_group_prefix
+from app.services.prompt_loader import load_prompt
 
 _TASK_TYPES: set[str] = {"code", "translation", "writing", "qa", "unknown"}
 _RISK_TIERS: set[str] = {"low", "medium", "high"}

@@ -5,8 +5,9 @@ This makes SDK vendor selection explicit instead of relying on provider id / hos
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0014_add_sdk_vendor_to_providers_and_presets"
 down_revision = "0013_add_provider_presets_and_paths"

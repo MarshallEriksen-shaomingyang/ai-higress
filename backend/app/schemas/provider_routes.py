@@ -2,9 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .provider import ProviderConfig
+from .provider import ProviderConfig, SdkVendorValue
 from .routing_metrics import RoutingMetrics
-from .provider import SdkVendorValue
 
 
 class ProvidersResponse(BaseModel):

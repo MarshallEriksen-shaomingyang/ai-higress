@@ -1,8 +1,9 @@
 """Add transport and is_stream dimensions to provider routing metrics history."""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0010_add_transport_and_is_stream_to_metrics_history"
 down_revision = "0009_extend_provider_routing_metrics_history"

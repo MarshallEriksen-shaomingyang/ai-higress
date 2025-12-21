@@ -9,7 +9,6 @@ from typing import Any
 from fastapi import HTTPException, status
 
 from app.auth import AuthenticatedAPIKey
-from app.logging_config import logger
 from app.services.audit_service import record_audit_event
 from app.services.compliance_service import apply_content_policy, findings_to_summary
 from app.settings import settings
@@ -25,14 +24,14 @@ def enforce_request_moderation(
     """请求内容审核"""
     if not settings.enable_content_moderation:
         return
-    
+
     result = apply_content_policy(
         payload,
         action=settings.content_moderation_action,
         mask_token=settings.content_moderation_mask_token,
         mask_output=False,
     )
-    
+
     if result.findings:
         record_audit_event(
             action="content_check",
@@ -46,7 +45,7 @@ def enforce_request_moderation(
             decision="blocked" if result.blocked else "allowed",
             findings=result.findings,
         )
-    
+
     if result.blocked:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -77,7 +76,7 @@ def apply_response_moderation(
         mask_token=settings.content_moderation_mask_token,
         mask_output=settings.content_moderation_mask_response,
     )
-    
+
     if result.findings:
         record_audit_event(
             action="content_check",
@@ -91,7 +90,7 @@ def apply_response_moderation(
             decision="blocked" if result.blocked else "allowed",
             findings=result.findings,
         )
-    
+
     if result.blocked:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -101,10 +100,10 @@ def apply_response_moderation(
                 "findings": findings_to_summary(result.findings),
             },
         )
-    
+
     if settings.content_moderation_mask_response and result.findings:
         return result.redacted
-    
+
     return content
 
 
@@ -137,7 +136,7 @@ async def wrap_stream_with_moderation(
             mask_token=settings.content_moderation_mask_token,
             mask_output=settings.content_moderation_mask_stream,
         )
-        
+
         if result.findings:
             record_audit_event(
                 action="content_check",
@@ -151,7 +150,7 @@ async def wrap_stream_with_moderation(
                 decision="blocked" if result.blocked else "allowed",
                 findings=result.findings,
             )
-        
+
         if result.blocked:
             error_payload = {
                 "error": {
@@ -160,9 +159,9 @@ async def wrap_stream_with_moderation(
                     "findings": findings_to_summary(result.findings),
                 }
             }
-            yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode("utf-8")
+            yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
             return
-        
+
         if settings.content_moderation_mask_stream and result.findings:
             yield result.redacted.encode("utf-8")
         else:

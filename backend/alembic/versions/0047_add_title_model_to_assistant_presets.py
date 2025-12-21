@@ -7,9 +7,9 @@ Create Date: 2025-12-20 00:00:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0047_add_title_model_to_assistant_presets"
 down_revision = "0046_add_conversation_pinned_preview_unread"

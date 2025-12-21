@@ -11,8 +11,8 @@ from app.settings import settings
 def _parse_time(value: str) -> dt.datetime:
     parsed = dt.datetime.fromisoformat(value)
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt.timezone.utc)
-    return parsed.astimezone(dt.timezone.utc)
+        parsed = parsed.replace(tzinfo=dt.UTC)
+    return parsed.astimezone(dt.UTC)
 
 
 def main() -> None:

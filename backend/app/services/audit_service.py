@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -31,7 +31,7 @@ def record_audit_event(
     写入结构化审计日志，便于后期接入集中日志/合规系统。
     """
     payload = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "action": action,
         "stage": stage,
         "user_id": _to_str(user_id),

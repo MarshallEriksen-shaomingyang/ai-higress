@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import User
 from tests.utils import jwt_auth_headers
+
 
 def test_list_conversations_archived(client: TestClient, db_session: Session):
     # 1. Get the seeded user
@@ -16,7 +16,7 @@ def test_list_conversations_archived(client: TestClient, db_session: Session):
     headers = jwt_auth_headers(user_id)
 
     # 2. Create Project (implicit in API Key if needed, but here we create assistant with project_id)
-    # Actually, assistants need a project_id (UUID). The seeded API Key has one? 
+    # Actually, assistants need a project_id (UUID). The seeded API Key has one?
     # Let's check seed_user_and_key in utils.py. APIKey model has 'id' which acts as project_id usually.
     # The APIKey table is used as "Project".
     # We can get the API Key ID.

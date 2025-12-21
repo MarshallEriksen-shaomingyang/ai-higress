@@ -25,7 +25,7 @@ from tests.utils import InMemoryRedis, seed_user_and_key
 
 
 def _insert_sample_metrics(db: Session, *, provider_id: str, logical_model: str) -> None:
-    now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
+    now = dt.datetime.now(dt.UTC).replace(minute=0, second=0, microsecond=0)
     for i in range(3):
         bucket_start = now - dt.timedelta(minutes=i)
         db.add(
@@ -58,7 +58,7 @@ def _insert_user_metrics(
     provider_id: str,
     logical_model: str,
 ) -> None:
-    now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
+    now = dt.datetime.now(dt.UTC).replace(minute=0, second=0, microsecond=0)
     for i in range(3):
         bucket_start = now - dt.timedelta(minutes=i)
         db.add(
@@ -93,7 +93,7 @@ def _insert_api_key_metrics(
     provider_id: str,
     logical_model: str,
 ) -> None:
-    now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
+    now = dt.datetime.now(dt.UTC).replace(minute=0, second=0, microsecond=0)
     for i in range(3):
         bucket_start = now - dt.timedelta(minutes=i)
         db.add(
@@ -128,7 +128,7 @@ def _insert_user_overview_metrics(
     provider_id: str,
     logical_model: str,
 ) -> None:
-    now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
+    now = dt.datetime.now(dt.UTC).replace(minute=0, second=0, microsecond=0)
     for i in range(3):
         bucket_start = now - dt.timedelta(minutes=i)
         db.add(
@@ -154,7 +154,7 @@ def _insert_user_overview_metrics(
 
 
 def _insert_user_app_overview_metrics(db: Session, *, user_id: UUID) -> None:
-    now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
+    now = dt.datetime.now(dt.UTC).replace(minute=0, second=0, microsecond=0)
     db.add(
         UserAppRequestMetricsHistory(
             id=uuid4(),
@@ -248,7 +248,7 @@ def client_with_db():
 @pytest.mark.asyncio
 async def test_metrics_timeseries_api(mock_get_cached_api_key, client_with_db):
     client, session_factory = client_with_db
-    
+
     # Mock Redis cache to avoid connection timeout
     test_user_id = uuid4()
     mock_get_cached_api_key.return_value = CachedAPIKey(
@@ -265,7 +265,7 @@ async def test_metrics_timeseries_api(mock_get_cached_api_key, client_with_db):
 
     provider_id = "openai"
     logical_model = "gpt-4"
-    
+
     with session_factory() as session:
         _insert_sample_metrics(session, provider_id=provider_id, logical_model=logical_model)
 
@@ -314,7 +314,7 @@ async def test_metrics_user_overview_apps_api(client_with_db):
 @pytest.mark.asyncio
 async def test_metrics_summary_api(mock_get_cached_api_key, client_with_db):
     client, session_factory = client_with_db
-    
+
     # Mock Redis cache to avoid connection timeout
     test_user_id = uuid4()
     mock_get_cached_api_key.return_value = CachedAPIKey(
@@ -331,7 +331,7 @@ async def test_metrics_summary_api(mock_get_cached_api_key, client_with_db):
 
     provider_id = "openai-summary"
     logical_model = "gpt-4"
-    
+
     with session_factory() as session:
         _insert_sample_metrics(session, provider_id=provider_id, logical_model=logical_model)
 
@@ -357,7 +357,7 @@ async def test_metrics_summary_api(mock_get_cached_api_key, client_with_db):
 @pytest.mark.asyncio
 async def test_user_metrics_summary_api(mock_get_cached_api_key, client_with_db):
     client, session_factory = client_with_db
-    
+
     # Mock Redis cache to avoid connection timeout
     test_user_id = uuid4()
     mock_get_cached_api_key.return_value = CachedAPIKey(
@@ -375,7 +375,7 @@ async def test_user_metrics_summary_api(mock_get_cached_api_key, client_with_db)
     provider_id = "openai-user"
     logical_model = "gpt-4"
     user_id = uuid4()  # Use UUID object instead of string
-    
+
     with session_factory() as session:
         _insert_user_metrics(
             session,
@@ -404,7 +404,7 @@ async def test_user_metrics_summary_api(mock_get_cached_api_key, client_with_db)
 @pytest.mark.asyncio
 async def test_api_key_metrics_summary_api(mock_get_cached_api_key, client_with_db):
     client, session_factory = client_with_db
-    
+
     # Mock Redis cache to avoid connection timeout
     test_user_id = uuid4()
     mock_get_cached_api_key.return_value = CachedAPIKey(
@@ -422,7 +422,7 @@ async def test_api_key_metrics_summary_api(mock_get_cached_api_key, client_with_
     provider_id = "openai-apikey"
     logical_model = "gpt-4"
     api_key_id = uuid4()  # Use UUID object instead of string
-    
+
     with session_factory() as session:
         _insert_api_key_metrics(
             session,

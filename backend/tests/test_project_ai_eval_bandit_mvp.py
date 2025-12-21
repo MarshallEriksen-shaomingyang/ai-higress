@@ -197,8 +197,9 @@ def app_with_mock_chat(monkeypatch):
 
 
 def _get_seed_ids(SessionLocal):
-    from app.models import APIKey, User
     from sqlalchemy import select
+
+    from app.models import APIKey, User
 
     with SessionLocal() as db:
         user = db.execute(select(User)).scalars().first()
@@ -319,6 +320,7 @@ def test_assistant_conversation_message_and_eval_flow(app_with_mock_chat, monkey
         assert resp.json()["winner_run_id"] == baseline_run_id
 
     from sqlalchemy import select
+
     from app.models import BanditArmStats
 
     with SessionLocal() as db:
@@ -406,8 +408,9 @@ def test_eval_context_features_fallback_to_project_ai(app_with_mock_chat, monkey
         assert resp.status_code == 200
         eval_id = resp.json()["eval_id"]
 
-    from app.models import Eval
     from sqlalchemy import select
+
+    from app.models import Eval
 
     with SessionLocal() as db:
         row = db.execute(select(Eval).where(Eval.id == UUID(str(eval_id)))).scalars().first()
@@ -649,6 +652,7 @@ def test_eval_streaming_sse_parallel(app_with_mock_chat, monkeypatch):
         assert any(t == "done" and d == "[DONE]" for t, d in events)
 
     from sqlalchemy import select
+
     from app.models import Eval, Run
 
     with SessionLocal() as db:

@@ -4,12 +4,12 @@ import json
 import uuid
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-import httpx
 
-from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.errors import bad_request, not_found, service_unavailable
+from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.services.bridge_agent_token_service import (
     create_bridge_agent_token,
     generate_agent_id,

@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import status
+from sqlalchemy.orm import Session as DbSession
 
 from app.auth import AuthenticatedAPIKey
 from app.logging_config import logger
@@ -19,14 +20,13 @@ from app.services.metrics_service import (
     call_sdk_generate_with_metrics,
     stream_sdk_with_metrics,
 )
-from sqlalchemy.orm import Session as DbSession
 
 from .base import Transport, TransportResult
 
 
 class SdkTransport(Transport):
     """SDK 传输层实现"""
-    
+
     def __init__(
         self,
         *,
@@ -41,17 +41,17 @@ class SdkTransport(Transport):
             logical_model=logical_model,
         )
         self.db = db
-    
+
     def supports_provider(self, provider_id: str) -> bool:
         """检查 Provider 是否支持 SDK 传输"""
         from app.provider.config import get_provider_config
-        
+
         provider_cfg = get_provider_config(provider_id)
         if provider_cfg is None:
             return False
-        
+
         return getattr(provider_cfg, "transport", "http") == "sdk"
-    
+
     async def send_request(
         self,
         *,
@@ -89,7 +89,7 @@ class SdkTransport(Transport):
                 error=f"Provider '{provider_id}' 不支持 transport=sdk",
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        
+
         logger.info(
             "sdk_transport: calling %s request provider=%s model=%s driver=%s",
             "streaming" if is_stream else "non-streaming",
@@ -97,7 +97,7 @@ class SdkTransport(Transport):
             provider_model_id,
             driver.name,
         )
-        
+
         if is_stream:
             return await self._send_streaming_request(
                 driver=driver,
@@ -116,7 +116,7 @@ class SdkTransport(Transport):
                 payload=payload,
                 base_url=normalize_base_url(provider_config.base_url),
             )
-    
+
     async def _send_non_streaming_request(
         self,
         *,
@@ -152,19 +152,19 @@ class SdkTransport(Transport):
                 error=str(exc),
                 status_code=500,
             )
-        
+
         logger.info(
             "sdk_transport: success provider=%s model=%s",
             provider_id,
             provider_model_id,
         )
-        
+
         return TransportResult(
             response=sdk_payload,
             status_code=200,
             provider_model_id=provider_model_id,
         )
-    
+
     async def _send_streaming_request(
         self,
         *,
@@ -176,7 +176,7 @@ class SdkTransport(Transport):
         base_url: str | None,
     ) -> TransportResult:
         """发送流式 SDK 请求"""
-        
+
         async def stream_wrapper() -> AsyncIterator[bytes]:
             try:
                 async for chunk_dict in stream_sdk_with_metrics(
@@ -193,7 +193,7 @@ class SdkTransport(Transport):
                 ):
                     # SDK 驱动返回的是字典，需要转换为 SSE 格式
                     chunk_json = json.dumps(chunk_dict, ensure_ascii=False)
-                    yield f"data: {chunk_json}\n\n".encode("utf-8")
+                    yield f"data: {chunk_json}\n\n".encode()
             except Exception as exc:
                 logger.exception(
                     "sdk_transport: streaming error provider=%s model=%s",
@@ -206,8 +206,8 @@ class SdkTransport(Transport):
                         "message": str(exc),
                     }
                 }
-                yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode("utf-8")
-        
+                yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
+
         return TransportResult(
             stream=stream_wrapper(),
             is_stream=True,

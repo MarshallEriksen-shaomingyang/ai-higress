@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -96,7 +95,7 @@ class CreditAutoTopupBatchRequest(CreditAutoTopupConfig):
     - 其他字段沿用 CreditAutoTopupConfig 的含义。
     """
 
-    user_ids: List[UUID] = Field(
+    user_ids: list[UUID] = Field(
         ...,
         min_length=1,
         description="需要应用自动充值规则的用户 ID 列表",
@@ -109,7 +108,7 @@ class CreditAutoTopupBatchResponse(BaseModel):
     """
 
     updated_count: int = Field(..., description="实际创建或更新的规则数量")
-    configs: List[CreditAutoTopupConfigResponse] = Field(
+    configs: list[CreditAutoTopupConfigResponse] = Field(
         default_factory=list,
         description="被创建/更新后的规则明细列表",
     )
@@ -158,7 +157,7 @@ class CreditProviderUsageItem(BaseModel):
 class CreditProviderUsageResponse(BaseModel):
     time_range: str
     total_spent: int
-    items: List[CreditProviderUsageItem] = Field(default_factory=list)
+    items: list[CreditProviderUsageItem] = Field(default_factory=list)
 
 
 class CreditUsageTimeseriesPoint(BaseModel):
@@ -169,20 +168,20 @@ class CreditUsageTimeseriesPoint(BaseModel):
 class CreditUsageTimeseriesResponse(BaseModel):
     time_range: str
     bucket: str
-    points: List[CreditUsageTimeseriesPoint] = Field(default_factory=list)
+    points: list[CreditUsageTimeseriesPoint] = Field(default_factory=list)
 
 
 __all__ = [
     "CreditAccountResponse",
-    "CreditTopupRequest",
-    "CreditTransactionResponse",
-    "CreditAutoTopupConfig",
-    "CreditAutoTopupConfigResponse",
     "CreditAutoTopupBatchRequest",
     "CreditAutoTopupBatchResponse",
+    "CreditAutoTopupConfig",
+    "CreditAutoTopupConfigResponse",
     "CreditConsumptionSummary",
     "CreditProviderUsageItem",
     "CreditProviderUsageResponse",
+    "CreditTopupRequest",
+    "CreditTransactionResponse",
     "CreditUsageTimeseriesPoint",
     "CreditUsageTimeseriesResponse",
 ]

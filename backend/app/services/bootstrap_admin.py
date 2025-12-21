@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
-from app.settings import settings
 from app.services.key_management_service import initialize_system_admin
 from app.services.user_service import has_any_user
+from app.settings import settings
 
 
 @dataclass
@@ -33,7 +33,7 @@ def ensure_initial_admin(session: Session) -> BootstrapAdminResult | None:
             email=settings.default_admin_email,
             display_name="Administrator",
         )
-        
+
         logger.warning(
             "已自动创建初始管理员账号，请立即登录并修改凭证 | username=%s email=%s password=%s",
             admin_credentials["username"],

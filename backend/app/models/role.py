@@ -15,12 +15,12 @@ class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = Column(String(100), nullable=False)
     description: Mapped[str | None] = Column(Text, nullable=True)
 
-    role_permissions: Mapped[list["RolePermission"]] = relationship(
+    role_permissions: Mapped[list[RolePermission]] = relationship(
         "RolePermission",
         back_populates="role",
         cascade="all, delete-orphan",
     )
-    user_roles: Mapped[list["UserRole"]] = relationship(
+    user_roles: Mapped[list[UserRole]] = relationship(
         "UserRole",
         back_populates="role",
         cascade="all, delete-orphan",

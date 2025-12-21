@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -21,10 +22,13 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     Redis = object  # type: ignore
 
+from app.api.v1.chat.provider_selector import ProviderSelector
+from app.api.v1.chat.request_handler import RequestHandler
 from app.auth import AuthenticatedAPIKey
-from app.errors import bad_request, not_found
+from app.errors import bad_request
 from app.jwt_auth import AuthenticatedUser
 from app.models import APIKey
+from app.services.bandit_policy_service import recommend_challengers
 from app.services.chat_history_service import (
     create_assistant_message_after_user,
     create_assistant_message_placeholder_after_user,
@@ -34,20 +38,16 @@ from app.services.chat_history_service import (
     get_conversation,
 )
 from app.services.chat_run_service import build_openai_request_payload, create_run_record, execute_run_non_stream
-from app.services.credit_service import InsufficientCreditsError, ensure_account_usable
-from app.services.bandit_policy_service import recommend_challengers
 from app.services.context_features_service import build_rule_context_features
+from app.services.credit_service import InsufficientCreditsError, ensure_account_usable
+from app.services.eval_service import execute_run_stream
+from app.services.project_chat_settings_service import DEFAULT_PROJECT_CHAT_MODEL
 from app.services.project_eval_config_service import (
     DEFAULT_PROVIDER_SCOPES,
     get_effective_provider_ids_for_user,
     get_or_default_project_eval_config,
     resolve_project_context,
 )
-from app.services.project_chat_settings_service import DEFAULT_PROJECT_CHAT_MODEL
-from app.api.v1.chat.provider_selector import ProviderSelector
-from app.api.v1.chat.request_handler import RequestHandler
-from app.services.eval_service import execute_run_stream
-
 
 PROJECT_INHERIT_SENTINEL = "__project__"
 
@@ -295,7 +295,7 @@ async def send_message_and_run_baseline(
         raise bad_request("未指定模型")
 
     cfg = get_or_default_project_eval_config(db, project_id=ctx.project_id)
-    
+
     effective_provider_ids = get_effective_provider_ids_for_user(
         db,
         user_id=UUID(str(current_user.id)),

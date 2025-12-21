@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -19,8 +19,8 @@ def test_register_blocked_without_window(client: TestClient) -> None:
 
 def test_register_auto_activation_window(app_with_inmemory_db) -> None:
     app, SessionLocal = app_with_inmemory_db
-    start = datetime.now(timezone.utc) - timedelta(minutes=1)
-    end = datetime.now(timezone.utc) + timedelta(minutes=5)
+    start = datetime.now(UTC) - timedelta(minutes=1)
+    end = datetime.now(UTC) + timedelta(minutes=5)
 
     with SessionLocal() as session:
         create_registration_window(
@@ -50,8 +50,8 @@ def test_register_auto_activation_window(app_with_inmemory_db) -> None:
 
 def test_register_manual_activation_window(app_with_inmemory_db) -> None:
     app, SessionLocal = app_with_inmemory_db
-    start = datetime.now(timezone.utc) - timedelta(minutes=1)
-    end = datetime.now(timezone.utc) + timedelta(minutes=5)
+    start = datetime.now(UTC) - timedelta(minutes=1)
+    end = datetime.now(UTC) + timedelta(minutes=5)
 
     with SessionLocal() as session:
         create_registration_window(

@@ -36,7 +36,7 @@ class APIKeyUpdateRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def ensure_any_field(self) -> "APIKeyUpdateRequest":
+    def ensure_any_field(self) -> APIKeyUpdateRequest:
         if (
             self.name is None
             and self.expiry is None

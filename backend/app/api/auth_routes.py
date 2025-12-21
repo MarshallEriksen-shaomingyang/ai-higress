@@ -2,11 +2,10 @@
 用户认证路由，处理用户登录、注册和令牌管理
 """
 
-from typing import Optional
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, Cookie, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,10 +16,8 @@ except ModuleNotFoundError:
     Redis = object  # type: ignore[misc,assignment]
 
 from app.deps import get_db, get_http_client, get_redis
-from app.jwt_auth import AuthenticatedUser, require_jwt_refresh_token, require_jwt_token
+from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.models import User
-from app.settings import settings
-from app.schemas.token import DeviceInfo
 from app.schemas.auth import (
     LoginRequest,
     OAuthCallbackRequest,
@@ -29,6 +26,7 @@ from app.schemas.auth import (
     RegisterRequest,
     TokenResponse,
 )
+from app.schemas.token import DeviceInfo
 from app.schemas.user import UserCreateRequest, UserResponse
 from app.services.avatar_service import build_avatar_url
 from app.services.jwt_auth_service import (
@@ -36,7 +34,6 @@ from app.services.jwt_auth_service import (
     JWT_REFRESH_TOKEN_EXPIRE_DAYS,
     create_access_token_with_jti,
     create_refresh_token_with_jti,
-    extract_family_id_from_token,
     extract_jti_from_token,
     verify_password,
 )
@@ -45,8 +42,13 @@ from app.services.linuxdo_oauth_service import (
     build_linuxdo_authorize_url,
     complete_linuxdo_oauth_flow,
 )
-from app.services.token_redis_service import TokenRedisService
+from app.services.registration_window_service import (
+    RegistrationQuotaExceededError,
+    RegistrationWindowClosedError,
+    RegistrationWindowNotFoundError,
+)
 from app.services.role_service import RoleService
+from app.services.token_redis_service import TokenRedisService
 from app.services.user_permission_service import UserPermissionService
 from app.services.user_service import (
     EmailAlreadyExistsError,
@@ -54,11 +56,7 @@ from app.services.user_service import (
     get_user_by_id,
     register_user_with_window,
 )
-from app.services.registration_window_service import (
-    RegistrationQuotaExceededError,
-    RegistrationWindowClosedError,
-    RegistrationWindowNotFoundError,
-)
+from app.settings import settings
 
 router = APIRouter(tags=["authentication"], prefix="/auth")
 
@@ -130,8 +128,8 @@ def _build_user_response(
 
 
 def _build_device_info(
-    user_agent: Optional[str],
-    x_forwarded_for: Optional[str],
+    user_agent: str | None,
+    x_forwarded_for: str | None,
 ) -> DeviceInfo:
     ip_address = None
     if x_forwarded_for:
@@ -253,36 +251,36 @@ async def login(
     response: Response,
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
-    user_agent: Optional[str] = Header(None),
-    x_forwarded_for: Optional[str] = Header(None, alias="X-Forwarded-For"),
+    user_agent: str | None = Header(None),
+    x_forwarded_for: str | None = Header(None, alias="X-Forwarded-For"),
 ) -> TokenResponse:
     """
     用户登录并获取JWT令牌
     """
     stmt = select(User).where(User.email == request.email)
     user = db.execute(stmt).scalars().first()
-    
+
     # 如果用户不存在，返回通用错误信息
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="邮箱或密码错误",
         )
-    
+
     # 验证密码
     if not verify_password(request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="邮箱或密码错误",
         )
-    
+
     # 检查用户是否处于活动状态
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被禁用",
         )
-    
+
     device_info = _build_device_info(user_agent, x_forwarded_for)
     return await _issue_token_pair(user, redis, device_info, response)
 
@@ -314,8 +312,8 @@ async def linuxdo_oauth_callback(
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
     client: httpx.AsyncClient = Depends(get_http_client),
-    user_agent: Optional[str] = Header(None),
-    x_forwarded_for: Optional[str] = Header(None, alias="X-Forwarded-For"),
+    user_agent: str | None = Header(None),
+    x_forwarded_for: str | None = Header(None, alias="X-Forwarded-For"),
 ) -> OAuthCallbackResponse:
     """
     处理 LinuxDo OAuth 回调，完成用户同步与登录。
@@ -365,10 +363,10 @@ async def refresh_token(
     response: Response,
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
-    user_agent: Optional[str] = Header(None),
-    x_forwarded_for: Optional[str] = Header(None, alias="X-Forwarded-For"),
-    cookie_refresh_token: Optional[str] = Cookie(None, alias=REFRESH_TOKEN_COOKIE_NAME),
-    body: Optional[RefreshTokenRequest] = None,
+    user_agent: str | None = Header(None),
+    x_forwarded_for: str | None = Header(None, alias="X-Forwarded-For"),
+    cookie_refresh_token: str | None = Cookie(None, alias=REFRESH_TOKEN_COOKIE_NAME),
+    body: RefreshTokenRequest | None = None,
 ) -> TokenResponse:
     """
     使用刷新令牌获取新的访问令牌
@@ -381,11 +379,11 @@ async def refresh_token(
     
     优先使用 Cookie 中的 refresh_token，其次尝试 Request Body。
     """
-    
+
     current_refresh_token = cookie_refresh_token
     if not current_refresh_token and body:
         current_refresh_token = body.refresh_token
-        
+
     if not current_refresh_token:
          raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -396,28 +394,28 @@ async def refresh_token(
         # 验证刷新令牌
         from app.services.jwt_auth_service import decode_token
         payload = decode_token(current_refresh_token)
-        
+
         # 检查令牌类型
         if payload.get("type") != "refresh":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="无效的令牌类型",
             )
-        
+
         user_id = payload.get("sub")
         jti = payload.get("jti")
         family_id = payload.get("family_id")
-        
+
         if not user_id or not jti or not family_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="无效的令牌载荷",
             )
-        
+
         # 验证 Redis 中的 token 状态
         token_service = TokenRedisService(redis)
         token_record = await token_service.verify_refresh_token(jti)
-        
+
         if not token_record:
             # Token 不存在或已被撤销，可能是重用攻击
             # 撤销整个 token 家族
@@ -429,7 +427,7 @@ async def refresh_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="检测到 token 重用，已撤销所有相关会话",
             )
-        
+
         # 获取用户信息
         user = get_user_by_id(db, user_id)
         if user is None or not user.is_active:
@@ -437,17 +435,17 @@ async def refresh_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="用户不存在或已被禁用",
             )
-        
+
         # 创建设备信息
         device_info = DeviceInfo(
             user_agent=user_agent,
             ip_address=x_forwarded_for.split(',')[0].strip() if x_forwarded_for else None
         )
-        
+
         # 生成新的令牌对（使用相同的 family_id）
         access_token_data = {"sub": str(user.id)}
         refresh_token_data = {"sub": str(user.id)}
-        
+
         access_token, access_jti, access_token_id = create_access_token_with_jti(
             access_token_data
         )
@@ -455,10 +453,10 @@ async def refresh_token(
             refresh_token_data,
             family_id=family_id  # 保持相同的家族
         )
-        
+
         # 撤销旧的 refresh token，添加 30 秒宽限期以允许飞行中的请求完成
         await token_service.revoke_token(jti, reason="token_rotated", grace_period_seconds=30)
-        
+
         # 存储新的 access token
         await token_service.store_access_token(
             token_id=access_token_id,
@@ -467,7 +465,7 @@ async def refresh_token(
             expires_in=JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             device_info=device_info,
         )
-        
+
         # 存储新的 refresh token（记录父 token）
         await token_service.store_refresh_token(
             token_id=new_refresh_token_id,
@@ -478,7 +476,7 @@ async def refresh_token(
             parent_jti=jti,  # 记录父 token
             device_info=device_info,
         )
-        
+
         # 更新会话最后使用时间
         await token_service.update_session_last_used(user_id, new_refresh_jti)
 
@@ -487,7 +485,7 @@ async def refresh_token(
             str(user.id),
             settings.max_sessions_per_user,
         )
-        
+
         # Set HttpOnly cookie
         response.set_cookie(
             key=REFRESH_TOKEN_COOKIE_NAME,
@@ -498,7 +496,7 @@ async def refresh_token(
             max_age=JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/",
         )
-        
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=None,
@@ -509,7 +507,7 @@ async def refresh_token(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"无效的刷新令牌: {str(e)}",
+            detail=f"无效的刷新令牌: {e!s}",
         )
 
 
@@ -540,8 +538,8 @@ async def logout(
     response: Response,
     current_user: AuthenticatedUser = Depends(require_jwt_token),
     redis: Redis = Depends(get_redis),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="X-Auth-Token"),
+    authorization: str | None = Header(None),
+    x_auth_token: str | None = Header(None, alias="X-Auth-Token"),
 ) -> dict:
     """
     用户登出
@@ -568,14 +566,14 @@ async def logout(
             token = token_value
     elif x_auth_token:
         token = x_auth_token.strip()
-    
+
     if not token:
         # If no access token is provided, just return success if we cleared the cookie
         # But we require_jwt_token so we should have a user.
         # Actually require_jwt_token already validates the token.
         # If the user is authenticated, we should have a token.
         pass
-    
+
     if token:
         # 提取 JTI
         jti = extract_jti_from_token(token)
@@ -609,9 +607,9 @@ async def logout_all(
         current_user.id,
         reason="user_logout_all"
     )
-    
+
     return {
-        "message": f"已成功登出所有设备",
+        "message": "已成功登出所有设备",
         "revoked_sessions": count
     }
 

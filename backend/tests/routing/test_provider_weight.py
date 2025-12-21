@@ -1,11 +1,11 @@
 import pytest
 
-from app.schemas import PhysicalModel
 from app.routing.provider_weight import (
     adjust_provider_weight,
     invalidate_provider_weights,
     load_dynamic_weights,
 )
+from app.schemas import PhysicalModel
 
 
 class FakeRedis:

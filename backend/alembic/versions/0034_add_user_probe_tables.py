@@ -8,9 +8,10 @@ Create Date: 2025-12-15
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0034_add_user_probe_tables"
 down_revision = "0033_add_claude_cli_transport_type"

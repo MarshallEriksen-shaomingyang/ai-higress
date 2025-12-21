@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy import Boolean, Column, DateTime, Float, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped
-
-from uuid import UUID
 
 from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 

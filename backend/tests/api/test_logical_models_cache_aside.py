@@ -43,17 +43,17 @@ def test_logical_models_cache_miss_fallback_to_db(
     """
     from app.models import User
     from tests.utils import jwt_auth_headers
-    
+
     # 获取测试用户并生成 JWT token
     user = db_session.query(User).filter_by(username="admin").first()
     headers = jwt_auth_headers(str(user.id))
-    
+
     # 注意：这个测试假设 Redis 是空的或者缓存已过期
     # 在实际测试中，可能需要先清空 Redis 缓存
-    
+
     response = client.get("/logical-models", headers=headers)
     assert response.status_code == 200
-    
+
     data = response.json()
     # 应该能看到从数据库回源的结果
     assert "models" in data

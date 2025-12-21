@@ -11,7 +11,6 @@ from app.jwt_auth import AuthenticatedUser
 from app.models import APIKey, ProjectEvalConfig, Provider, ProviderAllowedUser
 from app.services.api_key_service import get_api_key_by_id
 
-
 ALLOWED_PROVIDER_SCOPES = {"private", "shared", "public"}
 DEFAULT_PROVIDER_SCOPES = ["private", "shared", "public"]
 

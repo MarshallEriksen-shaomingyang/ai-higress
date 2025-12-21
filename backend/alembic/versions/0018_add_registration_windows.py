@@ -1,6 +1,7 @@
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0018_add_registration_windows"
 down_revision = "0017_add_approved_provider_to_submissions"

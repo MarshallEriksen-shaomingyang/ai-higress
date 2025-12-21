@@ -1,9 +1,10 @@
 """Add user and api_key dimensions to provider routing metrics history."""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0011_add_user_and_api_key_to_metrics_history"
 down_revision = "0010_add_transport_and_is_stream_to_metrics_history"

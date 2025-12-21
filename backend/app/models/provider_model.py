@@ -41,7 +41,7 @@ class ProviderModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         doc="是否在该 Provider 下禁用该模型（禁用后不会参与路由与 /models 聚合）",
     )
 
-    provider: Mapped["Provider"] = relationship("Provider", back_populates="models")
+    provider: Mapped[Provider] = relationship("Provider", back_populates="models")
 
 
 __all__ = ["ProviderModel"]

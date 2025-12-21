@@ -6,10 +6,10 @@ These tables are populated by Celery scheduled tasks, and are used to serve
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision = "0038_create_provider_routing_metrics_rollups"
 down_revision = "0037_add_metrics_retention_days_to_gateway_config"

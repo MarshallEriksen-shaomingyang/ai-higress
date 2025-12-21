@@ -1,9 +1,10 @@
 """Add provider presets table and provider path metadata"""
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0013_add_provider_presets_and_paths"
 down_revision = "0012_add_roles_and_seed_permissions"

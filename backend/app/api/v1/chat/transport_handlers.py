@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import httpx
@@ -21,6 +20,14 @@ except ModuleNotFoundError:  # pragma: no cover
 
 from sqlalchemy.orm import Session as DbSession
 
+from app.api.v1.chat.header_builder import build_upstream_headers
+from app.api.v1.chat.protocol_adapter import (
+    adapt_request_payload,
+    adapt_response_payload,
+    stringify_payload,
+)
+from app.api.v1.chat.provider_endpoint_resolver import resolve_http_upstream_target
+from app.api.v1.chat.upstream_error_classifier import classify_capability_mismatch
 from app.auth import AuthenticatedAPIKey
 from app.context_store import save_context
 from app.provider import config as provider_config
@@ -32,14 +39,6 @@ from app.provider.key_pool import (
     record_key_success,
 )
 from app.provider.sdk_selector import get_sdk_driver, normalize_base_url
-from app.api.v1.chat.header_builder import build_upstream_headers
-from app.api.v1.chat.provider_endpoint_resolver import resolve_http_upstream_target
-from app.api.v1.chat.protocol_adapter import (
-    adapt_request_payload,
-    adapt_response_payload,
-    stringify_payload,
-)
-from app.api.v1.chat.upstream_error_classifier import classify_capability_mismatch
 from app.services.chat_routing_service import (
     _GEMINI_MODEL_REGEX,
     _is_retryable_upstream_status,

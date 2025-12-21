@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
+from sqlalchemy.orm import Session as DbSession
 
 from app.auth import AuthenticatedAPIKey
 from app.logging_config import logger
@@ -27,10 +28,9 @@ from app.services.metrics_service import (
     stream_upstream_with_metrics,
 )
 from app.upstream import UpstreamStreamError
-from sqlalchemy.orm import Session as DbSession
 
-from .base import Transport, TransportResult
 from ..utils import convert_gemini_response, normalize_payload
+from .base import Transport, TransportResult
 
 
 class HttpTransport(Transport):
@@ -49,7 +49,7 @@ class HttpTransport(Transport):
     - Claude fallback（由上层处理）
     - 重试逻辑（由上层处理）
     """
-    
+
     def __init__(
         self,
         *,
@@ -66,11 +66,11 @@ class HttpTransport(Transport):
         )
         self.client = client
         self.db = db
-    
+
     def supports_provider(self, provider_id: str) -> bool:
         """HTTP 传输支持所有 Provider"""
         return True
-    
+
     async def send_request(
         self,
         *,
@@ -104,10 +104,10 @@ class HttpTransport(Transport):
             payload,
             provider_model_id=provider_model_id,
         )
-        
+
         # 准备请求头
         request_headers = headers or {}
-        
+
         logger.info(
             "http_transport: sending %s request to provider=%s model=%s url=%s",
             "streaming" if is_stream else "non-streaming",
@@ -115,7 +115,7 @@ class HttpTransport(Transport):
             provider_model_id,
             endpoint,
         )
-        
+
         if is_stream:
             return await self._send_streaming_request(
                 provider_id=provider_id,
@@ -133,7 +133,7 @@ class HttpTransport(Transport):
                 payload=upstream_payload,
                 original_payload=payload,
             )
-    
+
     async def _send_non_streaming_request(
         self,
         *,
@@ -178,10 +178,10 @@ class HttpTransport(Transport):
                 status_code=None,  # 网络错误没有 HTTP 状态码
                 provider_model_id=provider_model_id,
             )
-        
+
         status_code = r.status_code
         text = r.text
-        
+
         logger.info(
             "http_transport: upstream response status=%s provider=%s model=%s body_length=%d",
             status_code,
@@ -189,21 +189,21 @@ class HttpTransport(Transport):
             provider_model_id,
             len(text or ""),
         )
-        
+
         # 解析响应
         try:
             response_data = r.json()
         except ValueError:
             # JSON 解析失败，返回原始文本
             response_data = {"raw": text}
-        
+
         # Gemini 响应转换
         if isinstance(response_data, dict) and response_data.get("candidates") is not None:
             # 检测是否为 Gemini 响应格式
             if "gemini" in provider_model_id.lower():
                 original_model = original_payload.get("model") or provider_model_id
                 response_data = convert_gemini_response(response_data, original_model)
-        
+
         # 返回结果（包括错误状态码）
         # 上层会根据 status_code 判断是否需要重试或 fallback
         return TransportResult(
@@ -212,7 +212,7 @@ class HttpTransport(Transport):
             provider_model_id=provider_model_id,
             error=text if status_code >= 400 else None,
         )
-    
+
     async def _send_streaming_request(
         self,
         *,
@@ -230,7 +230,7 @@ class HttpTransport(Transport):
             - stream 字段包含 AsyncIterator[bytes]
             - 流式错误会在迭代器中以 SSE 错误帧形式返回
         """
-        
+
         async def stream_wrapper() -> AsyncIterator[bytes]:
             try:
                 async for chunk in stream_upstream_with_metrics(
@@ -262,7 +262,7 @@ class HttpTransport(Transport):
                         "status_code": exc.status_code,
                     }
                 }
-                yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode("utf-8")
+                yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
             except Exception as exc:
                 logger.exception(
                     "http_transport: unexpected streaming error for %s (provider=%s, model=%s)",
@@ -276,8 +276,8 @@ class HttpTransport(Transport):
                         "message": str(exc),
                     }
                 }
-                yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode("utf-8")
-        
+                yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
+
         return TransportResult(
             stream=stream_wrapper(),
             is_stream=True,

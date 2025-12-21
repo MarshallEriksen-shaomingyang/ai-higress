@@ -127,11 +127,11 @@ class ProviderModelDisabledResponse(BaseModel):
 
 __all__ = [
     "Model",
+    "ModelAliasUpdateRequest",
     "ModelCapability",
     "ModelDisableUpdateRequest",
     "ModelPricingUpdateRequest",
-    "ProviderModelPricingResponse",
-    "ModelAliasUpdateRequest",
     "ProviderModelAliasResponse",
     "ProviderModelDisabledResponse",
+    "ProviderModelPricingResponse",
 ]

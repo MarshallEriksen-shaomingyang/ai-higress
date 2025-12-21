@@ -15,8 +15,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is missing
     Redis = object  # type: ignore[misc,assignment]
 
-from app.schemas import LogicalModel, MetricsHistory, RoutingMetrics, Session
 from app.redis_client import redis_get_json, redis_set_json
+from app.schemas import LogicalModel, MetricsHistory, RoutingMetrics, Session
 
 # Key templates (must match data-model.md).
 PROVIDER_MODELS_KEY_TEMPLATE = "llm:vendor:{provider_id}:models"
@@ -146,10 +146,10 @@ async def get_all_provider_metrics(
     """
     pattern = f"llm:metrics:*:{provider_id}"
     keys = await redis.keys(pattern)  # type: ignore[attr-defined]
-    
+
     if not keys:
         return []
-    
+
     metrics_list: list[RoutingMetrics] = []
     for key in keys:
         data = await redis_get_json(redis, key)
@@ -160,7 +160,7 @@ async def get_all_provider_metrics(
             except Exception:
                 # 跳过无效的数据
                 continue
-    
+
     return metrics_list
 
 

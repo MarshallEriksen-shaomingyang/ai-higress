@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import Select, and_, exists, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
-from app.models import Provider, ProviderAPIKey, ProviderAllowedUser
+from app.models import Provider, ProviderAllowedUser, ProviderAPIKey
 from app.schemas.notification import NotificationCreateRequest
 from app.schemas.provider_control import (
     UserProviderCreateRequest,
@@ -129,7 +128,7 @@ def create_private_provider(
     return provider
 
 
-def list_private_providers(session: Session, owner_id: UUID) -> List[Provider]:
+def list_private_providers(session: Session, owner_id: UUID) -> list[Provider]:
     """列出指定用户的所有私有 Provider。"""
     stmt: Select[tuple[Provider]] = select(Provider).where(
         Provider.owner_id == owner_id,
@@ -142,7 +141,7 @@ def get_private_provider_by_id(
     session: Session,
     owner_id: UUID,
     provider_id: str,
-) -> Optional[Provider]:
+) -> Provider | None:
     stmt: Select[tuple[Provider]] = select(Provider).where(
         Provider.owner_id == owner_id,
         Provider.visibility.in_(("private", "restricted")),
@@ -363,14 +362,14 @@ def update_provider_shared_users(
 
 
 __all__ = [
-    "UserProviderServiceError",
     "UserProviderNotFoundError",
+    "UserProviderServiceError",
+    "count_user_private_providers",
     "create_private_provider",
     "get_accessible_provider_ids",
+    "get_private_provider_by_id",
     "list_private_providers",
     "list_providers_shared_with_user",
-    "get_private_provider_by_id",
     "update_private_provider",
-    "count_user_private_providers",
     "update_provider_shared_users",
 ]

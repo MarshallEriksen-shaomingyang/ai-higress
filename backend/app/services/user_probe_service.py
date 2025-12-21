@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import httpx
@@ -12,8 +12,8 @@ from app.http_client import CurlCffiClient
 from app.logging_config import logger
 from app.models import Provider
 from app.models.user_probe import UserProbeRun, UserProbeTask
-from app.provider.health import HealthStatus
 from app.provider.config import get_provider_config
+from app.provider.health import HealthStatus
 from app.schemas import ProviderConfig, ProviderStatus
 from app.services.provider_health_service import persist_provider_health
 from app.services.user_probe_executor import ProbeApiStyle, execute_user_probe
@@ -38,7 +38,7 @@ class UserProbeConflictError(UserProbeServiceError):
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _clamp_prompt(prompt: str) -> str:

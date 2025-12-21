@@ -2,57 +2,55 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-
-from app.provider.config import get_provider_config, load_provider_configs
+from fastapi.staticfiles import StaticFiles
 
 from .api.auth_routes import router as auth_router
 from .api.logical_model_routes import router as logical_model_router
-from .api.metrics_routes import router as metrics_router
 from .api.metrics_dashboard_v2_routes import router as metrics_dashboard_v2_router
+from .api.metrics_routes import router as metrics_router
 from .api.provider_preset_routes import router as provider_preset_router
 from .api.provider_routes import router as provider_router
 from .api.routing_routes import router as routing_router
 from .api.session_routes import router as session_router
 from .api.system_routes import router as system_router
+from .api.v1.admin_eval_routes import router as admin_eval_router
+from .api.v1.admin_notification_routes import router as admin_notification_router
 from .api.v1.admin_provider_preset_routes import (
     router as admin_provider_preset_router,
 )
 from .api.v1.admin_provider_routes import router as admin_provider_router
+from .api.v1.admin_registration_routes import router as admin_registration_router
 from .api.v1.admin_role_routes import router as admin_role_router
+from .api.v1.admin_upstream_proxy_routes import router as admin_upstream_proxy_router
 from .api.v1.admin_user_permission_routes import (
     router as admin_user_permission_router,
 )
-from .api.v1.admin_registration_routes import router as admin_registration_router
 from .api.v1.admin_user_routes import router as admin_user_router
-from .api.v1.admin_notification_routes import router as admin_notification_router
-from .api.v1.admin_eval_routes import router as admin_eval_router
-from .api.v1.admin_upstream_proxy_routes import router as admin_upstream_proxy_router
 from .api.v1.api_key_routes import router as api_key_router
-from .api.v1.chat_routes import router as chat_router
-from .api.v1.credit_routes import router as credit_router
-from .api.v1.gateway_routes import router as gateway_router
+from .api.v1.assistant_routes import router as assistant_router
 from .api.v1.bridge_routes import router as bridge_router
+from .api.v1.chat_routes import router as chat_router
+from .api.v1.cli_config import router as cli_config_router
+from .api.v1.credit_routes import router as credit_router
+from .api.v1.eval_routes import router as eval_router
+from .api.v1.gateway_routes import router as gateway_router
 from .api.v1.notification_routes import router as notification_router
 from .api.v1.private_provider_routes import router as private_provider_router
+from .api.v1.project_chat_settings_routes import router as project_chat_settings_router
+from .api.v1.project_eval_config_routes import router as project_eval_config_router
 from .api.v1.provider_key_routes import router as provider_key_router
 from .api.v1.provider_submission_routes import (
     router as provider_submission_router,
 )
-from .api.v1.user_provider_routes import router as user_provider_router
 from .api.v1.session_routes import router as user_session_router
+from .api.v1.user_provider_routes import router as user_provider_router
 from .api.v1.user_routes import router as user_router
-from .api.v1.cli_config import router as cli_config_router
-from .api.v1.assistant_routes import router as assistant_router
-from .api.v1.eval_routes import router as eval_router
-from .api.v1.project_eval_config_routes import router as project_eval_config_router
-from .api.v1.project_chat_settings_routes import router as project_chat_settings_router
 from .db import SessionLocal
-from .logging_config import logger
 from .log_sanitizer import sanitize_headers_for_log
-from .services.bootstrap_admin import ensure_initial_admin
+from .logging_config import logger
 from .services.avatar_service import ensure_avatar_storage_dir
+from .services.bootstrap_admin import ensure_initial_admin
 
 
 async def handle_unexpected_error(request: Request, exc: Exception):
@@ -85,7 +83,7 @@ async def lifespan(app: FastAPI):
     - shutdown: 目前无额外清理逻辑
     """
     from app.db.migration_runner import auto_upgrade_database
-    
+
     session = SessionLocal()
     try:
         # 执行数据库迁移（仅在显式启用时）
@@ -104,12 +102,13 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
 
-    from .settings import settings
     from app.middleware import (
         RateLimitMiddleware,
         RequestValidatorMiddleware,
         SecurityHeadersMiddleware,
     )
+
+    from .settings import settings
 
     # 解析 CORS 配置
     cors_origins = [origin.strip() for origin in settings.cors_allow_origins.split(",")] if settings.cors_allow_origins else []

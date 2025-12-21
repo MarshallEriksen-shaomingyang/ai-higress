@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Iterable
-from uuid import UUID
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ from .upstream_proxy_utils import (
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def get_or_create_proxy_config(db: Session) -> UpstreamProxyConfig:

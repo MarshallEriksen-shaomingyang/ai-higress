@@ -7,9 +7,9 @@ Create Date: 2025-12-20 00:00:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0048_add_project_chat_settings_to_api_keys"
 down_revision = "0047_add_title_model_to_assistant_presets"

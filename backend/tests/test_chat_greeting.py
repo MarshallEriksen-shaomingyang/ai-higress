@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 # Ensure project root is on sys.path so that `import app` works
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -15,36 +15,11 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.deps import get_http_client, get_redis  # noqa: E402
-from app.schemas import LogicalModel, ModelCapability, PhysicalModel, ProviderConfig  # noqa: E402
 from app.routes import create_app  # noqa: E402
+from app.schemas import LogicalModel, ModelCapability, PhysicalModel, ProviderConfig  # noqa: E402
 from app.services.chat_routing_service import (  # noqa: E402
-    HealthResponse,
-    ModelsResponse,
-    ModelInfo,
-    GeminiToOpenAIStreamAdapter,
-    ClaudeMessagesFallbackStreamError,
-    ResponsesFallbackStreamError,
-    _build_openai_completion_from_gemini,
-    _encode_sse_payload,
-    _get_or_fetch_models,
-    _normalize_payload_by_model,
-    _strip_model_group_prefix,
-    _build_ordered_candidates,
-    _is_retryable_upstream_status,
-    _apply_upstream_path_override,
-    _enforce_allowed_providers,
-    _build_provider_headers,
-    _send_claude_fallback_non_stream,
-    _send_responses_fallback_non_stream,
-    _claude_streaming_fallback_iterator,
-    _responses_streaming_fallback_iterator,
-    _load_metrics_for_candidates,
     _build_dynamic_logical_model_for_group,
-    _adapt_responses_payload,
-    _chat_to_responses_payload,
-    _wrap_chat_stream_response,
-    _should_attempt_claude_messages_fallback,
-    _GEMINI_MODEL_REGEX,
+    _build_provider_headers,
 )
 from app.settings import settings  # noqa: E402
 from app.storage.redis_service import LOGICAL_MODEL_KEY_TEMPLATE  # noqa: E402
@@ -188,7 +163,7 @@ def _mock_send(request: httpx.Request) -> httpx.Response:
             user_text = "".join(segments)
         elif isinstance(input_value, str):
             user_text = input_value
-        
+
         # Build reply with both instructions and user_text
         reply_parts = []
         if instructions:
@@ -594,7 +569,7 @@ def _prepare_basic_app(monkeypatch):
         )
         db.add(provider)
         db.flush()
-        
+
         # Add test-model to the database
         model = ProviderModel(
             provider_id=provider.id,
@@ -684,7 +659,7 @@ def _prepare_sdk_app(
 
     app = create_app()
     SessionLocal = install_inmemory_db(app)
-    
+
     # Seed SDK models into the database using the SessionLocal from install_inmemory_db
     from app.models import Provider, ProviderModel
     db = SessionLocal()
@@ -699,7 +674,7 @@ def _prepare_sdk_app(
         )
         db.add(provider)
         db.flush()
-        
+
         # Add SDK model to the database
         sdk_model = ProviderModel(
             provider_id=provider.id,
@@ -712,7 +687,7 @@ def _prepare_sdk_app(
         db.rollback()
     finally:
         db.close()
-    
+
     app.dependency_overrides[get_redis] = override_get_redis
     # HTTP client不会被 SDK 分支真正使用，但依然需要满足 FastAPI 依赖签名。
     app.dependency_overrides[get_http_client] = override_get_http_client
@@ -1847,12 +1822,12 @@ async def test_build_provider_headers_openai_style():
         api_key="sk-test-key-123",
     )
     reset_key_pool(provider_cfg.id)
-    
+
     # 测试 OpenAI 风格（默认）
     headers, key_selection = await _build_provider_headers(
         provider_cfg, redis=None, api_style="openai"
     )
-    
+
     assert "Authorization" in headers
     assert headers["Authorization"] == "Bearer sk-test-key-123"
     assert "x-api-key" not in headers
@@ -1873,12 +1848,12 @@ async def test_build_provider_headers_claude_style():
         api_key="sk-ant-test-key-456",
     )
     reset_key_pool(provider_cfg.id)
-    
+
     # 测试 Claude 风格
     headers, key_selection = await _build_provider_headers(
         provider_cfg, redis=None, api_style="claude"
     )
-    
+
     assert "x-api-key" in headers
     assert headers["x-api-key"] == "sk-ant-test-key-456"
     assert "Authorization" not in headers
@@ -1899,12 +1874,12 @@ async def test_build_provider_headers_default_to_openai():
         api_key="sk-default-key-789",
     )
     reset_key_pool(provider_cfg.id)
-    
+
     # 不传 api_style，应该默认为 openai
     headers, key_selection = await _build_provider_headers(
         provider_cfg, redis=None
     )
-    
+
     assert "Authorization" in headers
     assert headers["Authorization"] == "Bearer sk-default-key-789"
     assert "x-api-key" not in headers

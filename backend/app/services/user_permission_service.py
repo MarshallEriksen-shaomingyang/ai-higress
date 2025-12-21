@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, exists, or_, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
@@ -40,7 +39,7 @@ class UserPermissionService:
             return True
 
         # 1. 先看用户是否有直挂的有效权限记录（支持 expires_at）
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         direct_stmt: Select[tuple[UserPermission]] = select(UserPermission).where(
             UserPermission.user_id == user_id,
             UserPermission.permission_type == permission_type,
@@ -78,7 +77,7 @@ class UserPermissionService:
             # 去重 + 排序，方便前端展示
             return sorted(set(codes))
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 1. 用户直挂权限
         direct_stmt: Select[tuple[UserPermission]] = select(UserPermission).where(
@@ -99,7 +98,7 @@ class UserPermissionService:
 
         return sorted(direct_codes | role_codes)
 
-    def get_provider_limit(self, user_id: UUID) -> Optional[int]:
+    def get_provider_limit(self, user_id: UUID) -> int | None:
         """获取用户可创建私有提供商的数量上限。
 
         - 超级用户: 无限制，返回 None
@@ -113,7 +112,7 @@ class UserPermissionService:
         if user.is_superuser:
             return None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 优先检查 unlimited_providers
         stmt_unlimited = select(UserPermission).where(

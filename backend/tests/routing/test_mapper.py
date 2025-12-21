@@ -1,5 +1,4 @@
 
-from app.schemas import LogicalModel, Model, ModelCapability, PhysicalModel
 from app.routing.mapper import (
     ConsistencyIssue,
     build_provider_model_index,
@@ -7,6 +6,7 @@ from app.routing.mapper import (
     select_candidate_upstreams,
     validate_logical_model_consistency,
 )
+from app.schemas import LogicalModel, Model, ModelCapability, PhysicalModel
 
 
 def _make_models() -> dict[tuple[str, str], Model]:

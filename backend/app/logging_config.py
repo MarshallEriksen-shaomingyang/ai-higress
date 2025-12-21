@@ -1,8 +1,9 @@
 import datetime
 import logging
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, TextIO
+from typing import TextIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .settings import settings
@@ -399,7 +400,7 @@ class DailyFolderBusinessFileHandler(logging.Handler):
             self._ensure_date()
             biz = infer_log_business(record)
             # Expose biz for formatters.
-            setattr(record, "biz", biz)
+            record.biz = biz
             stream = self._stream_for_biz(biz)
             msg = self.format(record)
             stream.write(msg + self.terminator)
@@ -415,9 +416,9 @@ class DailyFolderBusinessFileHandler(logging.Handler):
 
 
 class EnsureBizFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+    def filter(self, record: logging.LogRecord) -> bool:
         if not hasattr(record, "biz"):
-            setattr(record, "biz", infer_log_business(record))
+            record.biz = infer_log_business(record)
         return True
 
 
@@ -426,8 +427,8 @@ class FixedBizFilter(logging.Filter):
         super().__init__()
         self._biz = biz
 
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
-        setattr(record, "biz", self._biz)
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.biz = self._biz
         return True
 
 

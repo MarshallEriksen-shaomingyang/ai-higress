@@ -9,16 +9,16 @@ Provider 选择器（v2）
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 import httpx
 from fastapi import HTTPException, status
-
 from sqlalchemy import select
+
 try:
     from redis.asyncio import Redis
 except ModuleNotFoundError:  # pragma: no cover
@@ -26,7 +26,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 from sqlalchemy.orm import Session as DbSession
 
-from app.errors import forbidden
+from app.api.v1.chat.routing_state import RoutingStateService
 from app.logging_config import logger
 from app.models import Provider, ProviderModel
 from app.routing.mapper import select_candidate_upstreams
@@ -37,14 +37,15 @@ from app.schemas import (
     ModelCapability,
     PhysicalModel,
     RoutingMetrics,
+)
+from app.schemas import (
     Session as RoutingSession,
 )
+from app.services.bandit_routing_weight_service import build_bandit_routing_weights
 from app.services.chat_routing_service import _build_dynamic_logical_model_for_group, _build_ordered_candidates
 from app.services.credit_service import estimate_request_cost_credits
-from app.services.bandit_routing_weight_service import build_bandit_routing_weights
 from app.settings import settings
 from app.storage.redis_service import get_logical_model
-from app.api.v1.chat.routing_state import RoutingStateService
 
 
 def _status_worse(a: Any, b: Any) -> bool:
@@ -258,7 +259,7 @@ class ProviderSelector:
                     return list(parsed)
         # Pre-load disabled pairs for all relevant providers to avoid repetitive DB queries?
         # Optimization: We do it per model for now as the list is small.
-        
+
         for model_id in candidate_logical_models:
             try:
                 # 1) Resolve
@@ -270,7 +271,7 @@ class ProviderSelector:
                     user_id=user_id,
                     is_superuser=is_superuser,
                 )
-                
+
                 if not logical_model.enabled:
                     continue
 
@@ -310,7 +311,7 @@ class ProviderSelector:
                     candidates = [
                         c for c in candidates if (c.provider_id, c.model_id) not in disabled_pairs
                     ]
-                
+
                 if not candidates:
                     continue
 
@@ -346,7 +347,7 @@ class ProviderSelector:
                             degraded_providers.add(cand.provider_id)
                         else:
                             healthy_or_unknown_providers.add(cand.provider_id)
-                    
+
                     if down_providers:
                         candidates = [c for c in candidates if c.provider_id not in down_providers]
 

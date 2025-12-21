@@ -4,6 +4,7 @@ import datetime as dt
 import uuid
 
 from celery import shared_task
+from sqlalchemy import Select, delete, func, select, text
 
 from app.celery_app import celery_app
 from app.db import SessionLocal
@@ -15,7 +16,6 @@ from app.models.provider_metrics_history import (
     ProviderRoutingMetricsHourly,
 )
 from app.settings import settings
-from sqlalchemy import Select, delete, func, select, text
 
 try:
     from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -29,7 +29,7 @@ except Exception:  # pragma: no cover
 
 
 def _now_utc_minute() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc).replace(second=0, microsecond=0)
+    return dt.datetime.now(dt.UTC).replace(second=0, microsecond=0)
 
 
 def _build_recalculator() -> OfflineMetricsRecalculator:
@@ -132,7 +132,7 @@ def _ensure_history_partitions_and_drop_old(*, session, retention_days: int) -> 
     if session.get_bind().dialect.name != "postgresql":
         return 0
 
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     today = now.date()
     keep_from_day = today - dt.timedelta(days=retention_days)
 
@@ -147,8 +147,8 @@ def _ensure_history_partitions_and_drop_old(*, session, retention_days: int) -> 
 
     for day in _iter_days(start_day, end_day):
         part = _part_name(day)
-        start = dt.datetime.combine(day, dt.time(0, 0, 0), tzinfo=dt.timezone.utc).isoformat()
-        end = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(0, 0, 0), tzinfo=dt.timezone.utc).isoformat()
+        start = dt.datetime.combine(day, dt.time(0, 0, 0), tzinfo=dt.UTC).isoformat()
+        end = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(0, 0, 0), tzinfo=dt.UTC).isoformat()
 
         exists = session.execute(text("SELECT to_regclass(:name)"), {"name": part}).scalar_one_or_none()
         if exists is None:
@@ -218,7 +218,7 @@ def _ensure_history_partitions_and_drop_old(*, session, retention_days: int) -> 
             changed += 1
 
     # Clean up any rows that accidentally landed in the DEFAULT partition (batched by ctid).
-    cutoff_ts = dt.datetime.combine(keep_from_day, dt.time(0, 0, 0), tzinfo=dt.timezone.utc)
+    cutoff_ts = dt.datetime.combine(keep_from_day, dt.time(0, 0, 0), tzinfo=dt.UTC)
     batch_size = int(settings.dashboard_metrics_cleanup_batch_size)
     while True:
         deleted = session.execute(
@@ -242,13 +242,13 @@ def _ensure_history_partitions_and_drop_old(*, session, retention_days: int) -> 
 
 def _utc_floor_hour(ts: dt.datetime) -> dt.datetime:
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=dt.timezone.utc)
+        ts = ts.replace(tzinfo=dt.UTC)
     return ts.replace(minute=0, second=0, microsecond=0)
 
 
 def _utc_floor_day(ts: dt.datetime) -> dt.datetime:
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=dt.timezone.utc)
+        ts = ts.replace(tzinfo=dt.UTC)
     return ts.replace(hour=0, minute=0, second=0, microsecond=0)
 
 

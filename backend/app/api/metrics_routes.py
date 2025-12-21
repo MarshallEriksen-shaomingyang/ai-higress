@@ -24,8 +24,8 @@ from app.models import (
 )
 from app.redis_client import redis_get_json, redis_set_json
 from app.schemas.metrics import (
-    APIKeyMetricsSummary,
     ActiveProviderMetrics,
+    APIKeyMetricsSummary,
     MetricsBucket,
     MetricsDataPoint,
     MetricsTimeRange,
@@ -34,11 +34,11 @@ from app.schemas.metrics import (
     OverviewMetricsTimeSeries,
     ProviderMetricsSummary,
     ProviderMetricsTimeSeries,
+    UserActiveProviderMetrics,
     UserAppUsageMetrics,
     UserMetricsSummary,
-    UserActiveProviderMetrics,
-    UserOverviewAppUsage,
     UserOverviewActiveProviders,
+    UserOverviewAppUsage,
     UserOverviewMetricsSummary,
     UserOverviewMetricsTimeSeries,
 )
@@ -57,7 +57,7 @@ OVERVIEW_CACHE_TTL_SECONDS = 60
 def _resolve_time_range(
     time_range: Literal["today", "7d", "30d", "all"],
 ) -> dt.datetime | None:
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
 
     if time_range == MetricsTimeRange.ALL:
         return None
@@ -154,7 +154,7 @@ def _compute_overview_windows(
     - today/7d/30d：使用“当前时间 - 起始时间”的跨度作为窗口长度；
     - all：仅返回当前窗口（全量），上一周期为 None。
     """
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     start_at = _resolve_time_range(time_range)
 
     if start_at is None:

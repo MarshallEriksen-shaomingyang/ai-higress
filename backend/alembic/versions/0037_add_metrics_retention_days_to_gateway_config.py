@@ -6,9 +6,9 @@ in the database for dashboard/reporting usage.
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0037_add_metrics_retention_days_to_gateway_config"
 down_revision = "0036_add_dashboard_v2_metrics_fields"

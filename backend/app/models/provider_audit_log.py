@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID as PyUUID
 
 from sqlalchemy import Column, ForeignKey, String, Text
@@ -22,10 +21,10 @@ class ProviderAuditLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     action: Mapped[str] = Column(String(32), nullable=False)
-    from_status: Mapped[Optional[str]] = Column(String(32), nullable=True)
-    to_status: Mapped[Optional[str]] = Column(String(32), nullable=True)
-    operation_from_status: Mapped[Optional[str]] = Column(String(16), nullable=True)
-    operation_to_status: Mapped[Optional[str]] = Column(String(16), nullable=True)
+    from_status: Mapped[str | None] = Column(String(32), nullable=True)
+    to_status: Mapped[str | None] = Column(String(32), nullable=True)
+    operation_from_status: Mapped[str | None] = Column(String(16), nullable=True)
+    operation_to_status: Mapped[str | None] = Column(String(16), nullable=True)
     operator_id: Mapped[PyUUID | None] = Column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),

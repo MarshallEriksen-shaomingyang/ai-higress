@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -82,7 +80,7 @@ def _handle_provider_key_service_error(exc: ProviderKeyServiceError):
     else:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error: {str(exc)}",
+            detail=f"Internal error: {exc!s}",
         )
 
 
@@ -112,13 +110,13 @@ def _build_provider_key_response(key: ProviderAPIKey) -> ProviderAPIKeyResponse:
 
 @router.get(
     "/providers/{provider_id}/keys",
-    response_model=List[ProviderAPIKeyResponse],
+    response_model=list[ProviderAPIKeyResponse],
 )
 def list_provider_keys_endpoint(
     provider_id: str,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
-) -> List[ProviderAPIKeyResponse]:
+) -> list[ProviderAPIKeyResponse]:
     """
     列出指定厂商的所有API密钥
     
@@ -131,7 +129,7 @@ def list_provider_keys_endpoint(
         厂商API密钥列表
     """
     _ensure_can_manage_provider_keys(db, provider_id, current_user)
-    
+
     try:
         keys = list_provider_keys(db, provider_id)
         return [_build_provider_key_response(key) for key in keys]
@@ -163,7 +161,7 @@ def create_provider_key_endpoint(
         新创建的厂商API密钥
     """
     _ensure_can_manage_provider_keys(db, provider_id, current_user)
-    
+
     try:
         key = create_provider_key(db, provider_id, payload)
         return _build_provider_key_response(key)
@@ -194,7 +192,7 @@ def get_provider_key_endpoint(
         厂商API密钥
     """
     _ensure_can_manage_provider_keys(db, provider_id, current_user)
-    
+
     try:
         key = get_provider_key_by_id(db, provider_id, key_id)
         if not key:
@@ -229,7 +227,7 @@ def update_provider_key_endpoint(
         更新后的厂商API密钥
     """
     _ensure_can_manage_provider_keys(db, provider_id, current_user)
-    
+
     try:
         key = update_provider_key(db, provider_id, key_id, payload)
         return _build_provider_key_response(key)
@@ -257,7 +255,7 @@ def delete_provider_key_endpoint(
         current_user: 当前认证用户
     """
     _ensure_can_manage_provider_keys(db, provider_id, current_user)
-    
+
     try:
         delete_provider_key(db, provider_id, key_id)
     except ProviderKeyServiceError as exc:

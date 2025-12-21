@@ -40,7 +40,7 @@ def test_user_dashboard_v2_kpis(client: TestClient, db_session: Session) -> None
     user = _get_admin_user(db_session)
     _seed_provider(db_session, provider_id="openai", transport="http")
 
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     window_start = (now - dt.timedelta(minutes=5)).replace(second=0, microsecond=0)
 
     db_session.add(
@@ -155,7 +155,7 @@ def test_user_dashboard_v2_providers_metrics(client: TestClient, db_session: Ses
     _seed_provider(db_session, provider_id="openai", transport="http")
     _seed_provider(db_session, provider_id="anthropic", transport="http")
 
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     window_start = (now - dt.timedelta(minutes=10)).replace(second=0, microsecond=0)
 
     db_session.add_all(

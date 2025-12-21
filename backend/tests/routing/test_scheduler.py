@@ -1,6 +1,6 @@
 
-from app.schemas import LogicalModel, ModelCapability, PhysicalModel, RoutingMetrics, SchedulingStrategy, Session
 from app.routing.scheduler import CandidateScore, choose_upstream, score_upstreams
+from app.schemas import LogicalModel, ModelCapability, PhysicalModel, RoutingMetrics, SchedulingStrategy, Session
 
 
 def _logical_and_upstreams():

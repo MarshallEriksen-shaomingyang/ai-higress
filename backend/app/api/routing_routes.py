@@ -14,14 +14,14 @@ except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is
 from app.deps import get_redis
 from app.errors import not_found, service_unavailable
 from app.jwt_auth import require_jwt_token
-from app.schemas import LogicalModel, PhysicalModel, RoutingMetrics, SchedulingStrategy, Session
-from app.schemas.routing import CandidateInfo, RoutingDecision, RoutingRequest
 from app.routing.mapper import select_candidate_upstreams
 from app.routing.provider_weight import load_dynamic_weights
 from app.routing.scheduler import choose_upstream
 from app.routing.session_manager import bind_session, get_session
-from app.settings import settings
+from app.schemas import LogicalModel, PhysicalModel, RoutingMetrics, SchedulingStrategy, Session
+from app.schemas.routing import CandidateInfo, RoutingDecision, RoutingRequest
 from app.services.provider_health_service import get_cached_health_status
+from app.settings import settings
 from app.storage.redis_service import get_logical_model, get_routing_metrics
 
 router = APIRouter(

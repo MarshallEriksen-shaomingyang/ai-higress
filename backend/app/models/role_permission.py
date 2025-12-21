@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, relationship
 
@@ -32,7 +32,7 @@ class RolePermission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    role: Mapped["Role"] = relationship("Role", back_populates="role_permissions")
+    role: Mapped[Role] = relationship("Role", back_populates="role_permissions")
     # 这里不需要反向在 Permission 上声明 relationship，避免循环依赖
     permission = relationship("Permission")
 

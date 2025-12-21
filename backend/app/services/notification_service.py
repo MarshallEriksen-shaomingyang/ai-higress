@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import Select, select
@@ -13,7 +13,7 @@ from app.schemas.notification import NotificationCreateRequest
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _get_user_role_codes(session: Session, user_id: UUID) -> set[str]:

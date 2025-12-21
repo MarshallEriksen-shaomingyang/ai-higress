@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.deps import get_db, get_redis
 from app.models import Base, User
 from app.routes import create_app
-from tests.utils import InMemoryRedis, auth_headers, jwt_auth_headers, seed_user_and_key
+from tests.utils import InMemoryRedis, jwt_auth_headers, seed_user_and_key
 
 
 def _jwt_auth_headers(user_id: str) -> dict[str, str]:
@@ -410,8 +410,8 @@ def test_upload_my_avatar_stores_key_and_exposes_url(client_with_db):
     - 对应的本地文件实际写入 AVATAR_LOCAL_DIR。
     """
 
-    from app.settings import settings
     from app.services.avatar_service import get_avatar_file_path
+    from app.settings import settings
 
     client, session_factory, admin_id, _redis = client_with_db
 

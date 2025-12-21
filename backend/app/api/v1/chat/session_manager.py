@@ -23,10 +23,10 @@ from app.schemas import Session
 
 class SessionManager:
     """Session 管理器，负责会话绑定和上下文保存"""
-    
+
     def __init__(self, *, redis: Redis):
         self.redis = redis
-    
+
     async def get_session(self, session_id: str) -> Session | None:
         """
         获取 Session
@@ -38,7 +38,7 @@ class SessionManager:
             Session 对象，如果不存在则返回 None
         """
         return await routing_get_session(self.redis, session_id)
-    
+
     async def bind_session(
         self,
         *,
@@ -66,7 +66,7 @@ class SessionManager:
             provider_id=provider_id,
             model_id=model_id,
         )
-        
+
         logger.info(
             "📌 Session bound: session_id=%s logical_model=%s provider=%s model=%s",
             session_id,
@@ -74,9 +74,9 @@ class SessionManager:
             provider_id,
             model_id,
         )
-        
+
         return session
-    
+
     async def save_context(
         self,
         *,

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from alembic import op
 
-
 revision = "0039_add_composite_indexes_for_metrics_history"
 down_revision = "0038_create_provider_routing_metrics_rollups"
 branch_labels = None

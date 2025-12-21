@@ -20,7 +20,7 @@ class DummyRedis:
 async def test_redis_set_json_serialises_datetime() -> None:
     redis = DummyRedis()
     payload = {
-        "ts": dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc),
+        "ts": dt.datetime(2024, 1, 1, tzinfo=dt.UTC),
         "nested": {"value": 1},
     }
 
