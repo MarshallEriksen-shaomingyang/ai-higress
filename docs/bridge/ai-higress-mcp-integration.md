@@ -40,9 +40,13 @@ AI-Higress-Gateway 接入 MCP（Bridge）设计说明
 1) 配置与启动（方案 A，不触碰密钥）
 - 用户在 Web 配置页填写 MCP server 配置（包含 token/env）。
 - 浏览器生成并下载 `config.yaml`（敏感信息仅存在浏览器内存与下载文件中）。
+- 一键安装 Bridge CLI（推荐）：
+  - macOS/Linux：`curl -fsSL https://raw.githubusercontent.com/MarshallEriksen-Neura/AI-Higress-Gateway/master/scripts/install-bridge.sh | bash`
+  - Windows（PowerShell）：`irm https://raw.githubusercontent.com/MarshallEriksen-Neura/AI-Higress-Gateway/master/scripts/install-bridge.ps1 | iex`
 - 用户运行（示例）:
-  - `bridge config apply --file ./config.yaml`
-  - `bridge agent start`
+  - 可选：写入默认路径并校验：`bridge config apply --file ./config.yaml` / `bridge config validate`
+  - 或放在仓库根目录：`<repo>/.ai-bridge/config.yaml`（`bridge` 会从当前目录向上查找，直到 `.git`）
+  - 启动：`bridge agent start`
 - Agent 与云端 Tunnel Gateway 建立 WSS 连接并注册 `agent_id`，上报工具列表（TOOLS）。
 
 2) 聊天调用工具（流式）

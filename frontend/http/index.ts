@@ -65,5 +65,6 @@ export { assistantService } from './assistant';
 export { conversationService } from './conversation';
 export { messageService } from './message';
 export { evalService } from './eval';
+export { adminEvalService } from './admin-evals';
 export { evalConfigService } from './eval-config';
 export { projectChatSettingsService } from './project-chat-settings';

@@ -47,7 +47,7 @@ services:
 
   api:
     # 开发环境后端默认直接拉取预构建镜像（与 deploy 一致），避免新手本地构建
-    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
+    image: marshalleriksen/mcpproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-api
     restart: unless-stopped
     env_file:
@@ -78,7 +78,7 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   celery_worker:
-    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
+    image: marshalleriksen/mcpproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-celery-worker
     restart: unless-stopped
     env_file:
@@ -99,7 +99,7 @@ services:
     command: celery -A app.celery_app.celery_app worker -l info
 
   celery_beat:
-    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
+    image: marshalleriksen/mcpproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-celery-beat
     restart: unless-stopped
     env_file:

@@ -24,6 +24,7 @@ import {
     Megaphone,
     Globe,
     Plug,
+    FlaskConical,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -94,6 +95,18 @@ const adminItems: NavItem[] = [
         titleKey: "nav.provider_presets",
         href: "/dashboard/provider-presets",
         icon: Package,
+    },
+    {
+        titleKey: "nav.eval_config",
+        href: "/dashboard/eval-config",
+        icon: FlaskConical,
+        requiresSuperuser: true,
+    },
+    {
+        titleKey: "nav.eval_results",
+        href: "/dashboard/evals",
+        icon: FlaskConical,
+        requiresSuperuser: true,
     },
     {
         titleKey: "nav.system_dashboard",

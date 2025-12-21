@@ -13,7 +13,7 @@ export default function SystemLayout({
                 <AdaptiveSidebar />
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <TopNav />
-                    <main className="flex-1 overflow-y-auto p-6">
+                    <main className="flex-1 overflow-y-auto no-scrollbar p-6">
                         {children}
                     </main>
                 </div>

@@ -44,9 +44,9 @@ def create_bridge_agent_token(*, user_id: str, agent_id: str) -> tuple[str, date
     now = datetime.datetime.now(datetime.UTC)
     expire = now + datetime.timedelta(days=int(settings.bridge_agent_token_expire_days))
 
-    secret = (settings.bridge_agent_token_secret or settings.secret_key).strip()
+    secret = (settings.secret_key or "").strip()
     if not secret:
-        raise RuntimeError("missing BRIDGE_AGENT_TOKEN_SECRET/SECRET_KEY")
+        raise RuntimeError("missing SECRET_KEY")
 
     payload: dict[str, Any] = {
         "type": "bridge_agent",
@@ -57,4 +57,3 @@ def create_bridge_agent_token(*, user_id: str, agent_id: str) -> tuple[str, date
         "iss": "ai-higress",
     }
     return jwt.encode(payload, secret, algorithm="HS256"), expire
-

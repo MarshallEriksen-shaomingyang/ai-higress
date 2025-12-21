@@ -13,7 +13,7 @@ export default function ProfileLayout({
                 <AdaptiveSidebar />
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <TopNav />
-                    <main className="flex-1 overflow-y-auto">
+                    <main className="flex-1 overflow-y-auto no-scrollbar">
                         {children}
                     </main>
                 </div>

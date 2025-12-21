@@ -54,6 +54,8 @@ type LoadOptions struct {
 	ConfigFile string
 }
 
+const projectConfigRelPath = ".ai-bridge/config.yaml"
+
 func DefaultConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -62,16 +64,53 @@ func DefaultConfigPath() string {
 	return filepath.Join(home, ".ai-bridge", "config.yaml")
 }
 
+func ResolveConfigPath(configFile string) string {
+	if strings.TrimSpace(configFile) != "" {
+		return configFile
+	}
+	if p := findProjectConfigPath(); p != "" {
+		return p
+	}
+	return DefaultConfigPath()
+}
+
+func findProjectConfigPath() string {
+	cwd, err := os.Getwd()
+	if err != nil || strings.TrimSpace(cwd) == "" {
+		return ""
+	}
+	dir := cwd
+	for {
+		p := filepath.Join(dir, projectConfigRelPath)
+		if fileExists(p) {
+			return p
+		}
+
+		// Stop after reaching repo root (if any) to avoid walking the entire FS.
+		if fileExists(filepath.Join(dir, ".git")) {
+			return ""
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func Load(opts LoadOptions) (*Config, error) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	v.SetEnvPrefix("AI_BRIDGE")
 	v.AutomaticEnv()
 
-	path := opts.ConfigFile
-	if path == "" {
-		path = DefaultConfigPath()
-	}
+	path := ResolveConfigPath(opts.ConfigFile)
 	v.SetConfigFile(path)
 
 	v.SetDefault("server.reconnect_initial", "1s")

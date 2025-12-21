@@ -109,3 +109,73 @@ Response:
   "created_at": "2025-12-19T00:00:00Z"
 }
 ```
+
+## GET `/admin/evals`（管理员：评测结果列表，无内容）
+
+> 认证：JWT（`Authorization: Bearer <access_token>`）  
+> 权限：仅超级管理员（`current_user.is_superuser=true`）
+
+用于管理员查看全站评测结果列表（分页），**不返回任何聊天内容/模型输出文本**（不包含 `output_text` / `output_preview`）。
+
+Query（可选）：
+- `cursor`: offset 游标（整数，默认 `0`）
+- `limit`: 每页条数（1~100，默认 `30`）
+- `status`: 按状态过滤（`running` / `ready` / `rated`）
+- `project_id`: 按项目过滤（MVP: `project_id == api_key_id`）
+- `assistant_id`: 按助手过滤
+
+Response:
+```json
+{
+  "items": [
+    {
+      "eval_id": "uuid",
+      "status": "ready",
+      "project_id": "uuid",
+      "assistant_id": "uuid",
+      "baseline_run_id": "uuid",
+      "baseline_run": {
+        "run_id": "uuid",
+        "requested_logical_model": "gpt-4.1-mini",
+        "status": "succeeded",
+        "selected_provider_id": "provider-x",
+        "selected_provider_model": "model-y",
+        "latency_ms": 123,
+        "cost_credits": 2,
+        "error_code": null,
+        "created_at": "2025-12-21T00:00:00Z",
+        "updated_at": "2025-12-21T00:00:00Z"
+      },
+      "challengers": [
+        {
+          "run_id": "uuid",
+          "requested_logical_model": "gpt-4.1-mini",
+          "status": "failed",
+          "selected_provider_id": "provider-x",
+          "selected_provider_model": "model-y",
+          "latency_ms": 456,
+          "cost_credits": 3,
+          "error_code": "UPSTREAM_ERROR",
+          "created_at": "2025-12-21T00:00:00Z",
+          "updated_at": "2025-12-21T00:00:00Z"
+        }
+      ],
+      "explanation": {
+        "summary": "…",
+        "evidence": {
+          "exploration": true
+        }
+      },
+      "rated_at": null,
+      "rating": null,
+      "created_at": "2025-12-21T00:00:00Z",
+      "updated_at": "2025-12-21T00:00:00Z"
+    }
+  ],
+  "next_cursor": "30"
+}
+```
+
+## GET `/admin/evals/{eval_id}`（管理员：单条评测详情，无内容）
+
+同 `GET /admin/evals` 的单条结构，用于在管理端查看某次评测（同样不返回聊天内容/模型输出文本）。

@@ -38,7 +38,7 @@ services:
       retries: 5
 
   api:
-    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
+    image: marshalleriksen/mcpproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-api
     restart: unless-stopped
     env_file:
@@ -62,7 +62,7 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
   celery_worker:
-    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
+    image: marshalleriksen/mcpproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-celery-worker
     restart: unless-stopped
     env_file:
@@ -78,7 +78,7 @@ services:
     command: celery -A app.celery_app.celery_app worker -l info
 
   celery_beat:
-    image: marshalleriksen/apiproxy-api:${IMAGE_TAG:-latest}
+    image: marshalleriksen/mcpproxy-api:${IMAGE_TAG:-latest}
     container_name: apiproxy-celery-beat
     restart: unless-stopped
     env_file:

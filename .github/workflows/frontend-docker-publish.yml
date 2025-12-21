@@ -1,12 +1,12 @@
-name: Publish Backend Image
+name: Publish Frontend Image
 
 on:
   push:
-    branches: [master, develop]
+    branches: [master, main, develop]
     tags: ['v*', 'release-*']
     paths:
-      - 'backend/**'
-      - '.github/workflows/backend-docker-publish.yml'
+      - 'frontend/**'
+      - '.github/workflows/frontend-docker-publish.yml'
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_NAMESPACE }}/mcpproxy-api
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_NAMESPACE }}/apiproxy-frontend
 
 jobs:
   build-and-push:
@@ -45,13 +45,13 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
+          context: ./frontend
+          file: ./frontend/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

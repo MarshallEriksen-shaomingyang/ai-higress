@@ -34,7 +34,12 @@ func NewRootCmd() *cobra.Command {
 		},
 	}
 
-	rootCmd.PersistentFlags().StringVar(&globalConfigFile, "config", "", "config file (default: ~/.ai-bridge/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(
+		&globalConfigFile,
+		"config",
+		"",
+		"config file (default: search up for .ai-bridge/config.yaml, fallback: ~/.ai-bridge/config.yaml)",
+	)
 	rootCmd.PersistentFlags().StringVar(&globalLogFormat, "log-format", "text", "log format: text|json")
 	rootCmd.PersistentFlags().StringVar(&globalLogLevel, "log-level", "info", "log level: debug|info|warn|error")
 

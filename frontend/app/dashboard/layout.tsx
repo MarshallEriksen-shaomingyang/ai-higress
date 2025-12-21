@@ -12,9 +12,9 @@ export default function DashboardLayout({
             <AdaptiveSidebar />
             
             {/* 主内容区 */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-                <TopNav />
-                <main className="flex-1 overflow-y-auto p-4 lg:p-6 glass-card">
+                <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+                    <TopNav />
+                <main className="flex-1 overflow-y-auto no-scrollbar min-h-0 p-4 lg:p-6 glass-card">
                     {children}
                 </main>
             </div>

@@ -84,6 +84,9 @@ frontend/yarn-debug.log*
 frontend/yarn-error.log*
 frontend/.pnpm-debug.log*
 
+# bridge
+bridge/bridge
+
 # ============================================
 # IDE & Tools
 # ============================================

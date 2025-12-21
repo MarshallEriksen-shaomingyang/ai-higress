@@ -149,17 +149,27 @@ pytest
 
 Bridge 用于在浏览器无法直连本地 MCP 的前提下，通过“反向 WSS 隧道 + 本地 Agent”让 Web 侧安全调用用户机器/内网的 MCP 工具。
 
+### 0) 一键安装 Bridge CLI（推荐）
+macOS/Linux：
+```bash
+curl -fsSL https://raw.githubusercontent.com/MarshallEriksen-Neura/AI-Higress-Gateway/master/scripts/install-bridge.sh | bash
+```
+Windows（PowerShell）：
+```powershell
+irm https://raw.githubusercontent.com/MarshallEriksen-Neura/AI-Higress-Gateway/master/scripts/install-bridge.ps1 | iex
+```
+
 ### 1) 启动云端 Tunnel Gateway（Go）
 ```bash
 cd bridge
-go run ./cmd/bridge gateway serve --listen :8088 --agent-token-secret "$BRIDGE_AGENT_TOKEN_SECRET"
+go run ./cmd/bridge gateway serve --listen :8088 --agent-token-secret "$SECRET_KEY"
 ```
 
 ### 2) 配置后端（FastAPI -> Gateway）
 推荐在后端 `.env` 设置：
 - `BRIDGE_GATEWAY_URL=http://127.0.0.1:8088`
 - `BRIDGE_GATEWAY_INTERNAL_TOKEN`（可选；如果你设置了 Gateway 的 `--internal-token`，两边必须一致）
-- `BRIDGE_AGENT_TOKEN_SECRET`（推荐；与 Gateway 的 `--agent-token-secret` 保持一致）
+- `SECRET_KEY`（用于签发 Bridge Agent 的 AUTH token；与 Gateway 的 `--agent-token-secret` 保持一致）
 
 ### 3) 网页生成用户侧配置文件（不上传密钥）
 在管理台打开 `/dashboard/bridge` → `配置` Tab：
@@ -168,8 +178,20 @@ go run ./cmd/bridge gateway serve --listen :8088 --agent-token-secret "$BRIDGE_A
 
 ### 4) 用户机器/服务器运行 Agent
 ```bash
-bridge agent start --config ~/.ai-bridge/config.yaml
+bridge agent start
 ```
+配置文件发现顺序：
+- 若显式传 `--config <file>`，优先使用该路径
+- 否则从当前目录向上查找 `<仓库根>/.ai-bridge/config.yaml`（找到 `.git` 即停止）
+- 再否则回退到 `~/.ai-bridge/config.yaml`
+
+可选：将网页下载的配置写入默认路径：
+```bash
+bridge config apply --file ./config.yaml
+bridge config validate
+```
+
+远程 MCP Server（可选）：`mcp_servers` 除了本地 `command`（stdio）外，也支持远程 `type: streamable|sse|auto` + `url` + 可选 `headers`。
 然后回到 Chat 会话选择 `agent_id`，后端会自动拉取工具列表并注入模型（tool-calling）。
 
 ### 5) 其他 MCP 客户端（Claude Desktop/Cursor）直连（stdio）

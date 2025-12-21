@@ -230,7 +230,19 @@ export function ConversationPageClient({
           return [...challengers, patch as ChallengerRun];
         }
         const next = [...challengers];
-        next[idx] = { ...next[idx], ...patch };
+        const prev = next[idx];
+        next[idx] = {
+          ...prev,
+          ...(patch.requested_logical_model
+            ? { requested_logical_model: patch.requested_logical_model }
+            : {}),
+          ...(patch.status ? { status: patch.status } : {}),
+          ...(patch.output_preview !== undefined
+            ? { output_preview: patch.output_preview }
+            : {}),
+          ...(patch.latency !== undefined ? { latency: patch.latency } : {}),
+          ...(patch.error_code !== undefined ? { error_code: patch.error_code } : {}),
+        };
         return next;
       };
 

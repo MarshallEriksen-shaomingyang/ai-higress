@@ -138,6 +138,19 @@ describe("EvalConfigForm", () => {
     });
   });
 
+  it("should not crash when candidate_logical_models is null", () => {
+    const onSubmit = vi.fn();
+    const configWithNullCandidates: EvalConfig = {
+      ...mockConfig,
+      candidate_logical_models: null,
+    };
+    render(<EvalConfigForm config={configWithNullCandidates} onSubmit={onSubmit} />);
+
+    expect(
+      screen.getByText("chat.eval_config.validation_candidate_models")
+    ).toBeInTheDocument();
+  });
+
   it("should validate Project AI configuration", async () => {
     const onSubmit = vi.fn();
     render(<EvalConfigForm config={mockConfig} onSubmit={onSubmit} />);

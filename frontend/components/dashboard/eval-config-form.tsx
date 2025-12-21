@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Card,
   CardContent,
@@ -115,7 +116,7 @@ export function EvalConfigForm({
   });
 
   const projectAiEnabled = watch("project_ai_enabled");
-  const candidateModels = watch("candidate_logical_models");
+  const candidateModels = watch("candidate_logical_models") ?? [];
 
   // 当配置加载时，更新表单
   useEffect(() => {
@@ -124,14 +125,14 @@ export function EvalConfigForm({
         enabled: config.enabled,
         max_challengers: config.max_challengers,
         provider_scopes: config.provider_scopes,
-        candidate_logical_models: config.candidate_logical_models,
+        candidate_logical_models: config.candidate_logical_models ?? [],
         cooldown_seconds: config.cooldown_seconds,
         budget_per_eval_credits: config.budget_per_eval_credits,
         rubric: config.rubric || "",
         project_ai_enabled: config.project_ai_enabled,
         project_ai_provider_model: config.project_ai_provider_model,
       });
-      setSelectedModels(new Set(config.candidate_logical_models));
+      setSelectedModels(new Set(config.candidate_logical_models ?? []));
     }
   }, [config, reset]);
 
@@ -298,25 +299,28 @@ export function EvalConfigForm({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {availableModels.map((model) => (
-              <div key={model} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`model-${model}`}
-                  checked={selectedModels.has(model)}
-                  onCheckedChange={(checked) =>
-                    handleModelToggle(model, checked as boolean)
-                  }
-                />
-                <Label
-                  htmlFor={`model-${model}`}
-                  className="text-sm font-normal cursor-pointer"
-                >
-                  {model}
-                </Label>
-              </div>
-            ))}
-          </div>
+          <ScrollArea className="h-[40vh] md:h-[50vh] pr-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {availableModels.map((model) => (
+                <div key={model} className="flex items-start space-x-2">
+                  <Checkbox
+                    id={`model-${model}`}
+                    checked={selectedModels.has(model)}
+                    onCheckedChange={(checked) =>
+                      handleModelToggle(model, checked as boolean)
+                    }
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor={`model-${model}`}
+                    className="text-sm font-normal cursor-pointer break-all"
+                  >
+                    {model}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
           {errors.candidate_logical_models && (
             <p className="text-sm text-destructive">
               {errors.candidate_logical_models.message}

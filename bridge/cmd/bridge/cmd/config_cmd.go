@@ -25,9 +25,9 @@ func NewConfigCmd() *cobra.Command {
 func newConfigPathCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "path",
-		Short: "Print default config path",
+		Short: "Print resolved config path",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(os.Stdout, config.DefaultConfigPath())
+			fmt.Fprintln(os.Stdout, config.ResolveConfigPath(""))
 			return nil
 		},
 	}
@@ -54,7 +54,7 @@ func newConfigValidateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	validateCmd.Flags().StringVar(&file, "file", "", "config file path (default: ~/.ai-bridge/config.yaml)")
+	validateCmd.Flags().StringVar(&file, "file", "", "config file path (default: search up for .ai-bridge/config.yaml, fallback: ~/.ai-bridge/config.yaml)")
 	return validateCmd
 }
 

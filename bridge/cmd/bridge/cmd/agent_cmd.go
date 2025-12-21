@@ -63,7 +63,6 @@ func newAgentServeMCPCmd() *cobra.Command {
 type agentRuntime struct {
 	agentID string
 	agg     *mcpbridge.Aggregator
-
 	pendingMu      sync.Mutex
 	pendingResults map[string]protocol.Envelope
 }

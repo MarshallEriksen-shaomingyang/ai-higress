@@ -1018,6 +1018,45 @@ export interface RatingResponse {
   created_at: string;
 }
 
+export interface AdminRunSummary {
+  run_id: string;
+  requested_logical_model: string;
+  status: string;
+  selected_provider_id?: string | null;
+  selected_provider_model?: string | null;
+  latency_ms?: number | null;
+  cost_credits?: number | null;
+  error_code?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminEvalRatingInfo {
+  winner_run_id: string;
+  reason_tags: string[];
+  created_at: string;
+}
+
+export interface AdminEvalItem {
+  eval_id: string;
+  status: string;
+  project_id: string;
+  assistant_id: string;
+  baseline_run_id: string;
+  baseline_run?: AdminRunSummary | null;
+  challengers: AdminRunSummary[];
+  explanation?: EvalExplanation | null;
+  rated_at?: string | null;
+  rating?: AdminEvalRatingInfo | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminEvalListResponse {
+  items: AdminEvalItem[];
+  next_cursor?: string | null;
+}
+
 // ============= 评测配置相关 =============
 export type ProviderScope = 'private' | 'shared' | 'public';
 
@@ -1027,7 +1066,7 @@ export interface EvalConfig {
   enabled: boolean;
   max_challengers: number;
   provider_scopes: ProviderScope[];
-  candidate_logical_models: string[];
+  candidate_logical_models: string[] | null;
   cooldown_seconds: number;
   budget_per_eval_credits?: number;
   rubric?: string;
