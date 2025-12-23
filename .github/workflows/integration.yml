@@ -23,7 +23,7 @@ jobs:
           echo "SECRET_KEY=test-secret-key-for-integration" >> backend/.env
       
       - name: Start services
-        run: docker-compose up -d
+        run: docker compose up -d
       
       - name: Wait for services
         run: |
@@ -42,9 +42,9 @@ jobs:
       - name: Collect logs
         if: failure()
         run: |
-          docker-compose logs api > api-logs.txt
-          docker-compose logs postgres > postgres-logs.txt
-          docker-compose logs redis > redis-logs.txt
+          docker compose logs api > api-logs.txt
+          docker compose logs postgres > postgres-logs.txt
+          docker compose logs redis > redis-logs.txt
       
       - name: Upload logs
         if: failure()
@@ -56,4 +56,4 @@ jobs:
       
       - name: Cleanup
         if: always()
-        run: docker-compose down -v
+        run: docker compose down -v
