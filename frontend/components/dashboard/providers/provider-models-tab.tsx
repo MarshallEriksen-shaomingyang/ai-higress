@@ -38,7 +38,9 @@ export const ProviderModelsTab = ({
     const groups: Record<string, Model[]> = {};
     models.models.forEach((model) => {
       const modelId = model.model_id || "";
-      const groupKey = modelId.includes("/") ? modelId.split("/")[0] : (model.family || "other");
+      const groupKey: string = modelId.includes("/") 
+        ? (modelId.split("/")[0] || "other")
+        : (model.family || "other");
       if (!groups[groupKey]) {
         groups[groupKey] = [];
       }

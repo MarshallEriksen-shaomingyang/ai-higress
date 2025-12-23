@@ -6,8 +6,6 @@ import { SlateChatInput } from "@/components/chat/slate-chat-input";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useClearConversationMessages, useSendMessage } from "@/lib/swr/use-messages";
 
-const EMPTY_STRING_ARRAY: string[] = [];
-
 export const ConversationChatInput = memo(function ConversationChatInput({
   conversationId,
   assistantId,
@@ -21,9 +19,6 @@ export const ConversationChatInput = memo(function ConversationChatInput({
   disabled?: boolean;
   className?: string;
 }) {
-  const bridgeAgentIds =
-    useChatStore((s) => s.conversationBridgeAgentIds[conversationId]) ??
-    EMPTY_STRING_ARRAY;
   const bridgeToolSelections =
     useChatStore((s) => s.conversationBridgeToolSelections[conversationId]) ?? {};
   const defaultBridgeToolSelections =
@@ -52,7 +47,7 @@ export const ConversationChatInput = memo(function ConversationChatInput({
         bridge_tool_selections: effectiveAgentIds.length
           ? effectiveAgentIds.map((agentId) => ({
               agent_id: agentId,
-              tool_names: effectiveSelections[agentId],
+              tool_names: effectiveSelections[agentId] ?? [],
             }))
           : undefined,
       }, { streaming: chatStreamingEnabled });

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 interface ChatEditorProps {
   editor: Editor;
-  editorRef: RefObject<HTMLDivElement>;
+  editorRef: RefObject<HTMLDivElement | null>;
   initialValue: Descendant[];
   disabled: boolean;
   isSending: boolean;
