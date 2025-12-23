@@ -108,6 +108,7 @@ specs/
 plans/
 
 .kiro/
+.secrets.baseline/
 # ============================================
 # Old directories (can be removed after migration)
 # ============================================
