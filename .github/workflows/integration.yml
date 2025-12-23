@@ -48,7 +48,7 @@ jobs:
       
       - name: Upload logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: integration-logs-${{ github.sha }}
           path: '*-logs.txt'
