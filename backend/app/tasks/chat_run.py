@@ -539,18 +539,18 @@ async def execute_chat_run(
                 async def _call_model(follow_payload: dict[str, Any], idempotency_key: str) -> dict[str, Any] | None:
                     from app.api.v1.chat.request_handler import RequestHandler
 
-                        handler = RequestHandler(api_key=auth_key, db=db, redis=redis, client=client)
-                        resp = await handler.handle(
-                            payload=follow_payload,
-                            requested_model=requested_model,
-                            lookup_model_id=requested_model,
-                            api_style="openai",
-                            effective_provider_ids=tool_loop_provider_ids,
-                            session_id=str(conv.id),
-                            assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
-                            billing_reason="chat_tool_loop",
-                            idempotency_key=idempotency_key or None,
-                        )
+                    handler = RequestHandler(api_key=auth_key, db=db, redis=redis, client=client)
+                    resp = await handler.handle(
+                        payload=follow_payload,
+                        requested_model=requested_model,
+                        lookup_model_id=requested_model,
+                        api_style="openai",
+                        effective_provider_ids=tool_loop_provider_ids,
+                        session_id=str(conv.id),
+                        assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
+                        billing_reason="chat_tool_loop",
+                        idempotency_key=idempotency_key or None,
+                    )
                     try:
                         raw = resp.body.decode("utf-8", errors="ignore")
                         parsed = json.loads(raw)
