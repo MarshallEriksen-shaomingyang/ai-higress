@@ -141,15 +141,10 @@ export function useSendMessageToConversation(
         markPending(true);
       }
       const sanitizeBridgePayload = (raw: SendMessageRequest): SendMessageRequest => {
-        // 若当前无可用 Bridge Agent，则不携带 bridge 字段，避免错误降级/空调用
-        if (!availableBridgeAgentIds.size) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { bridge_agent_id, bridge_agent_ids, bridge_tool_selections, ...rest } = raw;
-          return { ...rest };
-        }
-
         const filterId = (value: unknown): string | null => {
           const v = typeof value === 'string' ? value.trim() : '';
+          // 若当前拿不到 agent 列表（尚未加载/网络失败），则不做白名单过滤，避免丢失用户已选工具配置。
+          if (!availableBridgeAgentIds.size) return v || null;
           return v && availableBridgeAgentIds.has(v) ? v : null;
         };
 

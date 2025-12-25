@@ -3,6 +3,7 @@
 import { memo, useCallback } from "react";
 
 import { SlateChatInput } from "@/components/chat/slate-chat-input";
+import { buildBridgeRequestFields } from "@/lib/chat/build-bridge-request";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useClearConversationMessages, useSendMessage } from "@/lib/swr/use-messages";
 
@@ -23,36 +24,38 @@ export const ConversationChatInput = memo(function ConversationChatInput({
     useChatStore((s) => s.conversationBridgeToolSelections[conversationId]) ?? {};
   const defaultBridgeToolSelections =
     useChatStore((s) => s.defaultBridgeToolSelections) ?? {};
+  const bridgeAgentIds =
+    useChatStore((s) => s.conversationBridgeAgentIds[conversationId]) ?? [];
   const chatStreamingEnabled = useChatStore((s) => s.chatStreamingEnabled);
+  const setConversationModelPreset = useChatStore((s) => s.setConversationModelPreset);
 
   const sendMessage = useSendMessage(conversationId, assistantId, overrideLogicalModel);
   const clearConversationMessages = useClearConversationMessages(assistantId);
 
   const handleSend = useCallback(
     async (payload: { content: string; model_preset?: Record<string, number> }) => {
-      const effectiveSelections: Record<string, string[]> = { ...defaultBridgeToolSelections };
-      Object.entries(bridgeToolSelections).forEach(([aid, tools]) => {
-        if (Array.isArray(tools) && tools.length) {
-          effectiveSelections[aid] = tools;
-        }
+      setConversationModelPreset(conversationId, payload.model_preset ?? null);
+      const bridgeFields = buildBridgeRequestFields({
+        conversationBridgeAgentIds: bridgeAgentIds,
+        conversationBridgeToolSelections: bridgeToolSelections,
+        defaultBridgeToolSelections,
       });
-      const effectiveAgentIds = Object.entries(effectiveSelections)
-        .filter(([, tools]) => Array.isArray(tools) && tools.length)
-        .map(([aid]) => aid);
 
       await sendMessage({
         content: payload.content,
         model_preset: payload.model_preset,
-        bridge_agent_ids: effectiveAgentIds.length ? effectiveAgentIds : undefined,
-        bridge_tool_selections: effectiveAgentIds.length
-          ? effectiveAgentIds.map((agentId) => ({
-              agent_id: agentId,
-              tool_names: effectiveSelections[agentId] ?? [],
-            }))
-          : undefined,
+        ...bridgeFields,
       }, { streaming: chatStreamingEnabled });
     },
-    [sendMessage, bridgeToolSelections, defaultBridgeToolSelections, chatStreamingEnabled]
+    [
+      conversationId,
+      sendMessage,
+      bridgeAgentIds,
+      bridgeToolSelections,
+      defaultBridgeToolSelections,
+      chatStreamingEnabled,
+      setConversationModelPreset,
+    ]
   );
 
   const handleClearHistory = useCallback(async () => {

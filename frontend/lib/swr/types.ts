@@ -143,18 +143,19 @@ export function getCacheStrategyConfig(strategy: CacheStrategy): SWRConfigOption
       return {
         revalidateOnFocus: false,
         revalidateOnReconnect: false,
+        refreshInterval: 0,
         dedupingInterval: 3600000, // 1 小时
       };
     case 'frequent':
       return {
-        revalidateOnFocus: true,
-        revalidateOnReconnect: true,
-        refreshInterval: 30000, // 30 秒
+        revalidateOnFocus: false,
+        revalidateOnReconnect: false,
+        refreshInterval: 0,
         dedupingInterval: 5000, // 5 秒
       };
     case 'realtime':
       return {
-        revalidateOnFocus: true,
+        revalidateOnFocus: false,
         revalidateOnReconnect: true,
         refreshInterval: 5000, // 5 秒
         dedupingInterval: 1000, // 1 秒

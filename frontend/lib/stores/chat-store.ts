@@ -38,6 +38,9 @@ interface ChatState {
   // 全局默认 Bridge 工具选择：agent_id -> tool_names[]（跨会话复用）
   defaultBridgeToolSelections: Record<string, string[]>;
 
+  // 会话级最近一次发送使用的 model_preset：conversationId -> preset
+  conversationModelPresets: Record<string, Record<string, number>>;
+
   // 非流式等待回复中的会话：conversationId -> pending
   conversationPending: Record<string, boolean>;
 
@@ -58,6 +61,7 @@ interface ChatState {
     toolNames: string[] | null
   ) => void;
   setDefaultBridgeToolSelections: (agentId: string, toolNames: string[] | null) => void;
+  setConversationModelPreset: (conversationId: string, preset: Record<string, number> | null) => void;
   setConversationPending: (conversationId: string, pending: boolean) => void;
   
   // 重置状态
@@ -76,6 +80,7 @@ const initialState = {
   conversationBridgeActiveReqIds: {} as Record<string, string>,
   conversationBridgeToolSelections: {} as Record<string, Record<string, string[]>>,
   defaultBridgeToolSelections: {} as Record<string, string[]>,
+  conversationModelPresets: {} as Record<string, Record<string, number>>,
   conversationPending: {} as Record<string, boolean>,
 };
 
@@ -94,6 +99,7 @@ export const useChatStore = create<ChatState>()(
           conversationBridgeAgentIds: {},
           conversationBridgeActiveReqIds: {},
           conversationBridgeToolSelections: {},
+          conversationModelPresets: {},
         }),
 
       setSelectedAssistant: (assistantId) =>
@@ -183,6 +189,30 @@ export const useChatStore = create<ChatState>()(
           return { defaultBridgeToolSelections: next };
         }),
 
+      setConversationModelPreset: (conversationId, preset) =>
+        set((state) => {
+          const next = { ...(state.conversationModelPresets || {}) };
+          const normalizedId = String(conversationId || "").trim();
+          if (!normalizedId) return { conversationModelPresets: next };
+          if (!preset || typeof preset !== "object") {
+            delete next[normalizedId];
+            return { conversationModelPresets: next };
+          }
+          const normalized: Record<string, number> = {};
+          for (const [k, v] of Object.entries(preset)) {
+            const key = String(k || "").trim();
+            if (!key) continue;
+            if (typeof v !== "number" || Number.isNaN(v)) continue;
+            normalized[key] = v;
+          }
+          if (!Object.keys(normalized).length) {
+            delete next[normalizedId];
+          } else {
+            next[normalizedId] = normalized;
+          }
+          return { conversationModelPresets: next };
+        }),
+
       setConversationPending: (conversationId, pending) =>
         set((state) => {
           const next = { ...state.conversationPending };
@@ -198,7 +228,7 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'chat-store',
-      version: 10,
+      version: 11,
       migrate: (persistedState: unknown) => {
         // v1 -> v2: add conversationModelOverrides
         // v2 -> v3: add conversationBridgeAgentIds
@@ -209,6 +239,7 @@ export const useChatStore = create<ChatState>()(
         // v7 -> v8: add conversationPending
         // v8 -> v9: add conversationBridgeToolSelections
         // v9 -> v10: add defaultBridgeToolSelections
+        // v10 -> v11: add conversationModelPresets
         if (persistedState && typeof persistedState === 'object') {
           const state = persistedState as Record<string, unknown>;
           const rawAgentIds = state.conversationBridgeAgentIds ?? {};
@@ -267,6 +298,7 @@ export const useChatStore = create<ChatState>()(
             conversationPending: (state.conversationPending as Record<string, boolean> | undefined) ?? {},
             conversationBridgeToolSelections: nextToolSelections,
             defaultBridgeToolSelections: nextDefaultTools,
+            conversationModelPresets: (state.conversationModelPresets as Record<string, Record<string, number>> | undefined) ?? {},
           };
         }
         return persistedState;

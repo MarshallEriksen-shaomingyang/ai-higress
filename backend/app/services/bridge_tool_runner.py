@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 import time
@@ -126,6 +127,162 @@ def _safe_json_loads(value: str) -> Any:
         return None
 
 
+_FUNC_TRIGGER_RE = re.compile(r"FUNC_TRIGGER_[^\s]*?_END", re.IGNORECASE)
+_FUNCTION_CALLS_BLOCK_RE = re.compile(
+    r"<function_calls>(?P<body>[\s\S]*?)(?:</function_calls>|\Z)",
+    re.IGNORECASE,
+)
+_FUNCTION_CALL_BLOCK_RE = re.compile(
+    r"<function_call>(?P<body>[\s\S]*?)(?:</function_call>|\Z)",
+    re.IGNORECASE,
+)
+_SIMPLE_TAG_RE = re.compile(
+    r"<(?P<tag>[a-zA-Z0-9_\-]+)>(?P<value>[\s\S]*?)</(?P=tag)>",
+    re.IGNORECASE,
+)
+
+
+def _extract_text_from_content_field(content: Any) -> str | None:
+    if isinstance(content, str) and content.strip():
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, str) and part:
+                parts.append(part)
+                continue
+            if not isinstance(part, dict):
+                continue
+            if isinstance(part.get("text"), str) and part["text"]:
+                parts.append(part["text"])
+                continue
+            if isinstance(part.get("text"), dict):
+                value = part["text"].get("value")
+                if isinstance(value, str) and value:
+                    parts.append(value)
+        joined = "".join(parts).strip()
+        if joined:
+            return joined
+    return None
+
+
+def _coerce_scalar(value: str) -> Any:
+    raw = html.unescape((value or "").strip())
+    if raw == "":
+        return ""
+    lowered = raw.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if lowered == "null":
+        return None
+    if re.fullmatch(r"-?\d+", raw):
+        try:
+            return int(raw)
+        except Exception:
+            return raw
+    if re.fullmatch(r"-?\d+\.\d+", raw):
+        try:
+            return float(raw)
+        except Exception:
+            return raw
+    return raw
+
+
+def _merge_arg_value(target: dict[str, Any], key: str, value: Any) -> None:
+    if key in target:
+        current = target[key]
+        if isinstance(current, list):
+            current.append(value)
+        else:
+            target[key] = [current, value]
+        return
+    target[key] = value
+
+
+def _parse_args_xmlish(value: str) -> dict[str, Any]:
+    """
+    Parse a best-effort "XML-ish" args payload:
+      <query>foo</query><max_results>10</max_results>
+    Supports nested tags via recursion. Falls back gracefully.
+    """
+    text = (value or "").strip()
+    if not text:
+        return {}
+
+    # JSON wins if the model provided it.
+    if text.startswith("{") or text.startswith("["):
+        parsed = _safe_json_loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+        return {}
+
+    args: dict[str, Any] = {}
+    for m in _SIMPLE_TAG_RE.finditer(text):
+        key = str(m.group("tag") or "").strip()
+        if not key:
+            continue
+        inner = str(m.group("value") or "")
+        inner_stripped = inner.strip()
+        # If nested tags exist, attempt recursion; otherwise coerce scalar.
+        if "<" in inner_stripped and _SIMPLE_TAG_RE.search(inner_stripped):
+            _merge_arg_value(args, key, _parse_args_xmlish(inner_stripped))
+        else:
+            _merge_arg_value(args, key, _coerce_scalar(inner_stripped))
+    return args
+
+
+def _extract_tool_calls_from_tagged_text(text: str) -> list[dict[str, Any]]:
+    """
+    Fallback extractor for models that emit tool calls as plain text tags, e.g.
+      FUNC_TRIGGER_xxx_END <function_calls> ... </function_calls>
+    """
+    if not isinstance(text, str) or not text.strip():
+        return []
+
+    # Heuristic gate: avoid scanning every response.
+    if "<function_call" not in text.lower() and "func_trigger_" not in text.lower():
+        return []
+
+    # Prefer the explicit <function_calls> wrapper; otherwise scan the whole tail.
+    scan = text
+    block = _FUNCTION_CALLS_BLOCK_RE.search(text)
+    if block:
+        scan = block.group("body") or ""
+    else:
+        idx = text.lower().find("<function_call")
+        if idx >= 0:
+            scan = text[idx:]
+
+    tool_calls: list[dict[str, Any]] = []
+    for m in _FUNCTION_CALL_BLOCK_RE.finditer(scan):
+        body = str(m.group("body") or "")
+        tool_m = re.search(r"<tool>(?P<name>[\s\S]*?)</tool>", body, re.IGNORECASE)
+        tool_name = str(tool_m.group("name") if tool_m else "").strip()
+        if not tool_name:
+            continue
+
+        args_m = re.search(r"<args>(?P<args>[\s\S]*?)</args>", body, re.IGNORECASE)
+        args_raw = str(args_m.group("args") if args_m else "").strip()
+        args = _parse_args_xmlish(args_raw)
+
+        tool_calls.append(
+            {
+                "id": "call_" + uuid.uuid4().hex,
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                    "arguments": json.dumps(args, ensure_ascii=False),
+                },
+            }
+        )
+
+    # Some prompts wrap everything with a FUNC_TRIGGER_* marker.
+    # If we saw it but couldn't parse anything, treat as "no tool calls".
+    return tool_calls
+
+
 def extract_openai_tool_calls(response_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(response_payload, dict):
         return []
@@ -154,6 +311,19 @@ def extract_openai_tool_calls(response_payload: dict[str, Any] | None) -> list[d
                 },
             }
         ]
+
+    # Fallback: tool calls embedded in the text content (tagged format).
+    content_text = _extract_text_from_content_field(message.get("content"))
+    if not content_text:
+        raw_text = first.get("text")
+        if isinstance(raw_text, str) and raw_text.strip():
+            content_text = raw_text
+    if content_text:
+        # Strip FUNC_TRIGGER prefix for better matching, but keep the remaining tags.
+        sanitized = _FUNC_TRIGGER_RE.sub("", content_text)
+        parsed = _extract_tool_calls_from_tagged_text(sanitized)
+        if parsed:
+            return parsed
     return []
 
 

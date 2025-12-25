@@ -253,7 +253,7 @@ class ToolLoopRunner:
 
             follow_payload = dict(current_payload)
             follow_messages = list(current_payload.get("messages") or [])
-            follow_messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
+            follow_messages.append({"role": "assistant", "content": "", "tool_calls": tool_calls})
             follow_messages.extend(tool_messages)
             follow_payload["messages"] = follow_messages
             follow_payload["tool_choice"] = "auto"
@@ -281,6 +281,25 @@ def _extract_first_choice_text(payload: dict[str, Any] | None) -> str | None:
         content = message.get("content")
         if isinstance(content, str) and content.strip():
             return content
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for part in content:
+                if isinstance(part, str) and part:
+                    text_parts.append(part)
+                    continue
+                if not isinstance(part, dict):
+                    continue
+                text = part.get("text")
+                if isinstance(text, str) and text:
+                    text_parts.append(text)
+                    continue
+                if isinstance(text, dict):
+                    value = text.get("value")
+                    if isinstance(value, str) and value:
+                        text_parts.append(value)
+            combined = "".join(text_parts).strip()
+            if combined:
+                return combined
     content = first.get("text")
     if isinstance(content, str) and content.strip():
         return content

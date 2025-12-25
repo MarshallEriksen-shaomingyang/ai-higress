@@ -241,9 +241,40 @@ Response:
 当 `streaming=true`（或请求头包含 `Accept: text/event-stream`）时，返回 `text/event-stream`：
 
 - `event: message.created`：包含 `user_message_id` / `assistant_message_id` / `baseline_run`
+  - `request_context`（可选）：本次请求的上下文快照（模型 + 参数 + Bridge 工具选择），用于前端在“对比/重试/断线重连”等场景复用同一套配置。
 - `event: message.delta`：增量 token（字段 `delta`）
 - `event: message.completed` / `message.failed`：结束事件，包含最终 `baseline_run`
 - `event: done` + `data: [DONE]`
+
+### POST `/v1/messages/{assistant_message_id}/regenerate`
+
+基于已有的 user 消息重新生成一条 assistant 回复（会清空原 assistant 消息并生成新内容）。
+
+Request（可选 Body，用于显式携带模型参数与工具选择，避免“重试不带工具/参数”）：
+```json
+{
+  "override_logical_model": "gpt-4.1",
+  "model_preset": {"temperature": 0.2},
+  "bridge_agent_id": "aws-dev-server",
+  "bridge_agent_ids": ["aws-dev-server", "home-nas"],
+  "bridge_tool_selections": [
+    {"agent_id": "aws-dev-server", "tool_names": ["search", "summarize"]}
+  ]
+}
+```
+
+Response:
+```json
+{
+  "assistant_message_id": "uuid",
+  "baseline_run": {
+    "run_id": "uuid",
+    "requested_logical_model": "gpt-4.1",
+    "status": "succeeded",
+    "output_preview": "..."
+  }
+}
+```
 
 ### GET `/v1/conversations/{conversation_id}/messages`
 

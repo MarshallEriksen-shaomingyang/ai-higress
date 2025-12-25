@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n-context";
 import { useBridgeEvents } from "@/lib/hooks/use-bridge-events";
 import { useBridgeAgents, useBridgeCancel, useBridgeInvoke, useBridgeTools } from "@/lib/swr/use-bridge";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { BRIDGE_TOOL_TIMEOUT_MS } from "@/config/timeouts";
 
 const EMPTY_STRING_ARRAY: string[] = [];
 
@@ -140,7 +141,7 @@ export function BridgePanelClient({
       tool_name: toolName,
       arguments: args,
       stream: true,
-      timeout_ms: 60000,
+      timeout_ms: BRIDGE_TOOL_TIMEOUT_MS,
     });
     setActiveReqId(resp.req_id);
     if (conversationId) {

@@ -13,13 +13,16 @@ export interface SWRProviderConfig extends SWRConfiguration {
 const defaultSWRConfig: SWRProviderConfig = {
   fetcher: swrFetcher.get,
   revalidateOnFocus: false,
-  revalidateOnReconnect: true,
-  dedupingInterval: 2000,
+  revalidateOnReconnect: false,
+  revalidateIfStale: false,
+  dedupingInterval: 5000,
   focusThrottleInterval: 5000,
   errorRetryCount: 3,
   errorRetryInterval: 5000,
   loadingTimeout: 10000,
   refreshInterval: 0, // 默认不自动刷新
+  refreshWhenHidden: false,
+  refreshWhenOffline: false,
   // 缓存策略配置
   keepPreviousData: true,
   // 错误处理

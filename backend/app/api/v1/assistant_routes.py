@@ -33,6 +33,7 @@ from app.schemas import (
     ConversationUpdateRequest,
     MessageCreateRequest,
     MessageCreateResponse,
+    MessageRegenerateRequest,
     MessageRegenerateResponse,
     MessageListResponse,
     RunDetailResponse,
@@ -776,6 +777,7 @@ async def stream_run_events_endpoint(
 @router.post("/v1/messages/{assistant_message_id}/regenerate", response_model=MessageRegenerateResponse)
 async def regenerate_message_endpoint(
     assistant_message_id: UUID,
+    payload: MessageRegenerateRequest | None = None,
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
     client: Any = Depends(get_http_client),
@@ -787,6 +789,11 @@ async def regenerate_message_endpoint(
         client=client,
         current_user=current_user,
         assistant_message_id=assistant_message_id,
+        override_logical_model=(payload.override_logical_model if payload is not None else None),
+        model_preset=(payload.model_preset if payload is not None else None),
+        bridge_agent_id=(payload.bridge_agent_id if payload is not None else None),
+        bridge_agent_ids=(payload.bridge_agent_ids if payload is not None else None),
+        bridge_tool_selections=(payload.bridge_tool_selections if payload is not None else None),
     )
     run = get_run_detail(db, run_id=run_id, user_id=UUID(str(current_user.id)))
     return MessageRegenerateResponse(

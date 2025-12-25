@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -154,8 +155,77 @@ def _to_authenticated_api_key(
         allowed_provider_ids=list(api_key.allowed_provider_ids),
     )
 
+_THINK_BLOCK_RE = re.compile(r"<think>[\s\S]*?</think>", re.IGNORECASE)
+_THINK_UNCLOSED_RE = re.compile(r"<think>[\s\S]*\Z", re.IGNORECASE)
+_THINK_CLOSE_TAG_RE = re.compile(r"</think>", re.IGNORECASE)
+
+_TOOL_TAG_STREAM_TRIGGER_RE = re.compile(
+    r"(FUNC_TRIGGER_[^\s]*?_END|<function_calls>|<function_call>)",
+    re.IGNORECASE,
+)
+
+
+class _ToolTagStreamFilter:
+    """
+    流式场景下的“标签型 tool call”降噪器：
+    - 避免把 <function_calls> / FUNC_TRIGGER_* 等工件直接推给前端
+    - 只在本次请求确实开启了 tool loop 时启用（避免误伤无工具场景）
+    """
+
+    def __init__(self, *, holdback_chars: int = 64) -> None:
+        self._holdback = max(0, int(holdback_chars))
+        self._buf = ""
+        self.detected = False
+
+    def feed(self, chunk: str) -> str:
+        if not chunk:
+            return ""
+        if self.detected:
+            return ""
+
+        self._buf += chunk
+
+        if _TOOL_TAG_STREAM_TRIGGER_RE.search(self._buf):
+            self.detected = True
+            # 丢弃本次缓冲（后续由 tool loop 输出最终答案），避免把标签泄漏给前端。
+            self._buf = ""
+            return ""
+
+        if self._holdback <= 0:
+            out = self._buf
+            self._buf = ""
+            return out
+
+        if len(self._buf) <= self._holdback:
+            return ""
+        out = self._buf[:-self._holdback]
+        self._buf = self._buf[-self._holdback :]
+        return out
+
+    def flush(self) -> str:
+        if self.detected:
+            self._buf = ""
+            return ""
+        out = self._buf
+        self._buf = ""
+        return out
+
+
+def _strip_think_blocks(value: str) -> str:
+    if not value:
+        return ""
+    text = value
+    # First remove well-formed <think>...</think> blocks.
+    text = _THINK_BLOCK_RE.sub(" ", text)
+    # Then remove any leftover unclosed <think>... tail (common in some reasoning models).
+    text = _THINK_UNCLOSED_RE.sub(" ", text)
+    # Finally remove any stray closing tags.
+    text = _THINK_CLOSE_TAG_RE.sub(" ", text)
+    return " ".join(text.split()).strip()
+
+
 def _sanitize_conversation_title(value: str) -> str:
-    title = (value or "").strip()
+    title = _strip_think_blocks(value or "").strip()
     if not title:
         return ""
 
@@ -190,6 +260,215 @@ def _extract_first_choice_text(payload: dict[str, Any] | None) -> str | None:
     if isinstance(content, str) and content.strip():
         return content
     return None
+
+
+async def _resolve_final_model(
+    db: Session,
+    redis: Redis,
+    client: Any,
+    current_user: AuthenticatedUser,
+    ctx: Any,
+    assistant: Any,
+    requested_model: str,
+    user_text: str | None,
+    model_preset: dict | None,
+) -> str:
+    """
+    统一处理模型解析逻辑：
+    1. 处理 PROJECT_INHERIT_SENTINEL
+    2. 处理 'auto' 模式（Candidate 检查 + Bandit 推荐）
+    3. 返回最终确定的 logical_model
+    """
+    final_model = requested_model
+    if final_model == PROJECT_INHERIT_SENTINEL:
+        final_model = (
+            (getattr(ctx.api_key, "chat_default_logical_model", None) or "").strip() or DEFAULT_PROJECT_CHAT_MODEL
+        )
+
+    if not final_model:
+        raise bad_request("未指定模型")
+
+    if final_model != "auto":
+        return final_model
+
+    # Auto mode logic
+    cfg = get_or_default_project_eval_config(db, project_id=ctx.project_id)
+    candidates = list(cfg.candidate_logical_models or [])
+    if not candidates:
+        raise bad_request(
+            "当前助手默认模型为 auto，但项目未配置 candidate_logical_models",
+            details={"project_id": str(ctx.project_id)},
+        )
+
+    preset_payload: dict[str, Any] = {}
+    if isinstance(assistant.model_preset, dict):
+        preset_payload.update(assistant.model_preset)
+    if isinstance(model_preset, dict):
+        preset_payload.update(model_preset)
+
+    effective_provider_ids = get_effective_provider_ids_for_user(
+        db,
+        user_id=UUID(str(current_user.id)),
+        api_key=ctx.api_key,
+        provider_scopes=list(getattr(cfg, "provider_scopes", None) or DEFAULT_PROVIDER_SCOPES),
+    )
+
+    selector = ProviderSelector(client=client, redis=redis, db=db)
+    available_candidates = await selector.check_candidate_availability(
+        candidate_logical_models=candidates,
+        effective_provider_ids=effective_provider_ids,
+        api_style="openai",
+        user_id=UUID(str(current_user.id)),
+        is_superuser=current_user.is_superuser,
+        request_payload=preset_payload or None,
+        budget_credits=cfg.budget_per_eval_credits,
+    )
+
+    if not available_candidates:
+        raise bad_request(
+            "auto 模式下无可用的候选模型（均被禁用或无健康上游）",
+            details={"project_id": str(ctx.project_id)},
+        )
+
+    rec = recommend_challengers(
+        db,
+        project_id=ctx.project_id,
+        assistant_id=UUID(str(assistant.id)),
+        baseline_logical_model="auto",
+        user_text=user_text or "",
+        context_features=build_rule_context_features(user_text=user_text or "", request_payload=None),
+        candidate_logical_models=available_candidates,
+        k=1,
+        policy_version="ts-v1",
+    )
+
+    if not rec.candidates:
+        raise bad_request(
+            "auto 模式下无法选择候选模型",
+            details={"project_id": str(ctx.project_id)},
+        )
+    
+    return rec.candidates[0].logical_model
+
+
+async def _load_bridge_tools_for_payload(
+    base_payload: dict[str, Any],
+    bridge_agent_id: str | None,
+    bridge_agent_ids: list[str] | None,
+    bridge_tool_selections: list[dict] | None,
+) -> tuple[dict[str, Any], list[str], dict[str, set[str]], list[dict[str, Any]], dict[str, tuple[str, str]]]:
+    """
+    统一处理 Bridge 工具加载逻辑：
+    1. 解析 agent ids
+    2. 调用 BridgeGateway 获取工具
+    3. 过滤白名单
+    4. 转换为 OpenAI 工具格式
+    5. 更新 payload
+    """
+    effective_ids, tool_filters = _normalize_bridge_inputs(
+        bridge_agent_id=bridge_agent_id,
+        bridge_agent_ids=bridge_agent_ids,
+        bridge_tool_selections=bridge_tool_selections,
+    )
+    
+    if not effective_ids:
+        return base_payload, [], {}, [], {}
+
+    bridge_tools_by_agent: dict[str, list[dict[str, Any]]] = {}
+    openai_tools: list[dict[str, Any]] = []
+    tool_name_map: dict[str, tuple[str, str]] = {}
+
+    try:
+        bridge = BridgeGatewayClient()
+        for aid in effective_ids:
+            try:
+                tools_resp = await bridge.list_tools(aid)
+            except Exception:
+                continue
+            
+            if isinstance(tools_resp, dict) and isinstance(tools_resp.get("tools"), list):
+                tools = [t for t in tools_resp["tools"] if isinstance(t, dict)]
+                allowlist = tool_filters.get(aid)
+                if allowlist:
+                    tools = [t for t in tools if str(t.get("name") or "").strip() in allowlist]
+                if tools:
+                    bridge_tools_by_agent[aid] = tools
+
+        openai_tools, tool_name_map = bridge_tools_by_agent_to_openai_tools(
+            bridge_tools_by_agent=bridge_tools_by_agent
+        )
+        
+        new_payload = dict(base_payload)
+        if openai_tools:
+            new_payload["tools"] = openai_tools
+            new_payload["tool_choice"] = "auto"
+        
+        return new_payload, effective_ids, tool_filters, openai_tools, tool_name_map
+
+    except Exception:
+        # Best-effort fallback
+        return base_payload, effective_ids, tool_filters, [], {}
+
+
+def _create_standard_tool_loop_runner(
+    db: Session,
+    redis: Redis,
+    client: Any,
+    auth_key: AuthenticatedAPIKey,
+    effective_provider_ids: set[str],
+    conversation_id: str,
+    assistant_id: UUID | None,
+    requested_model: str,
+    run_id: UUID,
+) -> ToolLoopRunner:
+    async def _invoke_tool(req_id: str, agent_id: str, tool_name: str, arguments: dict[str, Any]):
+        return await invoke_bridge_tool_and_wait(
+            req_id=req_id,
+            agent_id=agent_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            timeout_ms=60_000,
+            result_timeout_seconds=120.0,
+        )
+
+    async def _cancel_tool(req_id: str, agent_id: str, reason: str) -> None:
+        bridge = BridgeGatewayClient()
+        await bridge.cancel(req_id=req_id, agent_id=agent_id, reason=reason)
+
+    async def _call_model(follow_payload: dict[str, Any], idempotency_key: str) -> dict[str, Any] | None:
+        handler = RequestHandler(api_key=auth_key, db=db, redis=redis, client=client)
+        resp = await handler.handle(
+            payload=follow_payload,
+            requested_model=requested_model,
+            lookup_model_id=requested_model,
+            api_style="openai",
+            effective_provider_ids=effective_provider_ids,
+            session_id=conversation_id,
+            assistant_id=assistant_id,
+            billing_reason="chat_tool_loop",
+            idempotency_key=idempotency_key or None,
+        )
+        try:
+            raw = resp.body.decode("utf-8", errors="ignore")
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return None
+        return None
+
+    return ToolLoopRunner(
+        invoke_tool=_invoke_tool,
+        call_model=_call_model,
+        cancel_tool=_cancel_tool,
+        event_sink=lambda et, p: _append_run_event_best_effort(
+            db,
+            redis=redis,
+            run_id=run_id,
+            event_type=et,
+            payload=p,
+        ),
+    )
 
 
 def _normalize_bridge_inputs(
@@ -384,68 +663,19 @@ async def create_message_and_queue_baseline_run(
         )
 
     assistant = get_assistant(db, assistant_id=UUID(str(conv.assistant_id)), user_id=UUID(str(current_user.id)))
+    
     requested_model = override_logical_model or assistant.default_logical_model
-    if requested_model == PROJECT_INHERIT_SENTINEL:
-        requested_model = (getattr(ctx.api_key, "chat_default_logical_model", None) or "").strip() or DEFAULT_PROJECT_CHAT_MODEL
-    if not requested_model:
-        raise bad_request("未指定模型")
-
-    cfg = get_or_default_project_eval_config(db, project_id=ctx.project_id)
-    effective_provider_ids = get_effective_provider_ids_for_user(
-        db,
-        user_id=UUID(str(current_user.id)),
-        api_key=ctx.api_key,
-        provider_scopes=list(getattr(cfg, "provider_scopes", None) or DEFAULT_PROVIDER_SCOPES),
+    requested_model = await _resolve_final_model(
+        db=db,
+        redis=redis,
+        client=client,
+        current_user=current_user,
+        ctx=ctx,
+        assistant=assistant,
+        requested_model=requested_model,
+        user_text=content,
+        model_preset=model_preset,
     )
-
-    if requested_model == "auto":
-        candidates = list(cfg.candidate_logical_models or [])
-        if not candidates:
-            raise bad_request(
-                "当前助手默认模型为 auto，但项目未配置 candidate_logical_models",
-                details={"project_id": str(ctx.project_id)},
-            )
-
-        preset_payload: dict[str, Any] = {}
-        if isinstance(assistant.model_preset, dict):
-            preset_payload.update(assistant.model_preset)
-        if isinstance(model_preset, dict):
-            preset_payload.update(model_preset)
-
-        selector = ProviderSelector(client=client, redis=redis, db=db)
-        candidates = await selector.check_candidate_availability(
-            candidate_logical_models=candidates,
-            effective_provider_ids=effective_provider_ids,
-            api_style="openai",
-            user_id=UUID(str(current_user.id)),
-            is_superuser=current_user.is_superuser,
-            request_payload=preset_payload or None,
-            budget_credits=cfg.budget_per_eval_credits,
-        )
-
-        if not candidates:
-            raise bad_request(
-                "auto 模式下无可用的候选模型（均被禁用或无健康上游）",
-                details={"project_id": str(ctx.project_id)},
-            )
-
-        rec = recommend_challengers(
-            db,
-            project_id=ctx.project_id,
-            assistant_id=UUID(str(assistant.id)),
-            baseline_logical_model="auto",
-            user_text=content,
-            context_features=build_rule_context_features(user_text=content, request_payload=None),
-            candidate_logical_models=candidates,
-            k=1,
-            policy_version="ts-v1",
-        )
-        if not rec.candidates:
-            raise bad_request(
-                "auto 模式下无法选择候选模型",
-                details={"project_id": str(ctx.project_id)},
-            )
-        requested_model = rec.candidates[0].logical_model
 
     user_message = create_user_message(db, conversation=conv, content_text=content)
     assistant_message: Message | None = None
@@ -465,38 +695,12 @@ async def create_message_and_queue_baseline_run(
         model_preset_override=model_preset,
     )
 
-    bridge_tools_by_agent: dict[str, list[dict[str, Any]]] = {}
-    openai_tools: list[dict[str, Any]] = []
-
-    effective_bridge_agent_ids, tool_filters = _normalize_bridge_inputs(
+    payload, effective_bridge_agent_ids, _tool_filters, _openai_tools, _tool_name_map = await _load_bridge_tools_for_payload(
+        base_payload=payload,
         bridge_agent_id=bridge_agent_id,
         bridge_agent_ids=bridge_agent_ids,
         bridge_tool_selections=bridge_tool_selections,
     )
-
-    if effective_bridge_agent_ids:
-        try:
-            bridge = BridgeGatewayClient()
-            for aid in effective_bridge_agent_ids:
-                try:
-                    tools_resp = await bridge.list_tools(aid)
-                except Exception:
-                    continue
-                if isinstance(tools_resp, dict) and isinstance(tools_resp.get("tools"), list):
-                    tools = [t for t in tools_resp["tools"] if isinstance(t, dict)]
-                    allowlist = tool_filters.get(aid)
-                    if allowlist:
-                        tools = [t for t in tools if str(t.get("name") or "").strip() in allowlist]
-                    if tools:
-                        bridge_tools_by_agent[aid] = tools
-
-            openai_tools, _ = bridge_tools_by_agent_to_openai_tools(bridge_tools_by_agent=bridge_tools_by_agent)
-            if openai_tools:
-                payload = dict(payload)
-                payload["tools"] = openai_tools
-                payload["tool_choice"] = "auto"
-        except Exception:
-            openai_tools = []
 
     run = create_run_record(
         db,
@@ -621,6 +825,7 @@ async def _maybe_auto_title_conversation(
         "If the user's message is mixed-language, use the dominant language.\n"
         "Rules:\n"
         "- Output ONLY the title.\n"
+        "- Do NOT output any <think> blocks or reasoning.\n"
         "- No quotes, no markdown, no emojis, no extra punctuation at the end.\n"
         "- Single line.\n"
         "- Length: <= 20 CJK characters OR <= 8 English words; for other languages keep it short (<= 10 words).\n"
@@ -715,11 +920,8 @@ async def send_message_and_run_baseline(
     t_stage = _log_timing("2_ensure_account_usable", t_stage, request_id)
 
     assistant = get_assistant(db, assistant_id=UUID(str(conv.assistant_id)), user_id=UUID(str(current_user.id)))
+    
     requested_model = override_logical_model or assistant.default_logical_model
-    if requested_model == PROJECT_INHERIT_SENTINEL:
-        requested_model = (getattr(ctx.api_key, "chat_default_logical_model", None) or "").strip() or DEFAULT_PROJECT_CHAT_MODEL
-    if not requested_model:
-        raise bad_request("未指定模型")
     t_stage = _log_timing("3_get_assistant_model", t_stage, request_id, f"model={requested_model}")
 
     cfg = get_or_default_project_eval_config(db, project_id=ctx.project_id)
@@ -732,59 +934,18 @@ async def send_message_and_run_baseline(
     )
     t_stage = _log_timing("4_get_provider_ids", t_stage, request_id, f"count={len(effective_provider_ids)}")
 
-    if requested_model == "auto":
-        candidates = list(cfg.candidate_logical_models or [])
-        if not candidates:
-            raise bad_request(
-                "当前助手默认模型为 auto，但项目未配置 candidate_logical_models",
-                details={"project_id": str(ctx.project_id)},
-            )
-
-        # 用 assistant preset（+override）构造一个“能力/预算判定用”的轻量 payload：
-        # - 只需要 tools / max_tokens 等字段即可用于候选池过滤；
-        # - messages 依赖实际历史上下文，这里不强依赖。
-        preset_payload: dict[str, Any] = {}
-        if isinstance(assistant.model_preset, dict):
-            preset_payload.update(assistant.model_preset)
-        if isinstance(model_preset, dict):
-            preset_payload.update(model_preset)
-
-        # 过滤不可用/无权限/故障的模型
-        selector = ProviderSelector(client=client, redis=redis, db=db)
-        candidates = await selector.check_candidate_availability(
-            candidate_logical_models=candidates,
-            effective_provider_ids=effective_provider_ids,
-            api_style="openai",  # 默认聊天场景
-            user_id=UUID(str(current_user.id)),
-            is_superuser=current_user.is_superuser,
-            request_payload=preset_payload or None,
-            budget_credits=cfg.budget_per_eval_credits,
-        )
-
-        if not candidates:
-             raise bad_request(
-                "auto 模式下无可用的候选模型（均被禁用或无健康上游）",
-                details={"project_id": str(ctx.project_id)},
-            )
-
-        rec = recommend_challengers(
-            db,
-            project_id=ctx.project_id,
-            assistant_id=UUID(str(assistant.id)),
-            baseline_logical_model="auto",
-            user_text=content,
-            context_features=build_rule_context_features(user_text=content, request_payload=None),
-            candidate_logical_models=candidates,
-            k=1,
-            policy_version="ts-v1",
-        )
-        if not rec.candidates:
-            raise bad_request(
-                "auto 模式下无法选择候选模型",
-                details={"project_id": str(ctx.project_id)},
-            )
-        requested_model = rec.candidates[0].logical_model
-        t_stage = _log_timing("5_auto_model_selection", t_stage, request_id, f"selected={requested_model}")
+    requested_model = await _resolve_final_model(
+        db=db,
+        redis=redis,
+        client=client,
+        current_user=current_user,
+        ctx=ctx,
+        assistant=assistant,
+        requested_model=requested_model,
+        user_text=content,
+        model_preset=model_preset,
+    )
+    t_stage = _log_timing("5_auto_model_selection", t_stage, request_id, f"selected={requested_model}")
 
     user_message = create_user_message(db, conversation=conv, content_text=content)
     t_stage = _log_timing("6_create_user_message", t_stage, request_id)
@@ -799,47 +960,14 @@ async def send_message_and_run_baseline(
     )
     t_stage = _log_timing("7_build_payload", t_stage, request_id, f"messages_count={len(payload.get('messages', []))}")
 
-    bridge_tools_by_agent: dict[str, list[dict[str, Any]]] = {}
-    openai_tools: list[dict[str, Any]] = []
-    tool_name_map: dict[str, tuple[str, str]] = {}  # openai_tool_name -> (agent_id, bridge_tool_name)
-
-    effective_bridge_agent_ids, tool_filters = _normalize_bridge_inputs(
+    t_bridge_start = time.perf_counter()
+    payload, effective_bridge_agent_ids, _tool_filters, openai_tools, tool_name_map = await _load_bridge_tools_for_payload(
+        base_payload=payload,
         bridge_agent_id=bridge_agent_id,
         bridge_agent_ids=bridge_agent_ids,
         bridge_tool_selections=bridge_tool_selections,
     )
-
-    if effective_bridge_agent_ids:
-        t_bridge_start = time.perf_counter()
-        try:
-            bridge = BridgeGatewayClient()
-            for aid in effective_bridge_agent_ids:
-                try:
-                    tools_resp = await bridge.list_tools(aid)
-                except Exception:
-                    continue
-                if isinstance(tools_resp, dict) and isinstance(tools_resp.get("tools"), list):
-                    tools = [t for t in tools_resp["tools"] if isinstance(t, dict)]
-                    allowlist = tool_filters.get(aid)
-                    if allowlist:
-                        tools = [
-                            t for t in tools
-                            if str(t.get("name") or "").strip() in allowlist
-                        ]
-                    if tools:
-                        bridge_tools_by_agent[aid] = tools
-
-            openai_tools, tool_name_map = bridge_tools_by_agent_to_openai_tools(
-                bridge_tools_by_agent=bridge_tools_by_agent,
-            )
-            if openai_tools:
-                payload = dict(payload)
-                payload["tools"] = openai_tools
-                payload["tool_choice"] = "auto"
-        except Exception:
-            # Best-effort: do not block baseline chat if bridge tools cannot be loaded.
-            openai_tools = []
-        t_stage = _log_timing("8_load_bridge_tools", t_bridge_start, request_id, f"agents={len(effective_bridge_agent_ids)} tools={len(openai_tools)}")
+    t_stage = _log_timing("8_load_bridge_tools", t_bridge_start, request_id, f"agents={len(effective_bridge_agent_ids)} tools={len(openai_tools)}")
 
     run = create_run_record(
         db,
@@ -885,53 +1013,16 @@ async def send_message_and_run_baseline(
     if run.status == "succeeded" and effective_bridge_agent_ids and openai_tools:
         t_tool_loop_start = time.perf_counter()
 
-        async def _invoke_tool(req_id: str, agent_id: str, tool_name: str, arguments: dict[str, Any]):
-            return await invoke_bridge_tool_and_wait(
-                req_id=req_id,
-                agent_id=agent_id,
-                tool_name=tool_name,
-                arguments=arguments,
-                timeout_ms=60_000,
-                result_timeout_seconds=120.0,
-            )
-
-        async def _cancel_tool(req_id: str, agent_id: str, reason: str) -> None:
-            bridge = BridgeGatewayClient()
-            await bridge.cancel(req_id=req_id, agent_id=agent_id, reason=reason)
-
-        async def _call_model(follow_payload: dict[str, Any], idempotency_key: str) -> dict[str, Any] | None:
-            handler = RequestHandler(api_key=auth_key, db=db, redis=redis, client=client)
-            resp = await handler.handle(
-                payload=follow_payload,
-                requested_model=requested_model,
-                lookup_model_id=requested_model,
-                api_style="openai",
-                effective_provider_ids=effective_provider_ids,
-                session_id=str(conv.id),
-                assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
-                billing_reason="chat_tool_loop",
-                idempotency_key=idempotency_key or None,
-            )
-            try:
-                raw = resp.body.decode("utf-8", errors="ignore")
-                parsed = json.loads(raw)
-                if isinstance(parsed, dict):
-                    return parsed
-            except Exception:
-                return None
-            return None
-
-        runner = ToolLoopRunner(
-            invoke_tool=_invoke_tool,
-            call_model=_call_model,
-            cancel_tool=_cancel_tool,
-            event_sink=lambda et, p: _append_run_event_best_effort(
-                db,
-                redis=redis,
-                run_id=UUID(str(run.id)),
-                event_type=et,
-                payload=p,
-            ),
+        runner = _create_standard_tool_loop_runner(
+            db=db,
+            redis=redis,
+            client=client,
+            auth_key=auth_key,
+            effective_provider_ids=effective_provider_ids,
+            conversation_id=str(conv.id),
+            assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
+            requested_model=requested_model,
+            run_id=UUID(str(run.id)),
         )
 
         result = await runner.run(
@@ -1064,11 +1155,8 @@ async def stream_message_and_run_baseline(
     t_stage = _log_timing("2_ensure_account_usable", t_stage, request_id)
 
     assistant = get_assistant(db, assistant_id=UUID(str(conv.assistant_id)), user_id=UUID(str(current_user.id)))
+    
     requested_model = override_logical_model or assistant.default_logical_model
-    if requested_model == PROJECT_INHERIT_SENTINEL:
-        requested_model = (getattr(ctx.api_key, "chat_default_logical_model", None) or "").strip() or DEFAULT_PROJECT_CHAT_MODEL
-    if not requested_model:
-        raise bad_request("未指定模型")
     t_stage = _log_timing("3_get_assistant_model", t_stage, request_id, f"model={requested_model}")
 
     cfg = get_or_default_project_eval_config(db, project_id=ctx.project_id)
@@ -1080,55 +1168,18 @@ async def stream_message_and_run_baseline(
     )
     t_stage = _log_timing("4_get_provider_ids", t_stage, request_id, f"count={len(effective_provider_ids)}")
 
-    if requested_model == "auto":
-        candidates = list(cfg.candidate_logical_models or [])
-        if not candidates:
-            raise bad_request(
-                "当前助手默认模型为 auto，但项目未配置 candidate_logical_models",
-                details={"project_id": str(ctx.project_id)},
-            )
-
-        preset_payload: dict[str, Any] = {}
-        if isinstance(assistant.model_preset, dict):
-            preset_payload.update(assistant.model_preset)
-        if isinstance(model_preset, dict):
-            preset_payload.update(model_preset)
-
-        selector = ProviderSelector(client=client, redis=redis, db=db)
-        candidates = await selector.check_candidate_availability(
-            candidate_logical_models=candidates,
-            effective_provider_ids=effective_provider_ids,
-            api_style="openai",
-            user_id=UUID(str(current_user.id)),
-            is_superuser=current_user.is_superuser,
-            request_payload=preset_payload or None,
-            budget_credits=cfg.budget_per_eval_credits,
-        )
-
-        if not candidates:
-            raise bad_request(
-                "auto 模式下无可用的候选模型（均被禁用或无健康上游）",
-                details={"project_id": str(ctx.project_id)},
-            )
-
-        rec = recommend_challengers(
-            db,
-            project_id=ctx.project_id,
-            assistant_id=UUID(str(assistant.id)),
-            baseline_logical_model="auto",
-            user_text=content,
-            context_features=build_rule_context_features(user_text=content, request_payload=None),
-            candidate_logical_models=candidates,
-            k=1,
-            policy_version="ts-v1",
-        )
-        if not rec.candidates:
-            raise bad_request(
-                "auto 模式下无法选择候选模型",
-                details={"project_id": str(ctx.project_id)},
-            )
-        requested_model = rec.candidates[0].logical_model
-        t_stage = _log_timing("5_auto_model_selection", t_stage, request_id, f"selected={requested_model}")
+    requested_model = await _resolve_final_model(
+        db=db,
+        redis=redis,
+        client=client,
+        current_user=current_user,
+        ctx=ctx,
+        assistant=assistant,
+        requested_model=requested_model,
+        user_text=content,
+        model_preset=model_preset,
+    )
+    t_stage = _log_timing("5_auto_model_selection", t_stage, request_id, f"selected={requested_model}")
 
     user_message = create_user_message(db, conversation=conv, content_text=content)
     assistant_message = create_assistant_message_placeholder_after_user(
@@ -1148,47 +1199,14 @@ async def stream_message_and_run_baseline(
     )
     t_stage = _log_timing("7_build_payload", t_stage, request_id, f"messages_count={len(payload.get('messages', []))}")
 
-    bridge_tools_by_agent: dict[str, list[dict[str, Any]]] = {}
-    openai_tools: list[dict[str, Any]] = []
-    tool_name_map: dict[str, tuple[str, str]] = {}  # openai_tool_name -> (agent_id, bridge_tool_name)
-
-    effective_bridge_agent_ids, tool_filters = _normalize_bridge_inputs(
+    t_bridge_start = time.perf_counter()
+    payload, effective_bridge_agent_ids, _tool_filters, openai_tools, tool_name_map = await _load_bridge_tools_for_payload(
+        base_payload=payload,
         bridge_agent_id=bridge_agent_id,
         bridge_agent_ids=bridge_agent_ids,
         bridge_tool_selections=bridge_tool_selections,
     )
-
-    if effective_bridge_agent_ids:
-        t_bridge_start = time.perf_counter()
-        try:
-            bridge = BridgeGatewayClient()
-            for aid in effective_bridge_agent_ids:
-                try:
-                    tools_resp = await bridge.list_tools(aid)
-                except Exception:
-                    continue
-                if isinstance(tools_resp, dict) and isinstance(tools_resp.get("tools"), list):
-                    tools = [t for t in tools_resp["tools"] if isinstance(t, dict)]
-                    allowlist = tool_filters.get(aid)
-                    if allowlist:
-                        tools = [
-                            t for t in tools
-                            if str(t.get("name") or "").strip() in allowlist
-                        ]
-                    if tools:
-                        bridge_tools_by_agent[aid] = tools
-
-            openai_tools, tool_name_map = bridge_tools_by_agent_to_openai_tools(
-                bridge_tools_by_agent=bridge_tools_by_agent,
-            )
-            if openai_tools:
-                payload = dict(payload)
-                payload["tools"] = openai_tools
-                payload["tool_choice"] = "auto"
-        except Exception:
-            # Best-effort：加载失败不阻塞基线流式
-            openai_tools = []
-        t_stage = _log_timing("8_load_bridge_tools", t_bridge_start, request_id, f"agents={len(effective_bridge_agent_ids)} tools={len(openai_tools)}")
+    t_stage = _log_timing("8_load_bridge_tools", t_bridge_start, request_id, f"agents={len(effective_bridge_agent_ids)} tools={len(openai_tools)}")
 
     run = create_run_record(
         db,
@@ -1233,6 +1251,8 @@ async def stream_message_and_run_baseline(
     errored = False
     t_stream_start = time.perf_counter()
     first_chunk_received = False
+    tool_loop_enabled = bool(effective_bridge_agent_ids and openai_tools)
+    stream_filter = _ToolTagStreamFilter(holdback_chars=64) if tool_loop_enabled else None
 
     async for item in execute_run_stream(
         db,
@@ -1254,20 +1274,24 @@ async def stream_message_and_run_baseline(
         if itype == "run.delta":
             delta = item.get("delta")
             if isinstance(delta, str) and delta:
+                emit_delta = delta
+                if stream_filter is not None:
+                    emit_delta = stream_filter.feed(delta)
                 if not first_chunk_received:
                     first_chunk_received = True
                     _log_timing("10_first_chunk_received", t_stream_start, request_id)
-                parts.append(delta)
-                yield _encode_sse_event(
-                    event_type="message.delta",
-                    data={
-                        "type": "message.delta",
-                        "conversation_id": str(conv.id),
-                        "assistant_message_id": str(assistant_message.id),
-                        "run_id": str(run.id),
-                        "delta": delta,
-                    },
-                )
+                if emit_delta:
+                    parts.append(emit_delta)
+                    yield _encode_sse_event(
+                        event_type="message.delta",
+                        data={
+                            "type": "message.delta",
+                            "conversation_id": str(conv.id),
+                            "assistant_message_id": str(assistant_message.id),
+                            "run_id": str(run.id),
+                            "delta": emit_delta,
+                        },
+                    )
         elif itype == "run.error":
             errored = True
             yield _encode_sse_event(
@@ -1283,6 +1307,21 @@ async def stream_message_and_run_baseline(
             )
             break
 
+    if stream_filter is not None:
+        tail = stream_filter.flush()
+        if tail:
+            parts.append(tail)
+            yield _encode_sse_event(
+                event_type="message.delta",
+                data={
+                    "type": "message.delta",
+                    "conversation_id": str(conv.id),
+                    "assistant_message_id": str(assistant_message.id),
+                    "run_id": str(run.id),
+                    "delta": tail,
+                },
+            )
+
     t_stage = _log_timing("11_stream_complete", t_stream_start, request_id, f"chunks={len(parts)} errored={errored}")
     run = refresh_run(db, run)
 
@@ -1290,53 +1329,16 @@ async def stream_message_and_run_baseline(
     if run.status == "succeeded" and effective_bridge_agent_ids and openai_tools:
         t_tool_loop_start = time.perf_counter()
 
-        async def _invoke_tool(req_id: str, agent_id: str, tool_name: str, arguments: dict[str, Any]):
-            return await invoke_bridge_tool_and_wait(
-                req_id=req_id,
-                agent_id=agent_id,
-                tool_name=tool_name,
-                arguments=arguments,
-                timeout_ms=60_000,
-                result_timeout_seconds=120.0,
-            )
-
-        async def _cancel_tool(req_id: str, agent_id: str, reason: str) -> None:
-            bridge = BridgeGatewayClient()
-            await bridge.cancel(req_id=req_id, agent_id=agent_id, reason=reason)
-
-        async def _call_model(follow_payload: dict[str, Any], idempotency_key: str) -> dict[str, Any] | None:
-            handler = RequestHandler(api_key=auth_key, db=db, redis=redis, client=client)
-            resp = await handler.handle(
-                payload=follow_payload,
-                requested_model=requested_model,
-                lookup_model_id=requested_model,
-                api_style="openai",
-                effective_provider_ids=effective_provider_ids,
-                session_id=str(conv.id),
-                assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
-                billing_reason="chat_tool_loop",
-                idempotency_key=idempotency_key or None,
-            )
-            try:
-                raw = resp.body.decode("utf-8", errors="ignore")
-                parsed = json.loads(raw)
-                if isinstance(parsed, dict):
-                    return parsed
-            except Exception:
-                return None
-            return None
-
-        runner = ToolLoopRunner(
-            invoke_tool=_invoke_tool,
-            call_model=_call_model,
-            cancel_tool=_cancel_tool,
-            event_sink=lambda et, p: _append_run_event_best_effort(
-                db,
-                redis=redis,
-                run_id=UUID(str(run.id)),
-                event_type=et,
-                payload=p,
-            ),
+        runner = _create_standard_tool_loop_runner(
+            db=db,
+            redis=redis,
+            client=client,
+            auth_key=auth_key,
+            effective_provider_ids=effective_provider_ids,
+            conversation_id=str(conv.id),
+            assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
+            requested_model=requested_model,
+            run_id=UUID(str(run.id)),
         )
 
         result = await runner.run(
@@ -1461,6 +1463,11 @@ async def regenerate_assistant_message(
     client: Any,
     current_user: AuthenticatedUser,
     assistant_message_id: UUID,
+    override_logical_model: str | None = None,
+    model_preset: dict | None = None,
+    bridge_agent_id: str | None = None,
+    bridge_agent_ids: list[str] | None = None,
+    bridge_tool_selections: list[dict] | None = None,
 ) -> tuple[UUID, UUID]:
     """
     基于已有的 user 消息重新生成 assistant 回复：
@@ -1500,64 +1507,19 @@ async def regenerate_assistant_message(
 
     # 复用上一条 run 的模型，否则按默认/项目回退
     last_run = get_last_run_for_message(db, user_msg.id)
-    requested_model = last_run.requested_logical_model if last_run else assistant.default_logical_model
-    if requested_model == PROJECT_INHERIT_SENTINEL:
-        requested_model = (getattr(ctx.api_key, "chat_default_logical_model", None) or "").strip() or DEFAULT_PROJECT_CHAT_MODEL
-    if requested_model == "auto":
-        cfg = get_or_default_project_eval_config(db, project_id=ctx.project_id)
-        candidates = list(cfg.candidate_logical_models or [])
-        if not candidates:
-            raise bad_request(
-                "当前助手默认模型为 auto，但项目未配置 candidate_logical_models",
-                details={"project_id": str(ctx.project_id)},
-            )
-        preset_payload: dict[str, Any] = {}
-        if isinstance(assistant.model_preset, dict):
-            preset_payload.update(assistant.model_preset)
-
-        selector = ProviderSelector(client=client, redis=redis, db=db)
-        candidates = await selector.check_candidate_availability(
-            candidate_logical_models=candidates,
-            effective_provider_ids=get_effective_provider_ids_for_user(
-                db,
-                user_id=UUID(str(current_user.id)),
-                api_key=ctx.api_key,
-                provider_scopes=list(
-                    getattr(get_or_default_project_eval_config(db, project_id=ctx.project_id), "provider_scopes", None)
-                    or DEFAULT_PROVIDER_SCOPES
-                ),
-            ),
-            api_style="openai",
-            user_id=UUID(str(current_user.id)),
-            is_superuser=current_user.is_superuser,
-            request_payload=preset_payload or None,
-            budget_credits=None,
-        )
-        if not candidates:
-            raise bad_request(
-                "auto 模式下无可用的候选模型",
-                details={"project_id": str(ctx.project_id)},
-            )
-        rec = recommend_challengers(
-            db,
-            project_id=ctx.project_id,
-            assistant_id=UUID(str(assistant.id)),
-            baseline_logical_model="auto",
-            user_text=user_text,
-            context_features=build_rule_context_features(user_text=user_text, request_payload=None),
-            candidate_logical_models=candidates,
-            k=1,
-            policy_version="ts-v1",
-        )
-        if not rec.candidates:
-            raise bad_request(
-                "auto 模式下无法选择候选模型",
-                details={"project_id": str(ctx.project_id)},
-            )
-        requested_model = rec.candidates[0].logical_model
-
-    if not requested_model:
-        raise bad_request("未指定模型")
+    requested_model = override_logical_model or (last_run.requested_logical_model if last_run else assistant.default_logical_model)
+    
+    requested_model = await _resolve_final_model(
+        db=db,
+        redis=redis,
+        client=client,
+        current_user=current_user,
+        ctx=ctx,
+        assistant=assistant,
+        requested_model=requested_model,
+        user_text=user_text,
+        model_preset=model_preset,
+    )
 
     payload = build_openai_request_payload(
         db,
@@ -1565,7 +1527,14 @@ async def regenerate_assistant_message(
         assistant=assistant,
         user_message=user_msg,
         requested_logical_model=requested_model,
-        model_preset_override=None,
+        model_preset_override=model_preset,
+    )
+
+    payload, effective_bridge_agent_ids, _tool_filters, openai_tools, tool_name_map = await _load_bridge_tools_for_payload(
+        base_payload=payload,
+        bridge_agent_id=bridge_agent_id,
+        bridge_agent_ids=bridge_agent_ids,
+        bridge_tool_selections=bridge_tool_selections,
     )
 
     effective_provider_ids = get_effective_provider_ids_for_user(
@@ -1599,9 +1568,56 @@ async def regenerate_assistant_message(
         user_message=user_msg,
         run=run,
         requested_logical_model=requested_model,
-        model_preset_override=None,
+        model_preset_override=model_preset,
         payload_override=payload,
     )
+
+    if run.status == "succeeded" and effective_bridge_agent_ids and openai_tools:
+        runner = _create_standard_tool_loop_runner(
+            db=db,
+            redis=redis,
+            client=client,
+            auth_key=auth_key,
+            effective_provider_ids=effective_provider_ids,
+            conversation_id=str(conv.id),
+            assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
+            requested_model=requested_model,
+            run_id=UUID(str(run.id)),
+        )
+
+        result = await runner.run(
+            conversation_id=str(conv.id),
+            run_id=str(run.id),
+            base_payload=payload,
+            first_response_payload=getattr(run, "response_payload", None),
+            effective_bridge_agent_ids=effective_bridge_agent_ids,
+            tool_name_map=tool_name_map,
+            idempotency_prefix=f"chat:{run.id}:tool_loop",
+        )
+
+        if result.did_run:
+            output_text = result.output_text
+            if result.error_code:
+                run.status = "failed"
+                run.error_code = result.error_code
+                run.error_message = result.error_message
+            elif output_text and output_text.strip():
+                run.output_text = output_text
+                run.output_preview = output_text.strip()[:380].rstrip()
+            else:
+                run.status = "failed"
+                run.error_code = "TOOL_LOOP_FAILED"
+                run.error_message = "tool loop finished without assistant content"
+
+            run.response_payload = {
+                "bridge": {
+                    "agent_ids": effective_bridge_agent_ids,
+                    "tool_invocations": result.tool_invocations,
+                },
+                "first_response": result.first_response_payload,
+                "final_response": result.final_response_payload,
+            }
+            run = persist_run(db, run)
 
     assistant_msg_new: Message | None = None
     if run.status == "succeeded" and run.output_text:

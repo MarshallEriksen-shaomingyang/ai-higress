@@ -31,6 +31,7 @@ import { conversationService } from "@/http/conversation";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useAssistant } from "@/lib/swr/use-assistants";
 import { useLogicalModels } from "@/lib/swr/use-logical-models";
+import { buildBridgeRequestFields } from "@/lib/chat/build-bridge-request";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useConversationPending } from "@/lib/hooks/use-conversation-pending";
 import {
@@ -71,6 +72,10 @@ export const MessageList = memo(function MessageList({
   const isPendingResponse =
     useChatStore((s) => s.conversationPending[conversationId]) ?? false;
   const { runWithPending } = useConversationPending();
+  const bridgeAgentIds = useChatStore((s) => s.conversationBridgeAgentIds[conversationId]) ?? [];
+  const bridgeToolSelections = useChatStore((s) => s.conversationBridgeToolSelections[conversationId]) ?? {};
+  const defaultBridgeToolSelections = useChatStore((s) => s.defaultBridgeToolSelections) ?? {};
+  const lastModelPreset = useChatStore((s) => s.conversationModelPresets[conversationId]);
 
   const deleteConversation = useDeleteConversation();
 
@@ -280,7 +285,16 @@ export const MessageList = memo(function MessageList({
         await runWithPending(
           conversationId,
           async () => {
-            await messageService.regenerateMessage(assistantMessageId);
+            const bridgeFields = buildBridgeRequestFields({
+              conversationBridgeAgentIds: bridgeAgentIds,
+              conversationBridgeToolSelections: bridgeToolSelections,
+              defaultBridgeToolSelections,
+            });
+            await messageService.regenerateMessage(assistantMessageId, {
+              override_logical_model: _overrideLogicalModel ?? undefined,
+              model_preset: lastModelPreset ?? undefined,
+              ...bridgeFields,
+            });
             await mutateMessages();
           },
           { minDurationMs: 250 }
@@ -296,7 +310,17 @@ export const MessageList = memo(function MessageList({
         setRegeneratingId(null);
       }
     },
-    [conversationId, mutateMessages, runWithPending, t]
+    [
+      conversationId,
+      mutateMessages,
+      runWithPending,
+      t,
+      _overrideLogicalModel,
+      bridgeAgentIds,
+      bridgeToolSelections,
+      defaultBridgeToolSelections,
+      lastModelPreset,
+    ]
   );
 
   const openRegenerateDialog = useCallback(
@@ -464,6 +488,12 @@ export const MessageList = memo(function MessageList({
         await messageService.sendMessage(tempConversation.conversation_id, {
           content: prompt,
           override_logical_model: compareSelectedModel,
+          model_preset: lastModelPreset ?? undefined,
+          ...buildBridgeRequestFields({
+            conversationBridgeAgentIds: bridgeAgentIds,
+            conversationBridgeToolSelections: bridgeToolSelections,
+            defaultBridgeToolSelections,
+          }),
           streaming: false,
         });
 
@@ -510,6 +540,10 @@ export const MessageList = memo(function MessageList({
     conversationId,
     assistant?.project_id,
     assistantId,
+    bridgeAgentIds,
+    bridgeToolSelections,
+    defaultBridgeToolSelections,
+    lastModelPreset,
     showError,
     t,
     updateVariant,

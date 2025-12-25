@@ -128,6 +128,16 @@ class MessageRegenerateResponse(BaseModel):
     baseline_run: RunSummary
 
 
+class MessageRegenerateRequest(BaseModel):
+    override_logical_model: str | None = Field(default=None, min_length=1, max_length=128)
+    model_preset: dict | None = None
+    bridge_agent_id: str | None = Field(default=None, min_length=1, max_length=128)
+    bridge_agent_ids: list[str] | None = Field(default=None, max_length=5)
+    bridge_tool_selections: list[BridgeToolSelection] | None = Field(default=None, max_length=5)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class RunSummary(BaseModel):
     run_id: UUID
     requested_logical_model: str

@@ -61,12 +61,6 @@ const processQueue = (error: any, token: string | null = null) => {
 
 // 刷新 token 的函数
 const refreshAccessToken = async (): Promise<string> => {
-  const refreshToken = tokenManager.getRefreshToken();
-  
-  if (!refreshToken) {
-    throw new Error('No refresh token available');
-  }
-
   try {
     // 使用 axios 直接调用后端刷新接口（避免实例拦截器循环）
     const response = await axios.post<{ access_token: string; refresh_token: string | null }>(
