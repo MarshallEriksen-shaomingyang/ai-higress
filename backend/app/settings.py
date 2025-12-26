@@ -795,6 +795,40 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Generated images (text-to-image) OSS storage configuration
+    image_oss_endpoint: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_ENDPOINT",
+        description="阿里 OSS Endpoint，例如 https://oss-cn-hangzhou.aliyuncs.com",
+    )
+    image_oss_bucket: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_BUCKET",
+        description="阿里 OSS Bucket 名称（建议私有读）",
+    )
+    image_oss_access_key_id: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_ACCESS_KEY_ID",
+        description="阿里 OSS AccessKeyId（用于后端上传与读取对象）",
+    )
+    image_oss_access_key_secret: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_ACCESS_KEY_SECRET",
+        description="阿里 OSS AccessKeySecret（用于后端上传与读取对象）",
+    )
+    image_oss_prefix: str = Field(
+        default="generated-images",
+        alias="IMAGE_OSS_PREFIX",
+        description="文生图对象 key 前缀，例如 generated-images",
+    )
+    image_signed_url_ttl_seconds: int = Field(
+        default=60 * 60,
+        alias="IMAGE_SIGNED_URL_TTL_SECONDS",
+        description="网关短链 URL 有效期（秒），用于文生图 response_format=url",
+        ge=60,
+        le=7 * 24 * 60 * 60,
+    )
+
     @property
     def enable_security_middleware(self) -> bool:
         """

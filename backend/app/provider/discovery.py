@@ -88,6 +88,23 @@ def _infer_capabilities(raw_model: dict[str, Any]) -> list[ModelCapability]:
 
     if not caps:
         caps = [ModelCapability.CHAT]
+
+    # Heuristic: infer image generation capability from model id/name when
+    # upstream does not provide explicit capabilities (common for /models lists).
+    try:
+        model_id = raw_model.get("id") or raw_model.get("model_id") or ""
+    except Exception:
+        model_id = ""
+    model_id_str = str(model_id or "").lower()
+    if model_id_str:
+        is_openai_image = model_id_str.startswith("gpt-image") or model_id_str.startswith("dall-e")
+        is_google_image = (
+            ("gemini" in model_id_str and "image" in model_id_str)
+            or "flash-image" in model_id_str
+            or model_id_str.startswith("imagen")
+        )
+        if (is_openai_image or is_google_image) and ModelCapability.IMAGE_GENERATION not in caps:
+            caps.append(ModelCapability.IMAGE_GENERATION)
     return caps
 
 

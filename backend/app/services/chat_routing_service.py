@@ -1535,6 +1535,7 @@ async def _build_dynamic_logical_model_for_group(
 
     # Discover all providers that advertise this model.
     candidate_upstreams: list[PhysicalModel] = []
+    merged_capabilities: set[ModelCapability] = set()
     now = time.time()
 
     for cfg in providers:
@@ -1556,6 +1557,30 @@ async def _build_dynamic_logical_model_for_group(
             continue
 
         matched_full_id: str | None = None
+        matched_caps: set[ModelCapability] | None = None
+
+        caps_by_model_id: dict[str, set[ModelCapability]] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            mid_val = item.get("id") or item.get("model_id")
+            if not isinstance(mid_val, str) or not mid_val:
+                continue
+            raw_caps = item.get("capabilities") or []
+            caps: set[ModelCapability] = set()
+            if isinstance(raw_caps, list):
+                for c in raw_caps:
+                    try:
+                        caps.add(ModelCapability(str(c)))
+                    except ValueError:
+                        continue
+            elif isinstance(raw_caps, str):
+                try:
+                    caps.add(ModelCapability(raw_caps))
+                except ValueError:
+                    pass
+            if caps:
+                caps_by_model_id[mid_val] = caps
 
         for item in items:
             mid: str | None = None
@@ -1579,6 +1604,7 @@ async def _build_dynamic_logical_model_for_group(
                 or (target_base is not None and target_base == base_id)
             ):
                 matched_full_id = mid
+                matched_caps = caps_by_model_id.get(mid)
                 break
 
         # Fallback: try to resolve via per-provider alias mapping when the
@@ -1604,6 +1630,7 @@ async def _build_dynamic_logical_model_for_group(
 
                 if alias_target in advertised_ids:
                     matched_full_id = alias_target
+                    matched_caps = caps_by_model_id.get(alias_target)
                 else:
                     logger.warning(
                         "Alias '%s' for provider %s maps to '%s' which is not present "
@@ -1636,14 +1663,19 @@ async def _build_dynamic_logical_model_for_group(
                 api_style=upstream_style,
             )
         )
+        if matched_caps:
+            merged_capabilities.update(matched_caps)
     if not candidate_upstreams:
         return None
+
+    if not merged_capabilities:
+        merged_capabilities = {ModelCapability.CHAT}
 
     return LogicalModel(
         logical_id=lookup_model_id,
         display_name=lookup_model_id,
         description=f"Dynamic logical model for '{lookup_model_id}'",
-        capabilities=[ModelCapability.CHAT],
+        capabilities=sorted(merged_capabilities, key=lambda c: c.value),
         upstreams=candidate_upstreams,
         enabled=True,
         updated_at=now,

@@ -19,8 +19,11 @@ import { buildModelPreset } from "./chat-input/model-preset";
 import { encodeImageFileToCompactDataUrl } from "./chat-input/image-encoding";
 import { composeMessageContent, isMessageTooLong } from "./chat-input/message-content";
 import type { ModelParameters } from "./chat-input/types";
+import { ImageGenParamsBar, type ImageGenParams } from "./chat-input/image-gen-params-bar";
+import type { ComposerMode } from "./chat-input/chat-toolbar";
 
 export type { ModelParameters } from "./chat-input/types";
+export type { ImageGenParams };
 
 // Slate 类型定义
 type CustomElement = 
@@ -44,6 +47,13 @@ export interface SlateChatInputProps {
   conversationId: string;
   assistantId?: string;
   disabled?: boolean;
+  
+  // Mode support
+  mode?: ComposerMode;
+  onModeChange?: (mode: ComposerMode) => void;
+  imageGenParams?: ImageGenParams;
+  onImageGenParamsChange?: (params: ImageGenParams) => void;
+
   onSend?:
     | ((
         content: string,
@@ -58,6 +68,12 @@ export interface SlateChatInputProps {
           parameters: ModelParameters;
         }
       ) => Promise<void>);
+  
+  onImageSend?: (payload: {
+    prompt: string;
+    params: ImageGenParams;
+  }) => Promise<void>;
+
   onClearHistory?: () => Promise<void>;
   className?: string;
 }
@@ -65,7 +81,12 @@ export interface SlateChatInputProps {
 export function SlateChatInput({
   conversationId,
   disabled = false,
+  mode = "chat",
+  onModeChange,
+  imageGenParams,
+  onImageGenParamsChange,
   onSend,
+  onImageSend,
   onClearHistory,
   className,
 }: SlateChatInputProps) {
@@ -206,27 +227,38 @@ export function SlateChatInput({
     setIsSending(true);
 
     try {
-      const composed = composeMessageContent(content, images);
-      if (!composed) {
-        toast.error(t("chat.message.input_placeholder"));
-        return;
-      }
-      if (isMessageTooLong(composed)) {
-        toast.error(t("chat.errors.message_too_long"));
-        return;
-      }
+      if (mode === "image") {
+         if (!onImageSend || !imageGenParams) {
+           console.error("Image generation handler or params missing");
+           return;
+         }
+         await onImageSend({
+           prompt: content,
+           params: imageGenParams,
+         });
+      } else {
+        const composed = composeMessageContent(content, images);
+        if (!composed) {
+          toast.error(t("chat.message.input_placeholder"));
+          return;
+        }
+        if (isMessageTooLong(composed)) {
+          toast.error(t("chat.errors.message_too_long"));
+          return;
+        }
 
-      const model_preset = buildModelPreset(parameters);
-      if (onSend) {
-        if (onSend.length <= 1) {
-          await (onSend as any)({
-            content: composed,
-            images,
-            model_preset,
-            parameters,
-          });
-        } else {
-          await (onSend as any)(composed, images, parameters);
+        const model_preset = buildModelPreset(parameters);
+        if (onSend) {
+          if (onSend.length <= 1) {
+            await (onSend as any)({
+              content: composed,
+              images,
+              model_preset,
+              parameters,
+            });
+          } else {
+            await (onSend as any)(composed, images, parameters);
+          }
         }
       }
       
@@ -238,7 +270,7 @@ export function SlateChatInput({
     } finally {
       setIsSending(false);
     }
-  }, [getTextContent, images, disabled, onSend, parameters, clearEditor, t]);
+  }, [getTextContent, images, disabled, onSend, onImageSend, parameters, clearEditor, t, mode, imageGenParams]);
 
   // 清空历史记录
   const handleClearHistory = useCallback(async () => {
@@ -296,13 +328,15 @@ export function SlateChatInput({
     <div className={cn("relative flex h-full flex-col bg-background", className)}>
       <div className="flex min-h-0 flex-1 flex-col justify-end px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-3">
-          <ImagePreviewGrid
-            images={images}
-            disabled={disabled || isSending}
-            onRemoveImage={removeImage}
-            uploadedAltPrefix={t("chat.message.uploaded_image")}
-            removeLabel={t("chat.message.remove_image")}
-          />
+          {mode === "chat" && (
+            <ImagePreviewGrid
+              images={images}
+              disabled={disabled || isSending}
+              onRemoveImage={removeImage}
+              uploadedAltPrefix={t("chat.message.uploaded_image")}
+              removeLabel={t("chat.message.remove_image")}
+            />
+          )}
 
           <div
             className={cn(
@@ -312,6 +346,14 @@ export function SlateChatInput({
               "focus-within:ring-2 focus-within:ring-ring/40"
             )}
           >
+            {mode === "image" && imageGenParams && onImageGenParamsChange && (
+              <ImageGenParamsBar
+                params={imageGenParams}
+                onChange={onImageGenParamsChange}
+                disabled={disabled || isSending}
+              />
+            )}
+
             <ChatEditor
               editor={editor}
               editorRef={editorRef}
@@ -319,7 +361,9 @@ export function SlateChatInput({
               disabled={disabled}
               isSending={isSending}
               placeholder={
-                disabled ? t("chat.conversation.archived_notice") : t("chat.message.input_placeholder")
+                disabled 
+                  ? t("chat.conversation.archived_notice") 
+                  : (mode === "image" ? t("chat.image_gen.prompt") : t("chat.message.input_placeholder"))
               }
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
@@ -327,6 +371,8 @@ export function SlateChatInput({
             />
 
             <ChatToolbar
+              mode={mode}
+              onModeChange={onModeChange}
               conversationId={conversationId}
               disabled={disabled}
               isSending={isSending}
@@ -346,7 +392,7 @@ export function SlateChatInput({
           </div>
 
           <div className="text-xs text-muted-foreground text-center">
-            {isSending ? t("chat.message.sending") : sendHint}
+            {isSending ? (mode === "image" ? t("chat.image_gen.generating") : t("chat.message.sending")) : sendHint}
           </div>
         </div>
       </div>

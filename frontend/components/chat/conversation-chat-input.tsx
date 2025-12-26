@@ -1,11 +1,17 @@
 "use client";
 
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { toast } from "sonner";
 
-import { SlateChatInput } from "@/components/chat/slate-chat-input";
+import { SlateChatInput, type ImageGenParams } from "@/components/chat/slate-chat-input";
 import { buildBridgeRequestFields } from "@/lib/chat/build-bridge-request";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useClearConversationMessages, useSendMessage } from "@/lib/swr/use-messages";
+import { useImageGenerations } from "@/lib/swr/use-image-generations";
+import { useImageGenStore } from "@/lib/stores/image-generation-store";
+import type { ComposerMode } from "@/components/chat/chat-input/chat-toolbar";
+import { useI18n } from "@/lib/i18n-context";
 
 export const ConversationChatInput = memo(function ConversationChatInput({
   conversationId,
@@ -20,6 +26,7 @@ export const ConversationChatInput = memo(function ConversationChatInput({
   disabled?: boolean;
   className?: string;
 }) {
+  const { t } = useI18n();
   const bridgeToolSelections =
     useChatStore((s) => s.conversationBridgeToolSelections[conversationId]) ?? {};
   const defaultBridgeToolSelections =
@@ -31,6 +38,18 @@ export const ConversationChatInput = memo(function ConversationChatInput({
 
   const sendMessage = useSendMessage(conversationId, assistantId, overrideLogicalModel);
   const clearConversationMessages = useClearConversationMessages(assistantId);
+
+  // Image Generation State
+  const [mode, setMode] = useState<ComposerMode>("chat");
+  const [imageGenParams, setImageGenParams] = useState<ImageGenParams>({
+    model: "",
+    size: "1024x1024",
+    n: 1,
+  });
+
+  const { generateImage } = useImageGenerations();
+  const addImageGenTask = useImageGenStore((s) => s.addTask);
+  const updateImageGenTask = useImageGenStore((s) => s.updateTask);
 
   const handleSend = useCallback(
     async (payload: { content: string; model_preset?: Record<string, number> }) => {
@@ -75,6 +94,46 @@ export const ConversationChatInput = memo(function ConversationChatInput({
     [handleSend]
   );
 
+  const handleImageSend = useCallback(
+    async (payload: { prompt: string; params: ImageGenParams }) => {
+      const taskId = uuidv4();
+      const createdAt = Date.now();
+
+      addImageGenTask({
+        id: taskId,
+        conversationId,
+        status: "pending",
+        prompt: payload.prompt,
+        params: {
+          model: payload.params.model,
+          prompt: payload.prompt,
+          n: payload.params.n,
+          size: payload.params.size,
+        },
+        createdAt,
+      });
+
+      try {
+        const result = await generateImage({
+          model: payload.params.model,
+          prompt: payload.prompt,
+          n: payload.params.n,
+          size: payload.params.size,
+        });
+        updateImageGenTask(taskId, { status: "success", result });
+        toast.success(t("chat.image_gen.success"));
+      } catch (error: any) {
+        console.error("Image generation failed", error);
+        updateImageGenTask(taskId, {
+          status: "failed",
+          error: error?.message || t("chat.image_gen.failed"),
+        });
+        toast.error(t("chat.image_gen.failed"));
+      }
+    },
+    [conversationId, addImageGenTask, updateImageGenTask, generateImage, t]
+  );
+
   return (
     <SlateChatInput
       conversationId={conversationId}
@@ -83,6 +142,11 @@ export const ConversationChatInput = memo(function ConversationChatInput({
       className={className}
       onSend={handleSlateSend}
       onClearHistory={handleClearHistory}
+      mode={mode}
+      onModeChange={setMode}
+      imageGenParams={imageGenParams}
+      onImageGenParamsChange={setImageGenParams}
+      onImageSend={handleImageSend}
     />
   );
 });

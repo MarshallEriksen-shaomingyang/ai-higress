@@ -1143,6 +1143,7 @@
 - `POST /v1/chat/completions`
 - `POST /v1/responses`
 - `POST /v1/messages`
+- `POST /v1/images/generations`
 
 会返回 `402 Payment Required`，错误体示例：
 
@@ -1162,6 +1163,52 @@
 >
 > 说明：当 `stream=true` 或请求头 `Accept: text/event-stream` 触发流式响应时，若在开始推流前发生可预判错误
 > （例如模型不可用、或仅支持 `/responses` 入口），网关仍会返回常规的 `4xx` JSON 错误体（而不是 SSE）。
+
+---
+
+## 图像生成（文生图）
+
+### 1. 生成图片
+
+**接口**: `POST /v1/images/generations`
+
+**描述**: OpenAI 兼容的文生图接口（固定对外为 OpenAI Images API 格式），根据 `model` 自动选择上游链路：
+- OpenAI 系模型（如 `gpt-image-*` / `dall-e-*`）：走 OpenAI-compatible Provider 的 `/v1/images/generations`；
+- Google 系模型（如 `gemini-*-*-image` / `*-flash-image` / `imagen*`）：走 Gemini Developer API `generateContent`（`v1beta/models/{model}:generateContent`）并将结果转换为 OpenAI Images 响应结构。
+
+**认证**: API Key（`Authorization: Bearer <token>`）
+
+**返回字段说明**:
+- 当 `response_format="b64_json"`：`data[*].b64_json` 返回 base64 图片；
+- 当 `response_format="url"`：
+  - 若配置了阿里 OSS（`IMAGE_OSS_*`），网关会把图片写入 OSS 私有桶，并返回网关域名下的签名短链 URL（`/media/images/...`）；
+  - 若未配置 OSS，网关会退化为 `data:image/...;base64,...` 的 Data URL（兼容前端直接渲染）。
+
+**请求体（示例）**:
+```json
+{
+  "prompt": "A cute cat, studio lighting",
+  "model": "gpt-image-1",
+  "n": 1,
+  "size": "1024x1024",
+  "response_format": "b64_json"
+}
+```
+
+**响应（示例）**:
+```json
+{
+  "created": 1700000000,
+  "data": [
+    {
+      "b64_json": "BASE64_IMAGE_DATA",
+      "revised_prompt": "A cute cat, studio lighting"
+    }
+  ]
+}
+```
+
+
 
 ### 计费规则
 
@@ -2931,7 +2978,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
       "display_name": "string",
       "description": "string",
       "enabled": true,
-      "capabilities": ["chat", "completion"],
+      "capabilities": ["chat", "completion", "image_generation"],
       "strategy": {
         "name": "balanced",
         "description": "Default routing strategy",
@@ -2983,7 +3030,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
   "display_name": "string",
   "description": "string",
   "enabled": true,
-  "capabilities": ["chat", "completion"],
+  "capabilities": ["chat", "completion", "image_generation"],
   "strategy": {
     "name": "balanced",
     "description": "Default routing strategy",

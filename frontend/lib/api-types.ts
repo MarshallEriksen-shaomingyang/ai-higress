@@ -362,7 +362,8 @@ export type ModelCapability =
   | "embedding"
   | "vision"
   | "audio"
-  | "function_calling";
+  | "function_calling"
+  | "image_generation";
 
 export type ApiStyle = "openai" | "responses" | "claude";
 
@@ -397,6 +398,30 @@ export interface LogicalModelsResponse {
 
 export interface LogicalModelUpstreamsResponse {
   upstreams: LogicalModelUpstream[];
+}
+
+// ============= 图片生成 / Image Generation =============
+
+export interface ImageGenerationRequest {
+  model: string;
+  prompt: string;
+  n?: number;
+  size?: string;
+  response_format?: "url" | "b64_json";
+  quality?: "standard" | "hd";
+  style?: "vivid" | "natural";
+  user?: string;
+}
+
+export interface ImageGenerationImage {
+  url?: string;
+  b64_json?: string;
+  revised_prompt?: string;
+}
+
+export interface ImageGenerationResponse {
+  created: number;
+  data: ImageGenerationImage[];
 }
 
 export type UpdateGatewayConfigRequest = GatewayConfig;
