@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n-context";
 import { useChatLayoutStore } from "@/lib/stores/chat-layout-store";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useConversationComposer } from "@/lib/hooks/use-conversation-composer";
 import { useAssistant } from "@/lib/swr/use-assistants";
+import { useLogicalModels } from "@/lib/swr/use-logical-models";
 import { useProjectChatSettings } from "@/lib/swr/use-project-chat-settings";
 import { useSelectableChatModels } from "@/lib/swr/use-selectable-chat-models";
 
@@ -41,6 +43,7 @@ export function ConversationHeader({
   const { t } = useI18n();
   const isImmersive = useChatLayoutStore((s) => s.isImmersive);
   const setIsImmersive = useChatLayoutStore((s) => s.setIsImmersive);
+  const { mode, image, setImageParams } = useConversationComposer(conversationId);
 
   const {
     conversationModelOverrides,
@@ -54,6 +57,7 @@ export function ConversationHeader({
 
   const { assistant } = useAssistant(assistantId);
   const { settings: projectSettings } = useProjectChatSettings(selectedProjectId);
+  const { models: logicalModels } = useLogicalModels(selectedProjectId);
 
   const currentOverride = conversationModelOverrides[conversationId] ?? null;
 
@@ -77,6 +81,40 @@ export function ConversationHeader({
     if (models.some((model) => model.value === effectiveSelectedModel)) return models;
     return [{ value: effectiveSelectedModel, label: effectiveSelectedModel }, ...models];
   }, [effectiveSelectedModel, filterOptions, modelSearch]);
+
+  const imageModels = useMemo(() => {
+    return logicalModels
+      .filter((m) => m.enabled && m.capabilities.includes("image_generation"))
+      .map((m) => ({
+        value: m.logical_id,
+        label: m.display_name || m.logical_id,
+      }));
+  }, [logicalModels]);
+
+  const filteredImageModels = useMemo(() => {
+    const needle = modelSearch.trim().toLowerCase();
+    const options = needle
+      ? imageModels.filter((m) => m.label.toLowerCase().includes(needle))
+      : imageModels;
+    if (!image.model) return options;
+    if (options.some((m) => m.value === image.model)) return options;
+    return [{ value: image.model, label: image.model }, ...options];
+  }, [image.model, imageModels, modelSearch]);
+
+  useEffect(() => {
+    if (mode !== "image") return;
+    if (!imageModels.length) return;
+    const selected = image.model;
+    const valid = selected && imageModels.some((m) => m.value === selected);
+    if (valid) return;
+    const first = imageModels[0];
+    if (!first) return;
+    setImageParams({ model: first.value });
+  }, [image.model, imageModels, mode, setImageParams]);
+
+  useEffect(() => {
+    setModelSearch("");
+  }, [mode]);
 
   const conversationPending =
     useChatStore((s) => s.conversationPending[conversationId]) ?? false;
@@ -160,40 +198,70 @@ export function ConversationHeader({
               : t("chat.action.enter_immersive")}
           </TooltipContent>
         </Tooltip>
-        
+
         {/* 模型选择器 - 移动端缩小 */}
         <div className="w-[140px] md:w-[220px]">
-          <Select
-            value={effectiveSelectedModel}
-            onValueChange={(value) => {
-              setConversationModelOverride(
-                conversationId,
-                value === effectiveAssistantDefaultModel ? null : value
-              );
-            }}
-            onOpenChange={(open) => {
-              if (!open) setModelSearch("");
-            }}
-          >
-            <SelectTrigger className="h-8 rounded-full border-border/40 bg-muted/20 px-3 text-xs font-medium shadow-sm transition-colors hover:bg-muted/35 focus:ring-1 focus:ring-ring/30 focus:ring-offset-0 md:h-9 md:text-sm">
-              <SelectValue placeholder={t("chat.header.model_placeholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              <div className="p-2 pb-1">
-                <Input
-                  value={modelSearch}
-                  onChange={(event) => setModelSearch(event.target.value)}
-                  placeholder={t("chat.model.search_placeholder")}
-                  className="h-9"
-                />
-              </div>
-              {filteredModels.map((model) => (
-                <SelectItem key={model.value} value={model.value} textValue={model.label}>
-                  {model.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {mode === "image" ? (
+            <Select
+              value={image.model}
+              onValueChange={(value) => setImageParams({ model: value })}
+              onOpenChange={(open) => {
+                if (!open) setModelSearch("");
+              }}
+              disabled={!imageModels.length}
+            >
+              <SelectTrigger className="h-8 rounded-full border-border/40 bg-muted/20 px-3 text-xs font-medium shadow-sm transition-colors hover:bg-muted/35 focus:ring-1 focus:ring-ring/30 focus:ring-offset-0 md:h-9 md:text-sm">
+                <SelectValue placeholder={t("chat.image_gen.select_model")} />
+              </SelectTrigger>
+              <SelectContent>
+                <div className="p-2 pb-1">
+                  <Input
+                    value={modelSearch}
+                    onChange={(event) => setModelSearch(event.target.value)}
+                    placeholder={t("chat.model.search_placeholder")}
+                    className="h-9"
+                  />
+                </div>
+                {filteredImageModels.map((model) => (
+                  <SelectItem key={model.value} value={model.value} textValue={model.label}>
+                    {model.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Select
+              value={effectiveSelectedModel}
+              onValueChange={(value) => {
+                setConversationModelOverride(
+                  conversationId,
+                  value === effectiveAssistantDefaultModel ? null : value
+                );
+              }}
+              onOpenChange={(open) => {
+                if (!open) setModelSearch("");
+              }}
+            >
+              <SelectTrigger className="h-8 rounded-full border-border/40 bg-muted/20 px-3 text-xs font-medium shadow-sm transition-colors hover:bg-muted/35 focus:ring-1 focus:ring-ring/30 focus:ring-offset-0 md:h-9 md:text-sm">
+                <SelectValue placeholder={t("chat.header.model_placeholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                <div className="p-2 pb-1">
+                  <Input
+                    value={modelSearch}
+                    onChange={(event) => setModelSearch(event.target.value)}
+                    placeholder={t("chat.model.search_placeholder")}
+                    className="h-9"
+                  />
+                </div>
+                {filteredModels.map((model) => (
+                  <SelectItem key={model.value} value={model.value} textValue={model.label}>
+                    {model.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
     </div>

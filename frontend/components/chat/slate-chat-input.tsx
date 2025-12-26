@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import { createEditor, Descendant, Editor, Transforms, Element as SlateElement } from "slate";
 import { withReact, ReactEditor } from "slate-react";
@@ -19,8 +19,9 @@ import { buildModelPreset } from "./chat-input/model-preset";
 import { encodeImageFileToCompactDataUrl } from "./chat-input/image-encoding";
 import { composeMessageContent, isMessageTooLong } from "./chat-input/message-content";
 import type { ModelParameters } from "./chat-input/types";
-import { ImageGenParamsBar, type ImageGenParams } from "./chat-input/image-gen-params-bar";
+import { type ImageGenParams } from "./chat-input/image-gen-params-bar";
 import type { ComposerMode } from "./chat-input/chat-toolbar";
+import { ImageGenSettingsDrawer } from "./chat-input/image-gen-settings-drawer";
 
 export type { ModelParameters } from "./chat-input/types";
 export type { ImageGenParams };
@@ -55,6 +56,7 @@ export interface SlateChatInputProps {
   imageGenParams?: ImageGenParams;
   onImageGenParamsChange?: (params: ImageGenParams) => void;
   hideModeSwitcher?: boolean;
+  imageSettingsShowModelSelect?: boolean;
 
   onSend?:
     | ((
@@ -89,6 +91,7 @@ export function SlateChatInput({
   imageGenParams,
   onImageGenParamsChange,
   hideModeSwitcher = false,
+  imageSettingsShowModelSelect = true,
   onSend,
   onImageSend,
   onClearHistory,
@@ -102,6 +105,7 @@ export function SlateChatInput({
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
+  const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
 
   // 模型参数状态（持久化）：用户设置后后续每次发送都会沿用
   const parameters = useChatModelParametersStore((s) => s.parameters);
@@ -328,6 +332,12 @@ export function SlateChatInput({
     [handleSend, preferences.sendShortcut]
   );
 
+  useEffect(() => {
+    if (mode !== "image" && imageSettingsOpen) {
+      setImageSettingsOpen(false);
+    }
+  }, [imageSettingsOpen, mode]);
+
   return (
     <div className={cn("relative flex h-full flex-col bg-background", className)}>
       <div className="flex min-h-0 flex-1 flex-col justify-end px-4 pt-1  pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
@@ -350,15 +360,6 @@ export function SlateChatInput({
               "focus-within:ring-2 focus-within:ring-ring/40"
             )}
           >
-            {mode === "image" && imageGenParams && onImageGenParamsChange && (
-              <ImageGenParamsBar
-                projectId={projectId}
-                params={imageGenParams}
-                onChange={onImageGenParamsChange}
-                disabled={disabled || isSending}
-              />
-            )}
-
             <ChatEditor
               editor={editor}
               editorRef={editorRef}
@@ -372,7 +373,6 @@ export function SlateChatInput({
               }
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              className="flex-1 min-h-0"
             />
 
             <ChatToolbar
@@ -394,6 +394,11 @@ export function SlateChatInput({
               }}
               onFilesSelected={handleFilesSelected}
               hideModeSwitcher={hideModeSwitcher}
+              onOpenImageSettings={
+                mode === "image" && imageGenParams && onImageGenParamsChange
+                  ? () => setImageSettingsOpen(true)
+                  : undefined
+              }
             />
           </div>
 
@@ -402,6 +407,18 @@ export function SlateChatInput({
           </div>
         </div>
       </div>
+
+      {imageGenParams && onImageGenParamsChange ? (
+        <ImageGenSettingsDrawer
+          projectId={projectId}
+          open={imageSettingsOpen}
+          onOpenChange={setImageSettingsOpen}
+          params={imageGenParams}
+          onChange={onImageGenParamsChange}
+          disabled={disabled || isSending}
+          showModelSelect={imageSettingsShowModelSelect}
+        />
+      ) : null}
     </div>
   );
 }

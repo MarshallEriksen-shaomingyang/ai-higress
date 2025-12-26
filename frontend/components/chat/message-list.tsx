@@ -22,6 +22,7 @@ import { ImageGenerationMessageItem } from "./image-generation-message-item";
 import { ErrorAlert } from "./error-alert";
 import { AddComparisonDialog } from "./add-comparison-dialog";
 import { ConversationPendingIndicator } from "./conversation-pending-indicator";
+import { ChatWelcomeContent } from "./chat-welcome-content";
 import { useI18n } from "@/lib/i18n-context";
 import { useErrorDisplay } from "@/lib/errors/error-display";
 import { useMessages } from "@/lib/swr/use-messages";
@@ -40,7 +41,7 @@ import {
   useChatComparisonStore,
   type ComparisonVariant,
 } from "@/lib/stores/chat-comparison-store";
-import type { Message, RunSummary, UserInfo } from "@/lib/api-types";
+import type { Message, RunSummary } from "@/lib/api-types";
 
 export interface MessageListProps {
   assistantId: string;
@@ -613,17 +614,8 @@ export const MessageList = memo(function MessageList({
 
   if (!isLoading && finalRenderItems.length === 0) {
     return (
-      <div 
-        className="flex flex-col items-center justify-center h-full text-center p-8"
-        role="status"
-        aria-live="polite"
-      >
-        <div className="text-muted-foreground mb-2">
-          {t("chat.message.empty")}
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {t("chat.message.empty_description")}
-        </div>
+      <div className="h-full overflow-y-auto" role="status" aria-live="polite">
+        <ChatWelcomeContent />
       </div>
     );
   }

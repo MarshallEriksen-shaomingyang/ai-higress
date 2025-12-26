@@ -1,6 +1,13 @@
 "use client";
 
-import { Send, Loader2, Plus, Image as ImageIcon, MessageSquare } from "lucide-react";
+import {
+  Send,
+  Loader2,
+  Plus,
+  Image as ImageIcon,
+  MessageSquare,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,8 +22,10 @@ import { ModelParametersPopover } from "@/components/chat/chat-input/model-param
 import { McpSelector } from "@/components/chat/chat-input/mcp-selector";
 import { useI18n } from "@/lib/i18n-context";
 import type { ModelParameters } from "@/components/chat/chat-input/types";
+import { composerModeLabelKeys, composerModes } from "@/lib/chat/composer-modes";
+import type { ComposerMode } from "@/lib/chat/composer-modes";
 
-export type ComposerMode = "chat" | "image";
+export type { ComposerMode } from "@/lib/chat/composer-modes";
 
 interface ChatToolbarProps {
   mode?: ComposerMode;
@@ -35,6 +44,7 @@ interface ChatToolbarProps {
   onResetParameters: () => void;
   onFilesSelected: (files: FileList | null) => Promise<void>;
   hideModeSwitcher?: boolean;
+  onOpenImageSettings?: () => void;
 }
 
 export function ChatToolbar({
@@ -54,8 +64,13 @@ export function ChatToolbar({
   onResetParameters,
   onFilesSelected,
   hideModeSwitcher = false,
+  onOpenImageSettings,
 }: ChatToolbarProps) {
   const { t } = useI18n();
+  const modeIcons: Record<ComposerMode, typeof MessageSquare> = {
+    chat: MessageSquare,
+    image: ImageIcon,
+  };
 
   return (
     <div className="flex items-center justify-between px-2 py-2 border-t bg-muted/30">
@@ -74,14 +89,15 @@ export function ChatToolbar({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => onModeChange?.("chat")}>
-                <MessageSquare className="size-4 mr-2" />
-                {t("chat.image_gen.mode_chat")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onModeChange?.("image")}>
-                <ImageIcon className="size-4 mr-2" />
-                {t("chat.image_gen.mode_image")}
-              </DropdownMenuItem>
+              {composerModes.map((m) => {
+                const Icon = modeIcons[m];
+                return (
+                  <DropdownMenuItem key={m} onClick={() => onModeChange?.(m)}>
+                    <Icon className="size-4 mr-2" />
+                    {t(composerModeLabelKeys[m])}
+                  </DropdownMenuItem>
+                );
+              })}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -92,22 +108,37 @@ export function ChatToolbar({
           uploadLabel={t("chat.message.upload_image")}
         />
 
-        <ModelParametersPopover
-          disabled={disabled || isSending}
-          parameters={parameters}
-          onParametersChange={onParametersChange}
-          onReset={onResetParameters}
-          title={t("chat.message.model_parameters")}
-          resetLabel={t("chat.message.reset_parameters")}
-          labels={{
-            temperature: t("chat.message.parameter_temperature"),
-            top_p: t("chat.message.parameter_top_p"),
-            frequency_penalty: t("chat.message.parameter_frequency_penalty"),
-            presence_penalty: t("chat.message.parameter_presence_penalty"),
-          }}
-        />
+        {mode === "chat" ? (
+          <ModelParametersPopover
+            disabled={disabled || isSending}
+            parameters={parameters}
+            onParametersChange={onParametersChange}
+            onReset={onResetParameters}
+            title={t("chat.message.model_parameters")}
+            resetLabel={t("chat.message.reset_parameters")}
+            labels={{
+              temperature: t("chat.message.parameter_temperature"),
+              top_p: t("chat.message.parameter_top_p"),
+              frequency_penalty: t("chat.message.parameter_frequency_penalty"),
+              presence_penalty: t("chat.message.parameter_presence_penalty"),
+            }}
+          />
+        ) : null}
 
         <McpSelector conversationId={conversationId} disabled={disabled} isSending={isSending} />
+
+        {mode === "image" && onOpenImageSettings ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onOpenImageSettings}
+            disabled={disabled || isSending}
+            title={t("chat.image_gen.params")}
+            aria-label={t("chat.image_gen.params")}
+          >
+            <SlidersHorizontal className="size-4" />
+          </Button>
+        ) : null}
 
         {onClearHistory ? (
           <ClearHistoryAction

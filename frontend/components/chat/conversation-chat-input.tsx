@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 
@@ -10,8 +10,10 @@ import { useChatStore } from "@/lib/stores/chat-store";
 import { useClearConversationMessages, useSendMessage } from "@/lib/swr/use-messages";
 import { useImageGenerations } from "@/lib/swr/use-image-generations";
 import { useImageGenStore } from "@/lib/stores/image-generation-store";
-import type { ComposerMode } from "@/components/chat/chat-input/chat-toolbar";
 import { useI18n } from "@/lib/i18n-context";
+import { ChatModeButtons } from "@/components/chat/chat-mode-buttons";
+import { cn } from "@/lib/utils";
+import { useConversationComposer } from "@/lib/hooks/use-conversation-composer";
 
 export const ConversationChatInput = memo(function ConversationChatInput({
   conversationId,
@@ -28,6 +30,7 @@ export const ConversationChatInput = memo(function ConversationChatInput({
 }) {
   const { t } = useI18n();
   const projectId = useChatStore((s) => s.selectedProjectId);
+  const { mode, image, setMode, setImageParams } = useConversationComposer(conversationId);
   const bridgeToolSelections =
     useChatStore((s) => s.conversationBridgeToolSelections[conversationId]) ?? {};
   const defaultBridgeToolSelections =
@@ -39,14 +42,6 @@ export const ConversationChatInput = memo(function ConversationChatInput({
 
   const sendMessage = useSendMessage(conversationId, assistantId, overrideLogicalModel);
   const clearConversationMessages = useClearConversationMessages(assistantId);
-
-  // Image Generation State
-  const [mode, setMode] = useState<ComposerMode>("chat");
-  const [imageGenParams, setImageGenParams] = useState<ImageGenParams>({
-    model: "",
-    size: "1024x1024",
-    n: 1,
-  });
 
   const { generateImage } = useImageGenerations();
   const addImageGenTask = useImageGenStore((s) => s.addTask);
@@ -93,6 +88,11 @@ export const ConversationChatInput = memo(function ConversationChatInput({
       parameters: any;
     }) => handleSend({ content: payload.content, model_preset: payload.model_preset }),
     [handleSend]
+  );
+
+  const handleImageGenParamsChange = useCallback(
+    (params: ImageGenParams) => setImageParams(params),
+    [setImageParams]
   );
 
   const handleImageSend = useCallback(
@@ -145,19 +145,33 @@ export const ConversationChatInput = memo(function ConversationChatInput({
   );
 
   return (
-    <SlateChatInput
-      conversationId={conversationId}
-      assistantId={assistantId}
-      projectId={projectId}
-      disabled={disabled}
-      className={className}
-      onSend={handleSlateSend}
-      onClearHistory={handleClearHistory}
-      mode={mode}
-      onModeChange={setMode}
-      imageGenParams={imageGenParams}
-      onImageGenParamsChange={setImageGenParams}
-      onImageSend={handleImageSend}
-    />
+    <div className="h-full flex flex-col">
+      <div className="px-4 pt-3">
+        <ChatModeButtons
+          mode={mode}
+          onModeChange={setMode}
+          disabled={disabled}
+          className="mb-2"
+        />
+      </div>
+      <div className="min-h-0 flex-1">
+        <SlateChatInput
+          conversationId={conversationId}
+          assistantId={assistantId}
+          projectId={projectId}
+          disabled={disabled}
+          className={cn("h-full", className)}
+          onSend={handleSlateSend}
+          onClearHistory={handleClearHistory}
+          mode={mode}
+          onModeChange={setMode}
+          imageGenParams={image}
+          onImageGenParamsChange={handleImageGenParamsChange}
+          onImageSend={handleImageSend}
+          hideModeSwitcher={true}
+          imageSettingsShowModelSelect={false}
+        />
+      </div>
+    </div>
   );
 });

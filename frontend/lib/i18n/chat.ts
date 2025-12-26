@@ -17,7 +17,7 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.welcome.feature_fast_title": "Fast Response",
     "chat.welcome.feature_fast_desc": "Lightning-fast response speed",
     "chat.welcome.try_asking": "Try asking:",
-    "chat.welcome.example_1": "Help me write a creative story",
+    "chat.welcome.example_1": "Help me draw a creative story",
 
     // ===== 项目选择器 =====
     "chat.project.title": "Project",
@@ -451,7 +451,7 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.welcome.feature_fast_title": "快速响应",
     "chat.welcome.feature_fast_desc": "毫秒级响应速度",
     "chat.welcome.try_asking": "试着问我：",
-    "chat.welcome.example_1": "帮我写一只可爱的猫咪",
+    "chat.welcome.example_1": "帮我画一只可爱的猫咪",
 
     // ===== 项目选择器 =====
     "chat.project.title": "项目",
