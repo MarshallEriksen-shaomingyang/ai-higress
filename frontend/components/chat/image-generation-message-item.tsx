@@ -8,12 +8,12 @@ import { MessageBubble } from "./message-bubble";
 import { ImageGenerationItem } from "./image-generation-item";
 import { useI18n } from "@/lib/i18n-context";
 import { cn } from "@/lib/utils";
-import type { ImageGenTask } from "@/lib/stores/image-generation-store";
+import type { ImageGenerationTask } from "@/lib/chat/composer-tasks";
 import type { UserInfo } from "@/lib/api-types";
 
 interface ImageGenerationMessageItemProps {
   role: "user" | "assistant";
-  task: ImageGenTask;
+  task: ImageGenerationTask;
   user?: UserInfo | null;
 }
 

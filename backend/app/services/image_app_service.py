@@ -243,7 +243,9 @@ class ImageAppService:
                 last_error = str(exc)
                 continue
 
-            images_path = _derive_openai_images_path(getattr(cfg, "chat_completions_path", None))
+            images_path = getattr(cfg, "images_generations_path", None) or _derive_openai_images_path(
+                getattr(cfg, "chat_completions_path", None)
+            )
             url = _apply_upstream_path_override(cand.endpoint, images_path)
             headers = build_upstream_headers(
                 key_selection.key, cfg, call_style="openai", is_stream=False

@@ -42,6 +42,7 @@ export interface Provider {
   messages_path: string | null;
   chat_completions_path: string;
   responses_path: string | null;
+  images_generations_path: string | null;
   supported_api_styles: string[] | null;
   static_models: any[] | null;
   shared_user_ids?: string[] | null;
@@ -307,6 +308,7 @@ export interface CreatePrivateProviderRequest {
   messages_path?: string;
   chat_completions_path?: string;
   responses_path?: string;
+  images_generations_path?: string;
   supported_api_styles?: string[];
   static_models?: any[];
 }
@@ -329,6 +331,7 @@ export interface UpdatePrivateProviderRequest {
   messages_path?: string;
   chat_completions_path?: string;
   responses_path?: string;
+  images_generations_path?: string;
   supported_api_styles?: string[];
   static_models?: any[];
 }

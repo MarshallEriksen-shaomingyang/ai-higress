@@ -32,6 +32,7 @@ class ProviderPreset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     chat_completions_path: Mapped[str | None] = Column(String(100), nullable=True)
     messages_path: Mapped[str | None] = Column(String(100), nullable=True)
     responses_path: Mapped[str | None] = Column(String(100), nullable=True)
+    images_generations_path: Mapped[str | None] = Column(String(100), nullable=True)
     supported_api_styles = Column(JSONBCompat(), nullable=True)
     retryable_status_codes = Column(JSONBCompat(), nullable=True)
     custom_headers = Column(JSONBCompat(), nullable=True)

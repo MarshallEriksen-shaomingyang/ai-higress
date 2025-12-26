@@ -302,6 +302,9 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_field_responses_path": "Responses Path",
     "providers.form_field_responses_path_help": "Custom response endpoint (e.g., /v1/responses)",
     "providers.form_field_responses_path_placeholder": "/v1/responses",
+    "providers.form_field_images_generations_path": "Images Generations Path",
+    "providers.form_field_images_generations_path_help": "Optional upstream path override for OpenAI Images API (e.g., /v1/images/generations). Leave empty to derive from Chat Completions Path.",
+    "providers.form_field_images_generations_path_placeholder": "/v1/images/generations",
     
     // Routing configuration
     "providers.form_section_routing": "Routing Configuration",
@@ -636,6 +639,9 @@ export const providersTranslations: Record<Language, Record<string, string>> = {
     "providers.form_field_responses_path": "Responses Path",
     "providers.form_field_responses_path_help": "自定义响应端点（如 /v1/responses）",
     "providers.form_field_responses_path_placeholder": "/v1/responses",
+    "providers.form_field_images_generations_path": "文生图路径",
+    "providers.form_field_images_generations_path_help": "可选：上游 OpenAI Images API 的路径覆盖（如 /v1/images/generations）。留空则会从 Chat Completions Path 推导。",
+    "providers.form_field_images_generations_path_placeholder": "/v1/images/generations",
     
     // Routing configuration
     "providers.form_section_routing": "路由配置",

@@ -96,6 +96,13 @@ class ProviderConfig(BaseModel):
         default=None,
         description="Optional Responses API endpoint path",
     )
+    images_generations_path: str | None = Field(
+        default=None,
+        description=(
+            "Optional OpenAI Images API path override (e.g. /v1/images/generations). "
+            "When omitted, the gateway derives it from chat_completions_path."
+        ),
+    )
     weight: float = Field(
         default=1.0,
         description="Base routing weight used by the scheduler",
@@ -296,6 +303,9 @@ class ProviderResponse(BaseModel):
     messages_path: str | None = Field(default=None, description="消息API路径")
     chat_completions_path: str | None = Field(default=None, description="聊天完成路径")
     responses_path: str | None = Field(default=None, description="响应API路径")
+    images_generations_path: str | None = Field(
+        default=None, description="文生图路径（OpenAI Images API 兼容，上游路径覆盖）"
+    )
     status: str = Field(default="healthy", description="提供商状态")
     visibility: str = Field(
         default="public",

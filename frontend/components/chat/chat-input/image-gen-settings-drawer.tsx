@@ -46,7 +46,7 @@ export function ImageGenSettingsDrawer({
   const { models } = useLogicalModels(projectId);
 
   const imageModels = useMemo(() => {
-    return models.filter((m) => m.enabled && m.capabilities.includes("image_generation"));
+    return models.filter((m) => m.enabled);
   }, [models]);
 
   const selectedModel = useMemo(() => {

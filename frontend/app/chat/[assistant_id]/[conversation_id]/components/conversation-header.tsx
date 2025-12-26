@@ -84,7 +84,7 @@ export function ConversationHeader({
 
   const imageModels = useMemo(() => {
     return logicalModels
-      .filter((m) => m.enabled && m.capabilities.includes("image_generation"))
+      .filter((m) => m.enabled)
       .map((m) => ({
         value: m.logical_id,
         label: m.display_name || m.logical_id,

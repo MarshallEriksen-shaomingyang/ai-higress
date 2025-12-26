@@ -14,6 +14,7 @@ def _seed_provider_with_image_model(db_session, *, provider_id: str, model_id: s
         base_url="https://upstream.example.com",
         transport="http",
         chat_completions_path="/v1/chat/completions",
+        images_generations_path="/v1/images/generations",
         static_models=[
             {
                 "id": model_id,
@@ -49,7 +50,10 @@ def test_images_generations_requires_api_key(client):
 def test_images_generations_openai_lane_happy_path(client, db_session, monkeypatch, api_key_auth_header):
     _seed_provider_with_image_model(db_session, provider_id="openai-like", model_id="gpt-image-1")
 
+    seen: dict[str, str] = {}
+
     async def _fake_call(**kwargs):
+        seen["url"] = kwargs.get("url")
         return httpx.Response(
             200,
             json={
@@ -69,6 +73,7 @@ def test_images_generations_openai_lane_happy_path(client, db_session, monkeypat
         json={"prompt": "a cat", "model": "gpt-image-1", "n": 1, "response_format": "b64_json"},
     )
     assert resp.status_code == 200
+    assert seen["url"] == "https://upstream.example.com/v1/images/generations"
     payload = resp.json()
     assert payload["created"] == 1700000000
     assert payload["data"][0]["b64_json"] == "AAAB"

@@ -103,6 +103,7 @@ def create_private_provider(
         messages_path=payload.messages_path,
         chat_completions_path=payload.chat_completions_path,
         responses_path=payload.responses_path,
+        images_generations_path=payload.images_generations_path,
         supported_api_styles=payload.supported_api_styles,
         static_models=payload.static_models,
         status="healthy",
@@ -183,6 +184,8 @@ def update_private_provider(
         provider.chat_completions_path = payload.chat_completions_path or None
     if payload.responses_path is not None:
         provider.responses_path = payload.responses_path or None
+    if payload.images_generations_path is not None:
+        provider.images_generations_path = payload.images_generations_path or None
     if payload.supported_api_styles is not None:
         # When explicitly provided, supported_api_styles becomes the
         # authoritative declaration of upstream API styles for this provider.

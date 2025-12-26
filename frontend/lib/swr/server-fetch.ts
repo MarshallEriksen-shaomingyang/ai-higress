@@ -1,5 +1,33 @@
 import { cookies } from 'next/headers';
 
+async function refreshServerAccessToken(
+  apiUrl: string,
+  refreshToken: string
+): Promise<string | null> {
+  try {
+    const refreshUrl = new URL('/auth/refresh', apiUrl);
+    const refreshRes = await fetch(refreshUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // 关键：SSR 请求不会自动携带浏览器 Cookie，需手动透传 refresh_token
+        Cookie: `refresh_token=${refreshToken}`,
+        'Cache-Control': 'no-store',
+      },
+      cache: 'no-store',
+    });
+
+    if (!refreshRes.ok) return null;
+    const contentType = refreshRes.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) return null;
+
+    const payload = (await refreshRes.json()) as { access_token?: string };
+    return payload.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 服务端数据获取工具
  * 用于在 Next.js 服务端组件中预取数据，避免客户端初始加载闪烁
@@ -13,10 +41,12 @@ export async function serverFetch<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T | null> {
+  let hasRetriedAfterRefresh = false;
   try {
     // Next.js 16（React 19）中 cookies() 返回 Promise，需要 await 获取 CookieStore
     const cookieStore = await cookies();
     const token = cookieStore.get('access_token')?.value;
+    const refreshToken = cookieStore.get('refresh_token')?.value;
     
     // 与前端 httpClient 保持一致：优先使用 NEXT_PUBLIC_API_BASE_URL
     // 兼容旧变量名 NEXT_PUBLIC_API_URL
@@ -51,18 +81,33 @@ export async function serverFetch<T>(
     const isBodyAllowed = method !== 'GET' && method !== 'HEAD';
     const body = hasBody && isBodyAllowed ? rawBody : undefined;
 
-    const res = await fetch(url, {
-      ...rest,
-      method,
-      headers: normalizedHeaders,
-      cache: 'no-store',
-      signal: options?.signal ?? undefined,
-      body,
-    });
+    const doFetch = (headers: Record<string, string>) =>
+      fetch(url, {
+        ...rest,
+        method,
+        headers,
+        cache: 'no-store',
+        signal: options?.signal ?? undefined,
+        body,
+      });
+
+    let res = await doFetch(normalizedHeaders);
 
     if (res.status === 401) {
-      console.log(`[serverFetch] 401 Unauthorized: ${endpoint} (token may be expired)`);
-      return null;
+      // SSR 场景没有 axios 拦截器；如果能拿到 refresh_token，则尝试刷新并重试一次。
+      if (!hasRetriedAfterRefresh && refreshToken) {
+        hasRetriedAfterRefresh = true;
+        const newToken = await refreshServerAccessToken(apiUrl, refreshToken);
+        if (newToken) {
+          const retryHeaders = { ...normalizedHeaders, Authorization: `Bearer ${newToken}` };
+          res = await doFetch(retryHeaders);
+        }
+      }
+
+      if (res.status === 401) {
+        console.log(`[serverFetch] 401 Unauthorized: ${endpoint} (token may be expired)`);
+        return null;
+      }
     }
     if (!res.ok) {
       console.error(`[serverFetch] Failed: ${endpoint}`, res.status);

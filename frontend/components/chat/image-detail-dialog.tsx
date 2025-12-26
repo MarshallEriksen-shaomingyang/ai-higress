@@ -11,12 +11,12 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/lib/i18n-context";
-import type { ImageGenTask } from "@/lib/stores/image-generation-store";
+import type { ImageGenerationTask } from "@/lib/chat/composer-tasks";
 
 interface ImageDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  task: ImageGenTask;
+  task: ImageGenerationTask;
   selectedImageIndex?: number;
 }
 

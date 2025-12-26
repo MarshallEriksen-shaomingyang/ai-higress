@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, AlertCircle, ImageIcon } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n-context";
 import { ImageDetailDialog } from "./image-detail-dialog";
-import type { ImageGenTask } from "@/lib/stores/image-generation-store";
+import type { ImageGenerationTask } from "@/lib/chat/composer-tasks";
 
 interface ImageGenerationItemProps {
-  task: ImageGenTask;
+  task: ImageGenerationTask;
 }
 
 export function ImageGenerationItem({ task }: ImageGenerationItemProps) {

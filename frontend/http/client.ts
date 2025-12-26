@@ -59,8 +59,8 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-// 刷新 token 的函数
-const refreshAccessToken = async (): Promise<string> => {
+// 刷新 token 的函数（导出供非 axios 请求复用，例如 SSE / SSR 补偿）
+export const refreshAccessToken = async (): Promise<string> => {
   try {
     // 使用 axios 直接调用后端刷新接口（避免实例拦截器循环）
     const response = await axios.post<{ access_token: string; refresh_token: string | null }>(

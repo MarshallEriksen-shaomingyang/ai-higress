@@ -18,7 +18,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { MessageItem } from "./message-item";
-import { ImageGenerationMessageItem } from "./image-generation-message-item";
 import { ErrorAlert } from "./error-alert";
 import { AddComparisonDialog } from "./add-comparison-dialog";
 import { ConversationPendingIndicator } from "./conversation-pending-indicator";
@@ -36,7 +35,9 @@ import { useLogicalModels } from "@/lib/swr/use-logical-models";
 import { buildBridgeRequestFields } from "@/lib/chat/build-bridge-request";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useConversationPending } from "@/lib/hooks/use-conversation-pending";
-import { useImageGenStore, type ImageGenTask } from "@/lib/stores/image-generation-store";
+import { useComposerTaskStore } from "@/lib/stores/composer-task-store";
+import type { ComposerTask } from "@/lib/chat/composer-tasks";
+import { ComposerTaskMessageItem } from "@/components/chat/composer-task-message-item";
 import {
   useChatComparisonStore,
   type ComparisonVariant,
@@ -55,7 +56,7 @@ export interface MessageListProps {
 
 type RenderItem =
   | { type: 'message'; key: string; message: Message; runs?: RunSummary[]; runSourceMessageId?: string; timestamp: number }
-  | { type: 'image-task'; key: string; role: 'user' | 'assistant'; task: ImageGenTask; timestamp: number };
+  | { type: 'composer-task'; key: string; role: 'user' | 'assistant'; task: ComposerTask; timestamp: number };
 
 export const MessageList = memo(function MessageList({
   assistantId,
@@ -119,11 +120,10 @@ export const MessageList = memo(function MessageList({
     baselineModel?: string;
   } | null>(null);
 
-  // Get image generation tasks
-  const imageGenTasks = useImageGenStore((s) => s.tasks);
-  const imageTasks = useMemo(
-    () => imageGenTasks.filter((t) => t.conversationId === conversationId),
-    [imageGenTasks, conversationId]
+  const composerTasks = useComposerTaskStore((s) => s.tasks);
+  const tasksForConversation = useMemo(
+    () => composerTasks.filter((t) => t.conversationId === conversationId),
+    [composerTasks, conversationId]
   );
 
   useEffect(() => {
@@ -262,7 +262,7 @@ export const MessageList = memo(function MessageList({
     return null;
   }, [renderRows]);
 
-  // Combine standard messages with image generation tasks
+  // Combine standard messages with composer tasks
   const finalRenderItems = useMemo(() => {
     const items: RenderItem[] = [];
 
@@ -278,20 +278,19 @@ export const MessageList = memo(function MessageList({
       });
     }
 
-    // Add image tasks
-    for (const task of imageTasks) {
+    for (const task of tasksForConversation) {
       // User prompt fake message
       items.push({
-        type: 'image-task',
-        key: `${task.id}-user`,
+        type: 'composer-task',
+        key: `${task.kind}:${task.id}:user`,
         role: 'user',
         task,
         timestamp: task.createdAt,
       });
       // Assistant result
       items.push({
-        type: 'image-task',
-        key: `${task.id}-assistant`,
+        type: 'composer-task',
+        key: `${task.kind}:${task.id}:assistant`,
         role: 'assistant',
         task,
         timestamp: task.createdAt + 1, // ensure it appears after user prompt
@@ -299,7 +298,7 @@ export const MessageList = memo(function MessageList({
     }
 
     return items.sort((a, b) => a.timestamp - b.timestamp);
-  }, [renderRows, imageTasks]);
+  }, [renderRows, tasksForConversation]);
 
   const handleRegenerate = useCallback(
     async (assistantMessageId: string, _sourceUserMessageId?: string) => {
@@ -755,7 +754,7 @@ export const MessageList = memo(function MessageList({
                     }}
                   >
                     <div className="pb-6">
-                      <ImageGenerationMessageItem
+                      <ComposerTaskMessageItem
                         role={item.role}
                         task={item.task}
                         user={user}

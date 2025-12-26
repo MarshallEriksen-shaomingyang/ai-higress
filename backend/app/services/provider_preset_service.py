@@ -60,6 +60,7 @@ def create_provider_preset(session: Session, payload: ProviderPresetCreateReques
         messages_path=payload.messages_path,
         chat_completions_path=payload.chat_completions_path,
         responses_path=payload.responses_path,
+        images_generations_path=payload.images_generations_path,
         supported_api_styles=payload.supported_api_styles,
         retryable_status_codes=payload.retryable_status_codes,
         custom_headers=payload.custom_headers,
@@ -101,6 +102,8 @@ def update_provider_preset(
         preset.chat_completions_path = payload.chat_completions_path
     if payload.responses_path is not None:
         preset.responses_path = payload.responses_path
+    if payload.images_generations_path is not None:
+        preset.images_generations_path = payload.images_generations_path
     if payload.supported_api_styles is not None:
         preset.supported_api_styles = payload.supported_api_styles
     if payload.retryable_status_codes is not None:

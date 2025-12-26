@@ -38,7 +38,7 @@ export function ImageGenParamsBar({
   const { models } = useLogicalModels(projectId);
 
   const imageModels = useMemo(() => {
-    return models.filter((m) => m.capabilities.includes("image_generation") && m.enabled);
+    return models.filter((m) => m.enabled);
   }, [models]);
 
   // Ensure selected model is valid or select first available

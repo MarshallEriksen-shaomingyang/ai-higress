@@ -37,6 +37,15 @@ const defaultConversationState = (): ConversationComposerState => ({
   },
 });
 
+const fallbackConversationState: ConversationComposerState = (() => {
+  const state = defaultConversationState();
+  if (process.env.NODE_ENV !== "production") {
+    Object.freeze(state.image);
+    Object.freeze(state);
+  }
+  return state;
+})();
+
 export const useChatComposerStore = create<ChatComposerState>()(
   persist(
     (set) => ({
@@ -76,13 +85,21 @@ export const useChatComposerStore = create<ChatComposerState>()(
           const key = String(conversationId || "").trim();
           if (!key) return state;
           const prev = state.byConversationId[key] ?? defaultConversationState();
+          const nextImage = { ...prev.image, ...updates };
+          if (
+            nextImage.model === prev.image.model &&
+            nextImage.size === prev.image.size &&
+            nextImage.n === prev.image.n
+          ) {
+            return state;
+          }
           return {
             ...state,
             byConversationId: {
               ...state.byConversationId,
               [key]: {
                 ...prev,
-                image: { ...prev.image, ...updates },
+                image: nextImage,
               },
             },
           };
@@ -143,5 +160,7 @@ export function getConversationComposerState(
   conversationId: string
 ) {
   const key = String(conversationId || "").trim();
-  return key ? state.byConversationId[key] ?? defaultConversationState() : defaultConversationState();
+  return key
+    ? state.byConversationId[key] ?? fallbackConversationState
+    : fallbackConversationState;
 }

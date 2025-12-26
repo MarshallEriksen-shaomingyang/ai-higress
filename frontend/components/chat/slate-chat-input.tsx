@@ -12,6 +12,7 @@ import { useChatModelParametersStore } from "@/lib/stores/chat-model-parameters-
 import { useUserPreferencesStore } from "@/lib/stores/user-preferences-store";
 import { cn } from "@/lib/utils";
 
+import type { ComposerSubmitPayload } from "@/lib/chat/composer-submit";
 import { ChatEditor } from "./chat-input/chat-editor";
 import { ChatToolbar } from "./chat-input/chat-toolbar";
 import { ImagePreviewGrid } from "./chat-input/image-attachments";
@@ -78,6 +79,8 @@ export interface SlateChatInputProps {
     params: ImageGenParams;
   }) => Promise<void>;
 
+  onSubmit?: (payload: ComposerSubmitPayload) => Promise<void>;
+
   onClearHistory?: () => Promise<void>;
   className?: string;
 }
@@ -94,6 +97,7 @@ export function SlateChatInput({
   imageSettingsShowModelSelect = true,
   onSend,
   onImageSend,
+  onSubmit,
   onClearHistory,
   className,
 }: SlateChatInputProps) {
@@ -236,14 +240,26 @@ export function SlateChatInput({
 
     try {
       if (mode === "image") {
-         if (!onImageSend || !imageGenParams) {
-           console.error("Image generation handler or params missing");
-           return;
-         }
-         await onImageSend({
-           prompt: content,
-           params: imageGenParams,
-         });
+        if (!imageGenParams) {
+          console.error("Image generation params missing");
+          return;
+        }
+        if (onSubmit) {
+          await onSubmit({
+            mode: "image",
+            prompt: content,
+            params: imageGenParams,
+          });
+        } else {
+          if (!onImageSend) {
+            console.error("Image generation handler missing");
+            return;
+          }
+          await onImageSend({
+            prompt: content,
+            params: imageGenParams,
+          });
+        }
       } else {
         const composed = composeMessageContent(content, images);
         if (!composed) {
@@ -256,7 +272,15 @@ export function SlateChatInput({
         }
 
         const model_preset = buildModelPreset(parameters);
-        if (onSend) {
+        if (onSubmit) {
+          await onSubmit({
+            mode: "chat",
+            content: composed,
+            images,
+            model_preset,
+            parameters,
+          });
+        } else if (onSend) {
           if (onSend.length <= 1) {
             await (onSend as any)({
               content: composed,

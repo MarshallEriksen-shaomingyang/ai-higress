@@ -1675,6 +1675,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
     "messages_path": "/v1/messages",
     "chat_completions_path": "/v1/chat/completions",
     "responses_path": "/v1/responses 或 null",
+    "images_generations_path": "/v1/images/generations 或 null",
     "weight": 1.0,
     "region": "string | null",
     "cost_input": 0.0,
@@ -1747,6 +1748,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
   "messages_path": "/v1/messages",
   "chat_completions_path": "/v1/chat/completions",
   "responses_path": "/v1/responses 或 null",
+  "images_generations_path": "/v1/images/generations 或 null",
   "weight": 1.0,
   "region": "string | null",
   "cost_input": 0.0,
@@ -2292,7 +2294,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
   "sdk_vendor": "openai/google/claude/vertexai (当 transport=sdk 时必填)"
   // 其余可选字段: weight, region, cost_input, cost_output, max_qps,
   // retryable_status_codes, custom_headers,
-  // models_path, messages_path, chat_completions_path, responses_path,
+  // models_path, messages_path, chat_completions_path, responses_path, images_generations_path,
   // static_models, supported_api_styles
 }
 ```
@@ -2351,6 +2353,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
   "messages_path": "/v1/messages",
   "chat_completions_path": "/v1/chat/completions",
   "responses_path": "/v1/responses",
+  "images_generations_path": "/v1/images/generations",
   "static_models": [ /* 可选的静态模型配置 */ ],
   "supported_api_styles": ["openai", "responses", "claude"]
 }
@@ -2848,6 +2851,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
       "messages_path": "/v1/messages",
       "chat_completions_path": "/v1/chat/completions",
       "responses_path": null,
+      "images_generations_path": null,
       "supported_api_styles": ["openai"],
       "retryable_status_codes": [429, 500],
       "custom_headers": {"X-Test": "1"},
@@ -2947,6 +2951,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
       "messages_path": "/v1/messages",
       "chat_completions_path": "/v1/chat/completions",
       "responses_path": null,
+      "images_generations_path": null,
       "supported_api_styles": ["openai"],
       "retryable_status_codes": [429],
       "custom_headers": null,

@@ -156,6 +156,31 @@ export function AdvancedProviderConfig({
                                         </div>
                                     )}
                                 />
+
+                                <SafeFormField
+                                    control={form.control}
+                                    name="imagesGenerationsPath"
+                                    render={({ field }: { field: any }) => (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-medium">
+                                                {t("providers.form_field_images_generations_path")}{" "}
+                                                <span className="text-muted-foreground font-normal">{t("providers.form_field_optional")}</span>
+                                            </label>
+                                            <p className="text-xs text-muted-foreground">
+                                                {t("providers.form_field_images_generations_path_help")}
+                                            </p>
+                                            <Input
+                                                {...field}
+                                                placeholder={t("providers.form_field_images_generations_path_placeholder")}
+                                                className="text-sm"
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    markFieldAsOverridden("imagesGenerationsPath");
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                />
                             </div>
                         </div>
                     </div>
