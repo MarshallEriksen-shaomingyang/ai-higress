@@ -5,11 +5,19 @@ import type { Language } from "../i18n-context";
  */
 export const chatTranslations: Record<Language, Record<string, string>> = {
   en: {
+    "chat.search.clear": "Clear search",
+
     // ===== 欢迎页面 =====
-    "chat.welcome.title": "Welcome to Chat",
-    "chat.welcome.description": "Select or create an assistant to start chatting",
-    "chat.welcome.hint1": "👈 Select an assistant from the left sidebar",
-    "chat.welcome.hint2": "Or create a new assistant to get started",
+    "chat.welcome.main_title": "Welcome to AI Assistant",
+    "chat.welcome.main_description": "I can help you answer questions, create content, and generate images based on your descriptions",
+    "chat.welcome.feature_chat_title": "Smart Conversation",
+    "chat.welcome.feature_chat_desc": "Natural AI conversation experience",
+    "chat.welcome.feature_image_title": "Text to Image",
+    "chat.welcome.feature_image_desc": "Generate beautiful images from text descriptions",
+    "chat.welcome.feature_fast_title": "Fast Response",
+    "chat.welcome.feature_fast_desc": "Lightning-fast response speed",
+    "chat.welcome.try_asking": "Try asking:",
+    "chat.welcome.example_1": "Help me draw a creative story",
 
     // ===== 项目选择器 =====
     "chat.project.title": "Project",
@@ -21,6 +29,8 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     // ===== 助手管理 =====
     "chat.assistant.title": "Assistants",
     "chat.assistant.create": "Create Assistant",
+    "chat.assistant.search_placeholder": "Search assistants...",
+    "chat.assistant.search_empty": "No matching assistants",
     "chat.assistant.edit": "Edit Assistant",
     "chat.assistant.archive": "Archive Assistant",
     "chat.assistant.delete": "Delete Assistant",
@@ -56,6 +66,8 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     // ===== 会话管理 =====
     "chat.conversation.title": "Conversations",
     "chat.conversation.create": "New Conversation",
+    "chat.conversation.search_placeholder": "Search conversations...",
+    "chat.conversation.search_empty": "No matching conversations",
     "chat.conversation.archive": "Archive Conversation",
     "chat.conversation.rename": "Rename",
     "chat.conversation.delete": "Delete Conversation",
@@ -165,6 +177,32 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.mcp.tools_pick_hint": "Picking a server injects all tools under that server; leave unchecked to skip.",
     "chat.mcp.tools_select_all": "Select all",
     "chat.mcp.tools_clear": "Clear",
+
+    // ===== Image Generation =====
+    "chat.image_gen.mode_chat": "Chat",
+    "chat.image_gen.mode_image": "Text to Image",
+    "chat.image_gen.model": "Model",
+    "chat.image_gen.select_model": "Select Model",
+    "chat.image_gen.size": "Size",
+    "chat.image_gen.number": "Count",
+    "chat.image_gen.quality": "Quality",
+  "chat.image_gen.google_search": "Google Search",
+  "chat.image_gen.google_search_desc": "Enable Gemini grounding search when supported",
+  "chat.image_gen.response_format": "Include response_format",
+  "chat.image_gen.response_format_desc": "Default to sending response_format=url; turn off to let upstream decide",
+    "chat.image_gen.generate": "Generate",
+    "chat.image_gen.generating": "Generating...",
+    "chat.image_gen.success": "Image generated successfully",
+    "chat.image_gen.failed": "Failed to generate image",
+    "chat.image_gen.switch_mode": "Switch mode",
+    "chat.image_gen.view_details": "View Details",
+    "chat.image_gen.download": "Download",
+    "chat.image_gen.prompt": "Prompt",
+    "chat.image_gen.params": "Parameters",
+    "chat.image_gen.no_image_data": "No image data",
+    "chat.image_gen.revised_prompt": "Revised prompt",
+    "chat.image_gen.generated_image_alt": "Generated image {index}",
+
     "chat.message.clear_history": "Clear history",
     "chat.message.clear_history_confirm": "Are you sure you want to clear the conversation history?",
     "chat.message.clear_history_success": "History cleared successfully",
@@ -406,11 +444,19 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.title": "Chat",
   },
   zh: {
+    "chat.search.clear": "清空搜索",
+
     // ===== 欢迎页面 =====
-    "chat.welcome.title": "欢迎使用聊天助手",
-    "chat.welcome.description": "选择或创建一个助手开始聊天",
-    "chat.welcome.hint1": "👈 从左侧边栏选择一个助手",
-    "chat.welcome.hint2": "或创建一个新助手开始使用",
+    "chat.welcome.main_title": "欢迎使用 AI 助手",
+    "chat.welcome.main_description": "我可以帮助你回答问题、进行创意写作，还能根据你的描述生成图片",
+    "chat.welcome.feature_chat_title": "智能对话",
+    "chat.welcome.feature_chat_desc": "自然流畅的AI对话体验",
+    "chat.welcome.feature_image_title": "文生图",
+    "chat.welcome.feature_image_desc": "用文字描述生成精美图片",
+    "chat.welcome.feature_fast_title": "快速响应",
+    "chat.welcome.feature_fast_desc": "毫秒级响应速度",
+    "chat.welcome.try_asking": "试着问我：",
+    "chat.welcome.example_1": "帮我画一只可爱的猫咪",
 
     // ===== 项目选择器 =====
     "chat.project.title": "项目",
@@ -422,6 +468,8 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     // ===== 助手管理 =====
     "chat.assistant.title": "助手",
     "chat.assistant.create": "创建助手",
+    "chat.assistant.search_placeholder": "搜索助手...",
+    "chat.assistant.search_empty": "未找到匹配的助手",
     "chat.assistant.edit": "编辑助手",
     "chat.assistant.archive": "归档助手",
     "chat.assistant.delete": "删除助手",
@@ -457,6 +505,8 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     // ===== 会话管理 =====
     "chat.conversation.title": "会话",
     "chat.conversation.create": "新建会话",
+    "chat.conversation.search_placeholder": "搜索会话...",
+    "chat.conversation.search_empty": "未找到匹配的会话",
     "chat.conversation.archive": "归档会话",
     "chat.conversation.rename": "重命名",
     "chat.conversation.delete": "删除会话",
@@ -566,6 +616,32 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.mcp.tools_pick_hint": "勾选某个 Server 会注入其下所有工具；不勾选则不使用。",
     "chat.mcp.tools_select_all": "全选",
     "chat.mcp.tools_clear": "清空",
+
+    // ===== Image Generation =====
+    "chat.image_gen.mode_chat": "聊天",
+    "chat.image_gen.mode_image": "文生图",
+    "chat.image_gen.model": "模型",
+    "chat.image_gen.select_model": "选择模型",
+    "chat.image_gen.size": "尺寸",
+    "chat.image_gen.number": "数量",
+    "chat.image_gen.quality": "质量",
+  "chat.image_gen.google_search": "联网搜索",
+  "chat.image_gen.google_search_desc": "Gemini 支持时开启 Google 搜索/grounding",
+  "chat.image_gen.response_format": "附带 response_format",
+  "chat.image_gen.response_format_desc": "默认携带 response_format=url；关闭后交由上游决定返回格式",
+    "chat.image_gen.generate": "生成",
+    "chat.image_gen.generating": "生成中...",
+    "chat.image_gen.success": "图片生成成功",
+    "chat.image_gen.failed": "图片生成失败",
+    "chat.image_gen.switch_mode": "切换模式",
+    "chat.image_gen.view_details": "查看详情",
+    "chat.image_gen.download": "下载",
+    "chat.image_gen.prompt": "提示词",
+    "chat.image_gen.params": "参数",
+    "chat.image_gen.no_image_data": "无图片数据",
+    "chat.image_gen.revised_prompt": "改写后的提示词",
+    "chat.image_gen.generated_image_alt": "生成图片 {index}",
+
     "chat.message.clear_history": "清空历史记录",
     "chat.message.clear_history_confirm": "确定要清空会话历史记录吗？",
     "chat.message.clear_history_success": "历史记录已清空",

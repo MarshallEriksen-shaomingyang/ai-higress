@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator, Iterator
 
+from fastapi import Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 try:
@@ -48,3 +49,36 @@ def get_db() -> Iterator[Session]:
     Provide a synchronous SQLAlchemy session.
     """
     yield from get_db_session()
+
+
+async def get_current_api_key(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> str:
+    """
+    解析请求中的 API Key（不做数据库校验），用于需要“原始 token 字符串”的场景。
+
+    规则与 `app.auth.require_api_key` 保持一致：
+    - Preferred：`Authorization: Bearer <token>`
+    - Compatible：`X-API-Key: <token>`
+    """
+    token_value: str | None = None
+
+    if authorization:
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Authorization header, expected 'Bearer <token>'",
+            )
+        token_value = token.strip() or None
+    elif x_api_key:
+        token_value = x_api_key.strip() or None
+
+    if not token_value:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization or X-API-Key header",
+        )
+
+    return token_value

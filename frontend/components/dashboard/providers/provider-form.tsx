@@ -55,6 +55,7 @@ const createProviderFormSchema = (
         messagesPath: z.string().trim().default(""),
         chatCompletionsPath: z.string().trim().default("/v1/chat/completions"),
         responsesPath: z.string().trim().default(""),
+        imagesGenerationsPath: z.string().trim().default(""),
         
         // 路由配置
         weight: z.string().trim().default("1"),
@@ -122,6 +123,7 @@ const createProviderFormSchema = (
             { value: values.messagesPath, name: "messagesPath" },
             { value: values.chatCompletionsPath, name: "chatCompletionsPath" },
             { value: values.responsesPath, name: "responsesPath" },
+            { value: values.imagesGenerationsPath, name: "imagesGenerationsPath" },
         ];
 
         paths.forEach(({ value, name }) => {
@@ -218,6 +220,7 @@ const providerFormDefaults: ProviderFormValues = {
     messagesPath: "",
     chatCompletionsPath: "",
     responsesPath: "",
+    imagesGenerationsPath: "",
     weight: "1",
     maxQps: "",
     region: "",
@@ -242,6 +245,7 @@ const buildFormValuesFromProvider = (provider: any, isEditing: boolean = false):
         messagesPath: provider?.messages_path ?? "",
         chatCompletionsPath: provider?.chat_completions_path ?? "",
         responsesPath: provider?.responses_path ?? "",
+        imagesGenerationsPath: provider?.images_generations_path ?? "",
         weight:
             provider?.weight !== undefined && provider?.weight !== null
                 ? String(provider.weight)
@@ -398,6 +402,7 @@ export function ProviderFormEnhanced({
                 messagesPath: selectedPreset.messages_path || "",
                 chatCompletionsPath: selectedPreset.chat_completions_path,
                 responsesPath: selectedPreset.responses_path || "",
+                imagesGenerationsPath: selectedPreset.images_generations_path || "",
                 retryableStatusCodes: selectedPreset.retryable_status_codes || [],
                 customHeaders: selectedPreset.custom_headers || {},
                 staticModels: selectedPreset.static_models || [],
@@ -455,6 +460,7 @@ export function ProviderFormEnhanced({
                     messages_path: values.messagesPath?.trim() || undefined,
                     chat_completions_path: values.chatCompletionsPath?.trim() || undefined,
                     responses_path: values.responsesPath?.trim() || undefined,
+                    images_generations_path: values.imagesGenerationsPath?.trim() || undefined,
                     region: values.region?.trim(),
                     max_qps: values.maxQps?.trim() ? Number(values.maxQps) : undefined,
                     cost_input: values.costInput?.trim() ? Number(values.costInput) : undefined,
@@ -518,6 +524,7 @@ export function ProviderFormEnhanced({
                 if (values.messagesPath?.trim()) createPayload.messages_path = values.messagesPath.trim();
                 if (values.chatCompletionsPath?.trim()) createPayload.chat_completions_path = values.chatCompletionsPath.trim();
                 if (values.responsesPath?.trim()) createPayload.responses_path = values.responsesPath.trim();
+                if (values.imagesGenerationsPath?.trim()) createPayload.images_generations_path = values.imagesGenerationsPath.trim();
 
                 // 可选字段
                 if (values.region?.trim()) createPayload.region = values.region.trim();

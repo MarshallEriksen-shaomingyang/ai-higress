@@ -34,7 +34,7 @@ from app.services.project_eval_config_service import (
 )
 from app.services.run_event_bus import build_run_event_envelope, publish_run_event_best_effort
 from app.services.run_cancel_service import is_run_canceled
-from app.services.tool_loop_runner import ToolLoopRunner
+from app.services.tool_loop_runner import ToolLoopRunner, split_text_into_deltas
 from app.services.eval_service import execute_run_stream
 from app.settings import settings
 
@@ -328,6 +328,10 @@ async def execute_chat_run(
                         payload=payload,
                         effective_bridge_agent_ids=bridge_agent_ids,
                     )
+                    tool_loop_provider_ids = effective_provider_ids
+                    pinned_provider_id = str(getattr(run, "selected_provider_id", None) or "").strip()
+                    if pinned_provider_id and pinned_provider_id in tool_loop_provider_ids:
+                        tool_loop_provider_ids = {pinned_provider_id}
 
                     async def _invoke_tool(req_id: str, agent_id: str, tool_name: str, arguments: dict[str, Any]):
                         return await invoke_bridge_tool_and_wait(
@@ -352,7 +356,7 @@ async def execute_chat_run(
                             requested_model=requested_model,
                             lookup_model_id=requested_model,
                             api_style="openai",
-                            effective_provider_ids=effective_provider_ids,
+                            effective_provider_ids=tool_loop_provider_ids,
                             session_id=str(conv.id),
                             assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
                             billing_reason="chat_tool_loop",
@@ -513,6 +517,10 @@ async def execute_chat_run(
                     payload=payload,
                     effective_bridge_agent_ids=bridge_agent_ids,
                 )
+                tool_loop_provider_ids = effective_provider_ids
+                pinned_provider_id = str(getattr(run, "selected_provider_id", None) or "").strip()
+                if pinned_provider_id and pinned_provider_id in tool_loop_provider_ids:
+                    tool_loop_provider_ids = {pinned_provider_id}
 
                 async def _invoke_tool(req_id: str, agent_id: str, tool_name: str, arguments: dict[str, Any]):
                     return await invoke_bridge_tool_and_wait(
@@ -537,7 +545,7 @@ async def execute_chat_run(
                         requested_model=requested_model,
                         lookup_model_id=requested_model,
                         api_style="openai",
-                        effective_provider_ids=effective_provider_ids,
+                        effective_provider_ids=tool_loop_provider_ids,
                         session_id=str(conv.id),
                         assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
                         billing_reason="chat_tool_loop",
@@ -604,20 +612,29 @@ async def execute_chat_run(
                     run = persist_run(db, run)
 
                     if delta_text:
-                        parts = [delta_text]
-                        _append_run_event_and_publish_best_effort(
-                            db,
-                            redis=redis,
-                            run_id=UUID(str(run.id)),
-                            event_type="message.delta",
-                            payload={
-                                "type": "message.delta",
-                                "conversation_id": str(conv.id),
-                                "assistant_message_id": assistant_message_id,
-                                "run_id": str(run.id),
-                                "delta": delta_text,
-                            },
-                        )
+                        parts = []
+                        chunks = split_text_into_deltas(delta_text)
+                        # 轻量节奏控制：把“工具后续”切成多段 delta，避免一次性灌入导致前端看起来不流式。
+                        pace_s = 0.0
+                        if len(chunks) > 1:
+                            pace_s = min(0.05, 0.9 / float(len(chunks)))
+                        for idx, chunk in enumerate(chunks):
+                            parts.append(chunk)
+                            _append_run_event_and_publish_best_effort(
+                                db,
+                                redis=redis,
+                                run_id=UUID(str(run.id)),
+                                event_type="message.delta",
+                                payload={
+                                    "type": "message.delta",
+                                    "conversation_id": str(conv.id),
+                                    "assistant_message_id": assistant_message_id,
+                                    "run_id": str(run.id),
+                                    "delta": chunk,
+                                },
+                            )
+                            if pace_s and idx < len(chunks) - 1:
+                                await asyncio.sleep(pace_s)
 
             if not errored and run.status == "succeeded" and run.output_text and assistant_message_id:
                 finalize_assistant_message_after_user_sequence(

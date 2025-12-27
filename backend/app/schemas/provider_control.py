@@ -56,6 +56,7 @@ class UserProviderCreateRequest(BaseModel):
     messages_path: str | None = Field(default=None)
     chat_completions_path: str | None = Field(default=None)
     responses_path: str | None = Field(default=None)
+    images_generations_path: str | None = Field(default=None)
     supported_api_styles: list[ApiStyleValue] | None = Field(default=None)
     static_models: list[dict[str, Any]] | None = Field(
         default=None,
@@ -83,6 +84,7 @@ class UserProviderCreateRequest(BaseModel):
             "messages_path",
             "chat_completions_path",
             "responses_path",
+            "images_generations_path",
         ):
             value = getattr(self, field_name)
             if value is None:
@@ -157,6 +159,7 @@ class UserProviderUpdateRequest(BaseModel):
     messages_path: str | None = None
     chat_completions_path: str | None = None
     responses_path: str | None = None
+    images_generations_path: str | None = None
     supported_api_styles: list[ApiStyleValue] | None = None
     static_models: list[dict[str, Any]] | None = None
 
@@ -181,6 +184,7 @@ class UserProviderUpdateRequest(BaseModel):
                 "messages_path",
                 "chat_completions_path",
                 "responses_path",
+                "images_generations_path",
                 "supported_api_styles",
                 "static_models",
             )
@@ -195,6 +199,7 @@ class UserProviderUpdateRequest(BaseModel):
             "messages_path",
             "chat_completions_path",
             "responses_path",
+            "images_generations_path",
         ):
             value = getattr(self, field_name)
             if value is None:
@@ -241,6 +246,7 @@ class UserProviderResponse(BaseModel):
     messages_path: str | None = None
     chat_completions_path: str | None = None
     responses_path: str | None = None
+    images_generations_path: str | None = None
 
     # 其他配置
     weight: float | None = None
@@ -491,6 +497,7 @@ class ProviderPresetBase(BaseModel):
     messages_path: str | None = Field(default=None)
     chat_completions_path: str | None = Field(default=None)
     responses_path: str | None = Field(default=None)
+    images_generations_path: str | None = Field(default=None)
     supported_api_styles: list[ApiStyleValue] | None = Field(default=None)
     retryable_status_codes: list[int] | None = Field(default=None)
     custom_headers: dict[str, str] | None = Field(default=None)
@@ -504,6 +511,7 @@ class ProviderPresetBase(BaseModel):
             "messages_path",
             "chat_completions_path",
             "responses_path",
+            "images_generations_path",
         ):
             value = getattr(self, field_name)
             if value is None:
@@ -555,6 +563,7 @@ class ProviderPresetUpdateRequest(BaseModel):
     messages_path: str | None = None
     chat_completions_path: str | None = None
     responses_path: str | None = None
+    images_generations_path: str | None = None
     supported_api_styles: list[ApiStyleValue] | None = None
     retryable_status_codes: list[int] | None = None
     custom_headers: dict[str, str] | None = None
@@ -575,6 +584,7 @@ class ProviderPresetUpdateRequest(BaseModel):
                 "messages_path",
                 "chat_completions_path",
                 "responses_path",
+                "images_generations_path",
                 "supported_api_styles",
                 "retryable_status_codes",
                 "custom_headers",
@@ -591,6 +601,7 @@ class ProviderPresetUpdateRequest(BaseModel):
             "messages_path",
             "chat_completions_path",
             "responses_path",
+            "images_generations_path",
         ):
             value = getattr(self, field_name)
             if value is None:

@@ -2,9 +2,12 @@
 
 import { memo, useCallback } from "react";
 
-import { SlateChatInput } from "@/components/chat/slate-chat-input";
-import { useChatStore } from "@/lib/stores/chat-store";
-import { useClearConversationMessages, useSendMessage } from "@/lib/swr/use-messages";
+import { SlateChatInput, type ImageGenParams } from "@/components/chat/slate-chat-input";
+import { useClearConversationMessages } from "@/lib/swr/use-messages";
+import { ChatModeButtons } from "@/components/chat/chat-mode-buttons";
+import { cn } from "@/lib/utils";
+import { useConversationComposer } from "@/lib/hooks/use-conversation-composer";
+import { useConversationComposerSubmit } from "@/lib/hooks/use-conversation-composer-submit";
 
 export const ConversationChatInput = memo(function ConversationChatInput({
   conversationId,
@@ -19,41 +22,13 @@ export const ConversationChatInput = memo(function ConversationChatInput({
   disabled?: boolean;
   className?: string;
 }) {
-  const bridgeToolSelections =
-    useChatStore((s) => s.conversationBridgeToolSelections[conversationId]) ?? {};
-  const defaultBridgeToolSelections =
-    useChatStore((s) => s.defaultBridgeToolSelections) ?? {};
-  const chatStreamingEnabled = useChatStore((s) => s.chatStreamingEnabled);
-
-  const sendMessage = useSendMessage(conversationId, assistantId, overrideLogicalModel);
+  const { mode, image, setMode, setImageParams } = useConversationComposer(conversationId);
+  const { projectId, submit } = useConversationComposerSubmit({
+    conversationId,
+    assistantId,
+    overrideLogicalModel,
+  });
   const clearConversationMessages = useClearConversationMessages(assistantId);
-
-  const handleSend = useCallback(
-    async (payload: { content: string; model_preset?: Record<string, number> }) => {
-      const effectiveSelections: Record<string, string[]> = { ...defaultBridgeToolSelections };
-      Object.entries(bridgeToolSelections).forEach(([aid, tools]) => {
-        if (Array.isArray(tools) && tools.length) {
-          effectiveSelections[aid] = tools;
-        }
-      });
-      const effectiveAgentIds = Object.entries(effectiveSelections)
-        .filter(([, tools]) => Array.isArray(tools) && tools.length)
-        .map(([aid]) => aid);
-
-      await sendMessage({
-        content: payload.content,
-        model_preset: payload.model_preset,
-        bridge_agent_ids: effectiveAgentIds.length ? effectiveAgentIds : undefined,
-        bridge_tool_selections: effectiveAgentIds.length
-          ? effectiveAgentIds.map((agentId) => ({
-              agent_id: agentId,
-              tool_names: effectiveSelections[agentId] ?? [],
-            }))
-          : undefined,
-      }, { streaming: chatStreamingEnabled });
-    },
-    [sendMessage, bridgeToolSelections, defaultBridgeToolSelections, chatStreamingEnabled]
-  );
 
   const handleClearHistory = useCallback(async () => {
     await clearConversationMessages(conversationId);
@@ -62,24 +37,38 @@ export const ConversationChatInput = memo(function ConversationChatInput({
     conversationId,
   ]);
 
-  const handleSlateSend = useCallback(
-    async (payload: {
-      content: string;
-      images: string[];
-      model_preset?: Record<string, number>;
-      parameters: any;
-    }) => handleSend({ content: payload.content, model_preset: payload.model_preset }),
-    [handleSend]
+  const handleImageGenParamsChange = useCallback(
+    (params: ImageGenParams) => setImageParams(params),
+    [setImageParams]
   );
 
   return (
-    <SlateChatInput
-      conversationId={conversationId}
-      assistantId={assistantId}
-      disabled={disabled}
-      className={className}
-      onSend={handleSlateSend}
-      onClearHistory={handleClearHistory}
-    />
+    <div className="h-full flex flex-col">
+      <div className="px-4 pt-3">
+        <ChatModeButtons
+          mode={mode}
+          onModeChange={setMode}
+          disabled={disabled}
+          className="mb-2"
+        />
+      </div>
+      <div className="min-h-0 flex-1">
+        <SlateChatInput
+          conversationId={conversationId}
+          assistantId={assistantId}
+          projectId={projectId}
+          disabled={disabled}
+          className={cn("h-full", className)}
+          onSubmit={submit}
+          onClearHistory={handleClearHistory}
+          mode={mode}
+          onModeChange={setMode}
+          imageGenParams={image}
+          onImageGenParamsChange={handleImageGenParamsChange}
+          hideModeSwitcher={true}
+          imageSettingsShowModelSelect={false}
+        />
+      </div>
+    </div>
   );
 });

@@ -141,11 +141,15 @@ export function useSendMessageToConversation(
         markPending(true);
       }
       const sanitizeBridgePayload = (raw: SendMessageRequest): SendMessageRequest => {
-        // 若当前无可用 Bridge Agent，则不携带 bridge 字段，避免错误降级/空调用
+        // 若当前未获取到任何可用的 Bridge Agent（未连接或加载失败），不要携带持久化的 Bridge 字段
         if (!availableBridgeAgentIds.size) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { bridge_agent_id, bridge_agent_ids, bridge_tool_selections, ...rest } = raw;
-          return { ...rest };
+          const {
+            bridge_agent_id: _omitSingle,
+            bridge_agent_ids: _omitList,
+            bridge_tool_selections: _omitTools,
+            ...rest
+          } = raw as SendMessageRequest & Record<string, unknown>;
+          return rest as SendMessageRequest;
         }
 
         const filterId = (value: unknown): string | null => {
@@ -362,119 +366,175 @@ export function useSendMessageToConversation(
           };
         };
 
+        const normalizeSseEvent = (
+          outer: Record<string, unknown>,
+          sseEvent: string
+        ): {
+          type: string;
+          record: Record<string, unknown>;
+          outer: Record<string, unknown>;
+        } | null => {
+          const rawOuterType = getString(outer, 'type');
+          const outerType = rawOuterType && rawOuterType !== 'message' ? rawOuterType : '';
+          const fallbackEvent = typeof sseEvent === 'string' && sseEvent !== 'message' ? sseEvent : '';
+
+          if (outerType === 'run.event') {
+            const eventType = getString(outer, 'event_type') || fallbackEvent;
+            const payload = toRecord(outer['payload']);
+            const runId = getString(outer, 'run_id');
+            if (payload) {
+              const payloadType = getString(payload, 'type') || eventType;
+              const payloadRunId = getString(payload, 'run_id');
+              const mergedPayload =
+                runId && !payloadRunId ? { ...payload, run_id: runId } : payload;
+              return {
+                type: payloadType,
+                record: mergedPayload,
+                outer,
+              };
+            }
+            return {
+              type: eventType,
+              record: outer,
+              outer,
+            };
+          }
+
+          const type = outerType || fallbackEvent;
+          if (!type) return null;
+          return { type, record: outer, outer };
+        };
+
         const streamUrl = `/v1/conversations/${conversationId}/messages`;
 
-        await streamSSERequest(
-          streamUrl,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'text/event-stream',
+        const controller = new AbortController();
+        const abortOnTerminal = () => {
+          if (!controller.signal.aborted) controller.abort();
+        };
+
+        try {
+          await streamSSERequest(
+            streamUrl,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'text/event-stream',
+              },
+              body: JSON.stringify({ ...payload, streaming: true }),
             },
-            body: JSON.stringify({ ...payload, streaming: true }),
-          },
-          (msg) => {
-            if (!msg.data || msg.data === '[DONE]') return;
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(msg.data);
-            } catch {
-              return;
-            }
-            const rec = toRecord(parsed);
-            if (!rec) return;
-            const type = getString(rec, 'type') || msg.event || '';
-            if (!type) return;
+            (msg) => {
+              if (!msg.data) return;
+              if (msg.data === '[DONE]') {
+                abortOnTerminal();
+                return;
+              }
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(msg.data);
+              } catch {
+                return;
+              }
+              const outer = toRecord(parsed);
+              if (!outer) return;
+              const normalized = normalizeSseEvent(outer, msg.event);
+              if (!normalized) return;
+              const { type, record: rec, outer: outerRec } = normalized;
+              if (!type) return;
 
-            if (type === 'message.created') {
-              const newUserId = getString(rec, 'user_message_id');
-              const newAssistantId = getString(rec, 'assistant_message_id');
-              if (newUserId) userMessageId = newUserId;
-              if (newAssistantId) assistantMessageId = newAssistantId;
+              if (type === 'message.created') {
+                const newUserId = getString(rec, 'user_message_id') || getString(outerRec, 'user_message_id');
+                const newAssistantId =
+                  getString(rec, 'assistant_message_id') || getString(outerRec, 'assistant_message_id');
+                if (newUserId) userMessageId = newUserId;
+                if (newAssistantId) assistantMessageId = newAssistantId;
 
-              baselineRun = parseRunSummary(rec['baseline_run']);
+                baselineRun = parseRunSummary(rec['baseline_run'] ?? outerRec['baseline_run']);
 
-              void globalMutate(
-                messagesKey,
-                (current?: MessagesResponse) => {
-                  if (!current) return current;
-                  const nextItems = current.items.map((it) => {
-                    if (it.message.message_id === tempUserMessageId) {
-                      return {
-                        ...it,
-                        message: { ...it.message, message_id: userMessageId },
-                        run: baselineRun ?? it.run,
-                        runs: baselineRun ? [baselineRun] : it.runs,
-                      };
-                    }
-                    if (it.message.message_id === tempAssistantMessageId) {
-                      return {
-                        ...it,
-                        message: { ...it.message, message_id: assistantMessageId },
-                      };
-                    }
-                    return it;
-                  });
-                  return { ...current, items: nextItems };
-                },
-                { revalidate: false }
-              );
-              return;
-            }
-
-            // 兼容：若后端未来在 chat SSE 里直接透传 tool.* 事件，这里同步写入工具事件 store
-            if (type === 'tool.status' || type === 'tool.result') {
-              const runId = getString(rec, 'run_id');
-              if (!runId) return;
-              useRunToolEventsStore.getState().apply_tool_event(runId, 0, rec as any);
-              return;
-            }
-
-            if (type === 'message.delta') {
-              const delta = getString(rec, 'delta');
-              if (!delta) return;
-              assistantBuffer += delta;
-              clearPending();
-              scheduleFlush();
-              return;
-            }
-
-            if (type === 'message.completed' || type === 'message.failed') {
-              flushBuffer(true);
-              clearPending();
-              const finalRun = parseRunSummary(rec['baseline_run']);
-              if (finalRun) baselineRun = finalRun;
-
-              const outputText = getString(rec, 'output_text');
-              if (!assistantText && outputText) {
-                assistantText = outputText;
+                void globalMutate(
+                  messagesKey,
+                  (current?: MessagesResponse) => {
+                    if (!current) return current;
+                    const nextItems = current.items.map((it) => {
+                      if (it.message.message_id === tempUserMessageId) {
+                        return {
+                          ...it,
+                          message: { ...it.message, message_id: userMessageId },
+                          run: baselineRun ?? it.run,
+                          runs: baselineRun ? [baselineRun] : it.runs,
+                        };
+                      }
+                      if (it.message.message_id === tempAssistantMessageId) {
+                        return {
+                          ...it,
+                          message: { ...it.message, message_id: assistantMessageId },
+                        };
+                      }
+                      return it;
+                    });
+                    return { ...current, items: nextItems };
+                  },
+                  { revalidate: false }
+                );
+                return;
               }
 
-              void globalMutate(
-                messagesKey,
-                (current?: MessagesResponse) => {
-                  if (!current) return current;
-                  const nextItems = current.items.map((it) => {
-                    if (it.message.message_id === assistantMessageId) {
-                      return {
-                        ...it,
-                        message: { ...it.message, content: assistantText },
-                      };
-                    }
-                    if (it.message.message_id === userMessageId) {
-                      return { ...it, run: baselineRun ?? it.run, runs: baselineRun ? [baselineRun] : it.runs };
-                    }
-                    return it;
-                  });
-                  return { ...current, items: nextItems };
-                },
-                { revalidate: false }
-              );
-            }
-          },
-          new AbortController().signal
-        );
+              // 兼容：若后端未来在 chat SSE 里直接透传 tool.* 事件，这里同步写入工具事件 store
+              if (type === 'tool.status' || type === 'tool.result') {
+                const runId = getString(rec, 'run_id') || getString(outerRec, 'run_id');
+                if (!runId) return;
+                useRunToolEventsStore.getState().apply_tool_event(runId, 0, rec as any);
+                return;
+              }
+
+              if (type === 'message.delta') {
+                const delta = getString(rec, 'delta') || getString(outerRec, 'delta');
+                if (!delta) return;
+                assistantBuffer += delta;
+                clearPending();
+                scheduleFlush();
+                return;
+              }
+
+              if (type === 'message.completed' || type === 'message.failed') {
+                flushBuffer(true);
+                clearPending();
+                const finalRun = parseRunSummary(rec['baseline_run'] ?? outerRec['baseline_run']);
+                if (finalRun) baselineRun = finalRun;
+
+                const outputText = getString(rec, 'output_text') || getString(outerRec, 'output_text');
+                if (outputText) assistantText = outputText;
+
+                void globalMutate(
+                  messagesKey,
+                  (current?: MessagesResponse) => {
+                    if (!current) return current;
+                    const nextItems = current.items.map((it) => {
+                      if (it.message.message_id === assistantMessageId) {
+                        return {
+                          ...it,
+                          message: { ...it.message, content: assistantText },
+                        };
+                      }
+                      if (it.message.message_id === userMessageId) {
+                        return { ...it, run: baselineRun ?? it.run, runs: baselineRun ? [baselineRun] : it.runs };
+                      }
+                      return it;
+                    });
+                    return { ...current, items: nextItems };
+                  },
+                  { revalidate: false }
+                );
+                abortOnTerminal();
+              }
+            },
+            controller.signal
+          );
+        } catch (err) {
+          if (!(err instanceof DOMException && err.name === 'AbortError')) {
+            throw err;
+          }
+        }
 
         await globalMutate(messagesKey);
         if (assistantId) {

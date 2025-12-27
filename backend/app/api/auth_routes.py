@@ -62,6 +62,17 @@ router = APIRouter(tags=["authentication"], prefix="/auth")
 
 REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
 
+def _use_secure_cookie() -> bool:
+    """
+    是否设置 Secure Cookie。
+
+    - 生产环境必须开启 Secure，避免 refresh_token 在明文 HTTP 传输。
+    - 本地/开发环境常见为 http://localhost，若强制 Secure 会导致浏览器忽略 Set-Cookie，
+      进而无法携带 refresh_token 调用 /auth/refresh（表现为 access_token 过期后立刻掉登录）。
+    """
+
+    return settings.environment == "production"
+
 def _request_base_url(request: Request | None) -> str | None:
     """提取请求基址（去掉末尾斜杠），用于拼接头像 URL。"""
 
@@ -182,7 +193,7 @@ async def _issue_token_pair(
         key=REFRESH_TOKEN_COOKIE_NAME,
         value=refresh_token,
         httponly=True,
-        secure=True,  # Always secure as we expect HTTPS in prod, and localhost is considered secure context
+        secure=_use_secure_cookie(),
         samesite="lax", # or 'strict'
         max_age=JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/", # Global path to ensure it's available for auth endpoints
@@ -491,7 +502,7 @@ async def refresh_token(
             key=REFRESH_TOKEN_COOKIE_NAME,
             value=new_refresh_token,
             httponly=True,
-            secure=True,
+            secure=_use_secure_cookie(),
             samesite="lax",
             max_age=JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/",

@@ -17,7 +17,7 @@ export interface PrivateProvidersCardsProps {
   onDelete?: (providerId: string) => void;
   onViewDetails: (providerId: string) => void;
   onViewModels: (providerId: string) => void;
-  onManageKeys?: (providerInternalId: string) => void;
+  onManageKeys?: (providerId: string) => void;
 }
 
 export function PrivateProvidersCards({
@@ -59,7 +59,7 @@ export function PrivateProvidersCards({
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {providers.map((provider) => (
         <ProviderCard
-          key={provider.id}
+          key={provider.provider_id}
           provider={provider}
           metrics={metricsByProviderId[provider.provider_id]}
           isMetricsLoading={isMetricsLoading}
@@ -75,4 +75,3 @@ export function PrivateProvidersCards({
     </div>
   );
 }
-

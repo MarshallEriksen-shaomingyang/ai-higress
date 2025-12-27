@@ -4,6 +4,7 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError, In
 import { tokenManager } from '@/lib/auth/token-manager';
 import { ErrorHandler } from '@/lib/errors';
 import { HTTP_DEFAULT_TIMEOUT_MS } from '@/config/timeouts';
+import { REQUEST_TITLE_HEADER_NAME, REQUEST_TITLE_HEADER_VALUE } from '@/config/headers';
 
 // 认证状态变更回调
 let authErrorCallback: (() => void) | null = null;
@@ -59,21 +60,18 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-// 刷新 token 的函数
-const refreshAccessToken = async (): Promise<string> => {
-  const refreshToken = tokenManager.getRefreshToken();
-  
-  if (!refreshToken) {
-    throw new Error('No refresh token available');
-  }
-
+// 刷新 token 的函数（导出供非 axios 请求复用，例如 SSE / SSR 补偿）
+export const refreshAccessToken = async (): Promise<string> => {
   try {
     // 使用 axios 直接调用后端刷新接口（避免实例拦截器循环）
     const response = await axios.post<{ access_token: string; refresh_token: string | null }>(
       `${BASE_URL}/auth/refresh`,
       {},
       {
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          [REQUEST_TITLE_HEADER_NAME]: REQUEST_TITLE_HEADER_VALUE,
+        },
         withCredentials: true, // 确保跨域发送 cookie
         validateStatus: () => true, // 由下方统一处理状态码
       }
@@ -110,12 +108,19 @@ const createHttpClient = (): AxiosInstance => {
     withCredentials: true,
     headers: {
       'Content-Type': 'application/json',
+      [REQUEST_TITLE_HEADER_NAME]: REQUEST_TITLE_HEADER_VALUE,
     },
   });
 
   // 请求拦截器
   instance.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
+      if (typeof (config.headers as any)?.set === 'function') {
+        (config.headers as any).set(REQUEST_TITLE_HEADER_NAME, REQUEST_TITLE_HEADER_VALUE);
+      } else {
+        (config.headers as any)[REQUEST_TITLE_HEADER_NAME] = REQUEST_TITLE_HEADER_VALUE;
+      }
+
       // 从 tokenManager 获取 token
       let token = tokenManager.getAccessToken();
       const apiKey = typeof window !== 'undefined' 

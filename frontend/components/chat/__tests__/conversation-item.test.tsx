@@ -47,6 +47,25 @@ describe('ConversationItem', () => {
     expect(screen.getByText('Untitled Conversation')).toBeInTheDocument();
   });
 
+  it('should not display <think> blocks in title', () => {
+    const conversationWithThinkTitle = {
+      ...mockConversation,
+      title: '<think>Hidden reasoning</think> Visible title',
+    };
+    render(<ConversationItem conversation={conversationWithThinkTitle} />);
+    expect(screen.getByText('Visible title')).toBeInTheDocument();
+    expect(screen.queryByText('Hidden reasoning')).not.toBeInTheDocument();
+  });
+
+  it('should fall back to untitled when title only contains <think>', () => {
+    const conversationWithOnlyThink = {
+      ...mockConversation,
+      title: '<think>Hidden reasoning only</think>',
+    };
+    render(<ConversationItem conversation={conversationWithOnlyThink} />);
+    expect(screen.getByText('Untitled Conversation')).toBeInTheDocument();
+  });
+
   it('should call onSelect when clicked', () => {
     const onSelect = vi.fn();
     render(<ConversationItem conversation={mockConversation} onSelect={onSelect} />);

@@ -21,6 +21,8 @@ import { MessageItem } from "./message-item";
 import { ErrorAlert } from "./error-alert";
 import { AddComparisonDialog } from "./add-comparison-dialog";
 import { ConversationPendingIndicator } from "./conversation-pending-indicator";
+import { ChatWelcomeContent } from "./chat-welcome-content";
+import { AssistantImageGenerationMessageItem } from "@/components/chat/assistant-image-generation-message-item";
 import { useI18n } from "@/lib/i18n-context";
 import { useErrorDisplay } from "@/lib/errors/error-display";
 import { useMessages } from "@/lib/swr/use-messages";
@@ -31,23 +33,35 @@ import { conversationService } from "@/http/conversation";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useAssistant } from "@/lib/swr/use-assistants";
 import { useLogicalModels } from "@/lib/swr/use-logical-models";
+import { buildComparisonPayload, buildRegeneratePayload } from "@/lib/chat/payload-builder";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useConversationPending } from "@/lib/hooks/use-conversation-pending";
+import { useComposerTaskStore } from "@/lib/stores/composer-task-store";
+import type { ComposerTask } from "@/lib/chat/composer-tasks";
+import { ComposerTaskMessageItem } from "@/components/chat/composer-task-message-item";
 import {
   useChatComparisonStore,
   type ComparisonVariant,
 } from "@/lib/stores/chat-comparison-store";
 import type { Message, RunSummary } from "@/lib/api-types";
+import { useBridgeAgents } from "@/lib/swr/use-bridge";
+
+const isValidUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 export interface MessageListProps {
   assistantId: string;
   conversationId: string;
   onViewDetails?: (runId: string) => void;
-  onTriggerEval?: (messageId: string, runId: string) => void; // 添加 messageId 参数
+  onTriggerEval?: (messageId: string, runId: string) => void;
   showEvalButton?: boolean;
   overrideLogicalModel?: string | null;
   disabledActions?: boolean;
 }
+
+type RenderItem =
+  | { type: 'message'; key: string; message: Message; runs?: RunSummary[]; runSourceMessageId?: string; timestamp: number }
+  | { type: 'composer-task'; key: string; role: 'user' | 'assistant'; task: ComposerTask; timestamp: number };
 
 export const MessageList = memo(function MessageList({
   assistantId,
@@ -71,13 +85,27 @@ export const MessageList = memo(function MessageList({
   const isPendingResponse =
     useChatStore((s) => s.conversationPending[conversationId]) ?? false;
   const { runWithPending } = useConversationPending();
+  const bridgeAgentIds = useChatStore((s) => s.conversationBridgeAgentIds[conversationId]) ?? [];
+  const bridgeToolSelections = useChatStore((s) => s.conversationBridgeToolSelections[conversationId]) ?? {};
+  const defaultBridgeToolSelections = useChatStore((s) => s.defaultBridgeToolSelections) ?? {};
+  const lastModelPreset = useChatStore((s) => s.conversationModelPresets[conversationId]);
+
+  const { agents: bridgeAgents } = useBridgeAgents();
+  const availableBridgeAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const agent of bridgeAgents || []) {
+      const id = typeof agent.agent_id === "string" ? agent.agent_id.trim() : "";
+      if (id) ids.add(id);
+    }
+    return ids;
+  }, [bridgeAgents]);
 
   const deleteConversation = useDeleteConversation();
 
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [regenerateMessageDialogOpen, setRegenerateMessageDialogOpen] =
     useState(false);
-  const [regenerateTarget, setRegenerateTarget] = useState<{
+  const [regenerateTarget, setRegenerateTarget] = useState<{ 
     assistantMessageId: string;
     sourceUserMessageId?: string;
   } | null>(null);
@@ -101,25 +129,28 @@ export const MessageList = memo(function MessageList({
   const [compareSelectedModel, setCompareSelectedModel] = useState<string | null>(
     null
   );
-  const [compareTarget, setCompareTarget] = useState<{
+  const [compareTarget, setCompareTarget] = useState<{ 
     assistantMessageId: string;
     sourceUserMessageId: string;
     baselineModel?: string;
   } | null>(null);
 
-  // 切换会话时重置本地分页/聚合状态
+  const composerTasks = useComposerTaskStore((s) => s.tasks);
+  const tasksForConversation = useMemo(
+    () => composerTasks.filter((t) => t.conversationId === conversationId),
+    [composerTasks, conversationId]
+  );
+
   useEffect(() => {
     setCursor(undefined);
     setAllMessages([]);
   }, [conversationId]);
 
-  // 获取消息列表
   const { messages, nextCursor, isLoading, isError, error, mutate: mutateMessages } = useMessages(
     conversationId,
     { cursor, limit: 50 }
   );
 
-  // 预加载下一页消息（缓存优化）
   useEffect(() => {
     if (nextCursor && !isLoading) {
       const nextPageKey = {
@@ -127,7 +158,6 @@ export const MessageList = memo(function MessageList({
         params: { cursor: nextCursor, limit: 50 },
       };
       
-      // 预加载下一页，但不触发重新验证
       preloadData(
         JSON.stringify(nextPageKey),
         () => messageService.getMessages(conversationId, {
@@ -138,18 +168,12 @@ export const MessageList = memo(function MessageList({
     }
   }, [nextCursor, conversationId, isLoading, preloadData]);
 
-  // 合并新消息到列表
-  // 注意：后端返回倒序（新消息在前），所以：
-  // - 第一次加载：直接使用后端返回的数据
-  // - 分页加载旧消息：旧消息在后端是倒序的末尾，应该追加到当前列表末尾
   useEffect(() => {
     if (messages.length > 0) {
       setAllMessages((prev) => {
-        // 如果是第一次加载或重置
         if (!cursor) {
           if (prev.length === 0) return messages;
 
-          // 兜底：当回流数据缺少助手正文时，保留流式阶段已展示的内容，避免气泡变空
           const prevContentMap = new Map(
             prev.map((item) => [item.message.message_id, item.message.content])
           );
@@ -172,13 +196,11 @@ export const MessageList = memo(function MessageList({
             return item;
           });
         }
-        // 追加更早的消息到列表末尾（因为后端倒序，旧消息在后端列表的后面）
         return [...prev, ...messages];
       });
     }
   }, [messages, cursor]);
 
-  // 当会话被“清空历史”后，SWR 返回空列表；这里需要同步清空本地聚合列表
   useEffect(() => {
     if (isLoading || isError) return;
     if (messages.length !== 0) return;
@@ -189,14 +211,12 @@ export const MessageList = memo(function MessageList({
     setAllMessages([]);
   }, [cursor, isError, isLoading, messages.length]);
 
-  // 反转消息顺序：后端返回倒序（新消息在前），前端需要正序（旧消息在上，新消息在下）
   const displayMessages = useMemo(() => {
     return [...allMessages].reverse();
   }, [allMessages]);
 
   const availableModels = useMemo(() => {
     const modelSet = new Set<string>();
-    modelSet.add("auto");
 
     for (const model of models) {
       if (!model.enabled) continue;
@@ -204,12 +224,11 @@ export const MessageList = memo(function MessageList({
       modelSet.add(model.logical_id);
     }
 
-    return ["auto", ...Array.from(modelSet).filter((m) => m !== "auto").sort()];
+    return Array.from(modelSet).sort();
   }, [models]);
 
-  // 将 user message 的 run 关联到其后一个 assistant message（便于在回复旁展示，并确保 eval 使用 user message_id）
   const displayRows = useMemo(() => {
-    const rows: Array<{
+    const rows: Array<{ 
       message: Message;
       runs: RunSummary[];
       runSourceMessageId?: string;
@@ -257,8 +276,53 @@ export const MessageList = memo(function MessageList({
     return null;
   }, [renderRows]);
 
+  // Combine standard messages with composer tasks
+  const finalRenderItems = useMemo(() => {
+    const items: RenderItem[] = [];
+
+    // Add standard messages
+    for (const row of renderRows) {
+      items.push({
+        type: 'message',
+        key: row.message.message_id,
+        message: row.message,
+        runs: row.runs,
+        runSourceMessageId: row.runSourceMessageId,
+        timestamp: new Date(row.message.created_at).getTime(),
+      });
+    }
+
+    for (const task of tasksForConversation) {
+      // User prompt fake message
+      items.push({
+        type: 'composer-task',
+        key: `${task.kind}:${task.id}:user`,
+        role: 'user',
+        task,
+        timestamp: task.createdAt,
+      });
+      // Assistant result
+      items.push({
+        type: 'composer-task',
+        key: `${task.kind}:${task.id}:assistant`,
+        role: 'assistant',
+        task,
+        timestamp: task.createdAt + 1, // ensure it appears after user prompt
+      });
+    }
+
+    return items.sort((a, b) => a.timestamp - b.timestamp);
+  }, [renderRows, tasksForConversation]);
+
   const handleRegenerate = useCallback(
     async (assistantMessageId: string, _sourceUserMessageId?: string) => {
+      if (!isValidUuid(assistantMessageId)) {
+        const message = t("chat.message.retry_failed");
+        toast.error(message);
+        setRegenErrorById((prev) => ({ ...prev, [assistantMessageId]: message }));
+        return;
+      }
+
       setRegeneratingId(assistantMessageId);
       setRegenErrorById((prev) => {
         const next = { ...prev };
@@ -266,7 +330,6 @@ export const MessageList = memo(function MessageList({
         return next;
       });
       try {
-        // 先在本地清空该条 assistant 内容，避免“旧答案”残留影响观感
         setAllMessages((prev) =>
           prev.map((item) => {
             if (item.message.message_id !== assistantMessageId) return item;
@@ -280,7 +343,17 @@ export const MessageList = memo(function MessageList({
         await runWithPending(
           conversationId,
           async () => {
-            await messageService.regenerateMessage(assistantMessageId);
+            const regeneratePayload = buildRegeneratePayload({
+              modelPreset: lastModelPreset ?? null,
+              overrideLogicalModel: _overrideLogicalModel ?? null,
+              bridgeState: {
+                conversationBridgeAgentIds: bridgeAgentIds,
+                conversationBridgeToolSelections: bridgeToolSelections,
+                defaultBridgeToolSelections,
+              },
+              availableBridgeAgentIds,
+            });
+            await messageService.regenerateMessage(assistantMessageId, regeneratePayload);
             await mutateMessages();
           },
           { minDurationMs: 250 }
@@ -296,15 +369,32 @@ export const MessageList = memo(function MessageList({
         setRegeneratingId(null);
       }
     },
-    [conversationId, mutateMessages, runWithPending, t]
+    [
+      conversationId,
+      mutateMessages,
+      runWithPending,
+      t,
+      _overrideLogicalModel,
+      bridgeAgentIds,
+      bridgeToolSelections,
+      defaultBridgeToolSelections,
+      lastModelPreset,
+      availableBridgeAgentIds,
+    ]
   );
 
   const openRegenerateDialog = useCallback(
     (assistantMessageId: string, sourceUserMessageId?: string) => {
+      if (!isValidUuid(assistantMessageId)) {
+        const message = t("chat.message.retry_failed");
+        toast.error(message);
+        setRegenErrorById((prev) => ({ ...prev, [assistantMessageId]: message }));
+        return;
+      }
       setRegenerateTarget({ assistantMessageId, sourceUserMessageId });
       setRegenerateMessageDialogOpen(true);
     },
-    []
+    [t]
   );
 
   const handleDeleteMessage = useCallback(
@@ -462,9 +552,17 @@ export const MessageList = memo(function MessageList({
 
       try {
         await messageService.sendMessage(tempConversation.conversation_id, {
-          content: prompt,
-          override_logical_model: compareSelectedModel,
-          streaming: false,
+          ...buildComparisonPayload({
+            content: prompt,
+            overrideLogicalModel: compareSelectedModel,
+            modelPreset: lastModelPreset ?? null,
+            bridgeState: {
+              conversationBridgeAgentIds: bridgeAgentIds,
+              conversationBridgeToolSelections: bridgeToolSelections,
+              defaultBridgeToolSelections,
+            },
+            availableBridgeAgentIds,
+          }),
         });
 
         const tempMessages = await messageService.getMessages(
@@ -510,59 +608,49 @@ export const MessageList = memo(function MessageList({
     conversationId,
     assistant?.project_id,
     assistantId,
+    bridgeAgentIds,
+    bridgeToolSelections,
+    defaultBridgeToolSelections,
+    lastModelPreset,
+    availableBridgeAgentIds,
     showError,
     t,
     updateVariant,
   ]);
 
-  // 虚拟列表配置
   const rowVirtualizer = useVirtualizer({
-    count: renderRows.length,
+    count: finalRenderItems.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 100, // 估计每条消息的高度
-    overscan: 5, // 预渲染的消息数量
+    estimateSize: () => 100,
+    overscan: 5,
   });
 
-  // 加载更多消息（向前分页）
   const loadMore = () => {
     if (nextCursor && !isLoading) {
       setCursor(nextCursor);
     }
   };
 
-  // 滚动到底部
   const scrollToBottom = () => {
     if (parentRef.current) {
       parentRef.current.scrollTop = parentRef.current.scrollHeight;
     }
   };
 
-  // 初始加载完成后滚动到底部（显示最新消息）
   useEffect(() => {
-    if (!isLoading && displayRows.length > 0 && !cursor) {
+    if (!isLoading && finalRenderItems.length > 0 && !cursor) {
       setTimeout(scrollToBottom, 100);
     }
-  }, [isLoading, displayRows.length, cursor]);
+  }, [isLoading, finalRenderItems.length, cursor]);
 
-  // 空状态
-  if (!isLoading && displayRows.length === 0) {
+  if (!isLoading && finalRenderItems.length === 0) {
     return (
-      <div 
-        className="flex flex-col items-center justify-center h-full text-center p-8"
-        role="status"
-        aria-live="polite"
-      >
-        <div className="text-muted-foreground mb-2">
-          {t("chat.message.empty")}
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {t("chat.message.empty_description")}
-        </div>
+      <div className="h-full overflow-y-auto" role="status" aria-live="polite">
+        <ChatWelcomeContent />
       </div>
     );
   }
 
-  // 错误状态
   if (isError) {
     return (
       <div 
@@ -585,7 +673,6 @@ export const MessageList = memo(function MessageList({
 
   return (
     <div className="flex flex-col h-full" role="region" aria-label={t("chat.message.list_label")}>
-      {/* 加载更多按钮 */}
       {nextCursor && (
         <div className="flex justify-center p-4 border-b">
           <Button
@@ -607,7 +694,6 @@ export const MessageList = memo(function MessageList({
         </div>
       )}
 
-      {/* 虚拟列表容器 */}
       <div
         ref={parentRef}
         className="flex-1 overflow-y-auto py-6"
@@ -628,69 +714,101 @@ export const MessageList = memo(function MessageList({
             }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-              const item = renderRows[virtualItem.index];
+              const item = finalRenderItems[virtualItem.index];
               if (!item) return null;
 
-              return (
-                <div
-                  key={virtualItem.key}
-                  data-index={virtualItem.index}
-                  ref={rowVirtualizer.measureElement}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                >
-                  <div className="pb-6">
-                    <MessageItem
-                      message={item.message}
-                      runs={item.runs}
-                      runSourceMessageId={item.runSourceMessageId}
-                      userAvatarUrl={user?.avatar ?? null}
-                      userDisplayName={user?.display_name ?? user?.username ?? null}
-                      onViewDetails={onViewDetails}
-                      onTriggerEval={onTriggerEval}
-                      showEvalButton={showEvalButton}
-                      comparisonVariants={
-                        variantsByKey[`${conversationId}:${item.message.message_id}`] ?? []
-                      }
-                      onAddComparison={(_, sourceUserMessageId) =>
-                        openCompareDialog(
-                          item.message.message_id,
-                          sourceUserMessageId,
-                          item.runs?.[0]?.requested_logical_model
-                        )
-                      }
-                      isLatestAssistant={item.message.message_id === latestAssistantMessageId}
-                      onRegenerate={openRegenerateDialog}
-                      isRegenerating={regeneratingId === item.message.message_id}
-                      onDeleteMessage={
-                        item.message.message_id === latestAssistantMessageId
-                          ? () => {
-                              setDeleteMessageTarget(item.message.message_id);
-                              setDeleteMessageDialogOpen(true);
-                            }
-                          : undefined
-                      }
-                      isDeletingMessage={deletingMessageId === item.message.message_id}
-                      disableActions={disabledActions || isLoading}
-                      errorMessage={regenErrorById[item.message.message_id] ?? null}
-                      enableTypewriter
-                      typewriterKey={`${item.message.conversation_id}:${item.message.created_at}`}
-                    />
+              if (item.type === 'message') {
+                const isAssistantImageGen =
+                  item.message.role === "assistant" && !!item.message.image_generation;
+                return (
+                  <div
+                    key={virtualItem.key}
+                    data-index={virtualItem.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    <div className="pb-6">
+                      {isAssistantImageGen ? (
+                        <AssistantImageGenerationMessageItem message={item.message} />
+                      ) : (
+                        <MessageItem
+                          message={item.message}
+                          runs={item.runs}
+                          runSourceMessageId={item.runSourceMessageId}
+                          userAvatarUrl={user?.avatar ?? null}
+                          userDisplayName={user?.display_name ?? user?.username ?? null}
+                          onViewDetails={onViewDetails}
+                          onTriggerEval={onTriggerEval}
+                          showEvalButton={showEvalButton}
+                          comparisonVariants={
+                            variantsByKey[`${conversationId}:${item.message.message_id}`] ?? []
+                          }
+                          onAddComparison={(_, sourceUserMessageId) =>
+                            openCompareDialog(
+                              item.message.message_id,
+                              sourceUserMessageId,
+                              item.runs?.[0]?.requested_logical_model
+                            )
+                          }
+                          isLatestAssistant={item.message.message_id === latestAssistantMessageId}
+                          onRegenerate={
+                            isValidUuid(item.message.message_id) ? openRegenerateDialog : undefined
+                          }
+                          isRegenerating={regeneratingId === item.message.message_id}
+                          onDeleteMessage={
+                            item.message.message_id === latestAssistantMessageId
+                              ? () => {
+                                  setDeleteMessageTarget(item.message.message_id);
+                                  setDeleteMessageDialogOpen(true);
+                                }
+                              : undefined
+                          }
+                          isDeletingMessage={deletingMessageId === item.message.message_id}
+                          disableActions={disabledActions || isLoading}
+                          errorMessage={regenErrorById[item.message.message_id] ?? null}
+                          enableTypewriter
+                          typewriterKey={`${item.message.conversation_id}:${item.message.created_at}`}
+                        />
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              } else {
+                return (
+                  <div
+                    key={virtualItem.key}
+                    data-index={virtualItem.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    <div className="pb-6">
+                      <ComposerTaskMessageItem
+                        role={item.role}
+                        task={item.task}
+                        user={user}
+                      />
+                    </div>
+                  </div>
+                );
+              }
             })}
           </div>
         </div>
       </div>
 
-      {/* 初始加载状态 */}
-      {isLoading && displayRows.length === 0 && (
+      {isLoading && finalRenderItems.length === 0 && (
         <div 
           className="flex items-center justify-center h-full"
           role="status"
@@ -703,7 +821,6 @@ export const MessageList = memo(function MessageList({
         </div>
       )}
 
-      {/* 等待回复时的 loading（非流式 / 流式首包前 / 重新生成） */}
       <ConversationPendingIndicator conversationId={conversationId} />
 
       <AddComparisonDialog

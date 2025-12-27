@@ -16,6 +16,7 @@ export interface ProviderPreset {
   messages_path: string | null;
   chat_completions_path: string;
   responses_path: string | null;
+  images_generations_path: string | null;
   supported_api_styles: ('openai' | 'responses' | 'claude')[] | null;
   retryable_status_codes: number[] | null;
   custom_headers: Record<string, string> | null;
@@ -37,6 +38,7 @@ export interface CreateProviderPresetRequest {
   messages_path?: string | null;
   chat_completions_path?: string;
   responses_path?: string | null;
+  images_generations_path?: string | null;
   supported_api_styles?: ('openai' | 'responses' | 'claude')[] | null;
   retryable_status_codes?: number[] | null;
   custom_headers?: Record<string, string> | null;
@@ -55,6 +57,7 @@ export interface UpdateProviderPresetRequest {
   messages_path?: string | null;
   chat_completions_path?: string | null;
   responses_path?: string | null;
+  images_generations_path?: string | null;
   supported_api_styles?: ('openai' | 'responses' | 'claude')[] | null;
   retryable_status_codes?: number[] | null;
   custom_headers?: Record<string, string> | null;

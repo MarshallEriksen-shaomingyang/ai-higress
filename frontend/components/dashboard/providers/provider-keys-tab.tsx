@@ -7,6 +7,7 @@ import { Key } from "lucide-react";
 import type { Provider } from "@/http/provider";
 
 interface ProviderKeysTabProps {
+  providerId: string;
   provider: Provider;
   canManage: boolean;
   translations: {
@@ -21,6 +22,7 @@ interface ProviderKeysTabProps {
 }
 
 export const ProviderKeysTab = ({ 
+  providerId,
   provider, 
   canManage, 
   translations,
@@ -39,7 +41,7 @@ export const ProviderKeysTab = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/dashboard/providers/${provider.provider_id}/keys`)}
+            onClick={() => router.push(`/dashboard/providers/${providerId}/keys`)}
           >
             <Key className="w-4 h-4 mr-1" />
             {actionManageKeys}

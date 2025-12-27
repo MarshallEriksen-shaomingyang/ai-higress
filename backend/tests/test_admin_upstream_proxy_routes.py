@@ -10,7 +10,7 @@ from app.deps import get_redis
 from app.models import User
 from app.proxy_pool import pick_upstream_proxy, report_upstream_proxy_failure
 from app.routes import create_app
-from app.services.upstream_proxy_redis import mark_available, put_endpoint_proxy_url
+from app.services.upstream_proxy.redis import mark_available, put_endpoint_proxy_url
 from tests.utils import InMemoryRedis, install_inmemory_db, jwt_auth_headers, seed_user_and_key
 
 

@@ -9,6 +9,7 @@ import {
   normalizeEvalResponse,
   type EvalResponseBackend,
 } from '@/lib/normalizers/chat-normalizers';
+import { CREATE_EVAL_TIMEOUT_MS } from '@/config/timeouts';
 
 /**
  * 评测服务 HTTP client
@@ -24,7 +25,9 @@ export const evalService = {
     if (!data.message_id) {
       throw new Error('message_id is required to create eval');
     }
-    const response = await httpClient.post<EvalResponseBackend>('/v1/evals', data);
+    const response = await httpClient.post<EvalResponseBackend>('/v1/evals', data, {
+      timeout: CREATE_EVAL_TIMEOUT_MS,
+    });
     return normalizeEvalResponse(response.data);
   },
 

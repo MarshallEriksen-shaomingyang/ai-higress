@@ -162,3 +162,66 @@ def test_recalculate_skips_when_no_diff() -> None:
         assert third == 1
         refreshed = session.execute(select(AggregateRoutingMetrics)).scalar_one()
         assert refreshed.latency_p99_ms == 1000.0
+
+
+def test_recalculate_and_persist_aligns_start_to_avoid_duplicate_bucket() -> None:
+    SessionLocal = _setup_session()
+    with SessionLocal() as session:
+        start = dt.datetime(2024, 1, 1, 6, 11, tzinfo=dt.UTC)
+        end = dt.datetime(2024, 1, 1, 7, 11, tzinfo=dt.UTC)
+
+        _seed_history(
+            session,
+            window_start=start,
+            total=2,
+            success=2,
+            error=0,
+            latency_avg=100.0,
+            latency_p95=150.0,
+            latency_p99=200.0,
+        )
+
+        # 预先插入一个对齐到 06:00 的小时桶；若 recalc 用原始 start=06:11 查询 existing，
+        # 会漏掉该记录并尝试重复插入，从而触发唯一约束冲突。
+        session.add(
+            AggregateRoutingMetrics(
+                provider_id="provider",
+                logical_model="gpt-4",
+                transport="http",
+                is_stream=False,
+                user_id=None,
+                api_key_id=None,
+                window_start=dt.datetime(2024, 1, 1, 6, 0, tzinfo=dt.UTC),
+                window_duration=3600,
+                total_requests=0,
+                success_requests=0,
+                error_requests=0,
+                latency_p50_ms=0.0,
+                latency_p90_ms=0.0,
+                latency_p95_ms=0.0,
+                latency_p99_ms=0.0,
+                error_rate=0.0,
+                success_qps=0.0,
+                status="unknown",
+                recalculated_at=dt.datetime(2024, 1, 1, 6, 0, tzinfo=dt.UTC),
+                source_version="seed",
+            )
+        )
+        session.commit()
+
+        recalculator = OfflineMetricsRecalculator(
+            diff_threshold=0.0, source_version="test", min_total_requests=1
+        )
+        written = recalculator.recalculate_and_persist(
+            session,
+            start=start,
+            end=end,
+            window_seconds=3600,
+        )
+        session.commit()
+
+        rows = session.execute(select(AggregateRoutingMetrics)).scalars().all()
+        assert len(rows) == 1
+        assert written == 1
+        assert rows[0].window_start == dt.datetime(2024, 1, 1, 6, 0, tzinfo=dt.UTC)
+        assert rows[0].total_requests == 2

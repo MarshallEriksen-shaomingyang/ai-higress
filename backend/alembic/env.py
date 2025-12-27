@@ -19,6 +19,40 @@ from app.settings import settings  # noqa: E402
 target_metadata = Base.metadata
 
 
+def _ensure_alembic_version_num_length(connection: sa.Connection, length: int = 128) -> None:
+    """
+    兼容历史数据库：alembic_version.version_num 早期可能是 VARCHAR(32)，
+    当 revision id 长于 32（例如 0006_add_api_key_provider_restrictions）会导致迁移在更新版本号时直接失败。
+    这里在跑迁移前自动扩容到更安全的长度，避免“初次部署/旧库升级”卡在很早期的版本更新阶段。
+    """
+    if connection.dialect.name != "postgresql":
+        return
+
+    try:
+        current_len = connection.execute(
+            sa.text(
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_name = 'alembic_version'
+                  AND column_name = 'version_num'
+                ORDER BY table_schema
+                LIMIT 1
+                """
+            )
+        ).scalar_one_or_none()
+    except Exception:
+        # 表不存在/权限不足等情况：交给 Alembic 正常创建或后续报错处理
+        return
+
+    if current_len is None or current_len >= length:
+        return
+
+    connection.execute(
+        sa.text(f"ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR({int(length)})")
+    )
+
+
 def _configure_alembic() -> AlembicConfig:
     """
     确保 Alembic Config 始终使用 settings.database_url。
@@ -58,6 +92,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        _ensure_alembic_version_num_length(connection, length=128)
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

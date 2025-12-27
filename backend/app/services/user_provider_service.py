@@ -3,12 +3,23 @@ from __future__ import annotations
 import re
 from uuid import UUID
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
 from app.models import Provider, ProviderAllowedUser, ProviderAPIKey
+from app.repositories.user_provider_repository import (
+    count_user_private_providers as repo_count_user_private_providers,
+    create_private_provider_with_key as repo_create_private_provider_with_key,
+    get_accessible_provider_ids as repo_get_accessible_provider_ids,
+    get_private_provider_by_id as repo_get_private_provider_by_id,
+    list_private_providers as repo_list_private_providers,
+    list_providers_shared_with_user as repo_list_providers_shared_with_user,
+    persist_provider as repo_persist_provider,
+    provider_exists as repo_provider_exists,
+    update_provider_shared_users as repo_update_provider_shared_users,
+)
 from app.schemas.notification import NotificationCreateRequest
 from app.schemas.provider_control import (
     UserProviderCreateRequest,
@@ -28,10 +39,7 @@ class UserProviderNotFoundError(UserProviderServiceError):
 
 
 def _provider_exists(session: Session, provider_id: str) -> bool:
-    stmt: Select[tuple[Provider]] = select(Provider).where(
-        Provider.provider_id == provider_id
-    )
-    return session.execute(stmt).scalars().first() is not None
+    return repo_provider_exists(session, provider_id=provider_id)
 
 
 def _slugify(text: str) -> str:
@@ -95,6 +103,7 @@ def create_private_provider(
         messages_path=payload.messages_path,
         chat_completions_path=payload.chat_completions_path,
         responses_path=payload.responses_path,
+        images_generations_path=payload.images_generations_path,
         supported_api_styles=payload.supported_api_styles,
         static_models=payload.static_models,
         status="healthy",
@@ -102,39 +111,22 @@ def create_private_provider(
         visibility="private",
     )
 
-    session.add(provider)
-    session.flush()  # ensure provider.id
-
-    # 写入一条上游 API 密钥（必填）
-    encrypted_key = encrypt_secret(payload.api_key)
-    api_key = ProviderAPIKey(
-        provider_uuid=provider.id,
-        encrypted_key=encrypted_key,
-        weight=1.0,
-        max_qps=payload.max_qps,
-        label="default",
-        status="active",
-    )
-    session.add(api_key)
-
     try:
-        session.commit()
+        provider = repo_create_private_provider_with_key(
+            session,
+            provider=provider,
+            encrypted_key=encrypt_secret(payload.api_key),
+            max_qps=payload.max_qps,
+        )
     except IntegrityError as exc:  # pragma: no cover - 并发场景保护
-        session.rollback()
         logger.error("Failed to create private provider: %s", exc)
         raise UserProviderServiceError("无法创建私有提供商") from exc
-
-    session.refresh(provider)
     return provider
 
 
 def list_private_providers(session: Session, owner_id: UUID) -> list[Provider]:
     """列出指定用户的所有私有 Provider。"""
-    stmt: Select[tuple[Provider]] = select(Provider).where(
-        Provider.owner_id == owner_id,
-        Provider.visibility.in_(("private", "restricted")),
-    )
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_private_providers(session, owner_id=owner_id)
 
 
 def get_private_provider_by_id(
@@ -142,12 +134,7 @@ def get_private_provider_by_id(
     owner_id: UUID,
     provider_id: str,
 ) -> Provider | None:
-    stmt: Select[tuple[Provider]] = select(Provider).where(
-        Provider.owner_id == owner_id,
-        Provider.visibility.in_(("private", "restricted")),
-        Provider.provider_id == provider_id,
-    )
-    return session.execute(stmt).scalars().first()
+    return repo_get_private_provider_by_id(session, owner_id=owner_id, provider_id=provider_id)
 
 
 def update_private_provider(
@@ -160,7 +147,7 @@ def update_private_provider(
 
     目前仅允许更新非标识类字段；provider_id 不可修改。
     """
-    provider = get_private_provider_by_id(session, owner_id, provider_id)
+    provider = repo_get_private_provider_by_id(session, owner_id=owner_id, provider_id=provider_id)
     if provider is None:
         raise UserProviderNotFoundError(
             f"Private provider '{provider_id}' not found for user {owner_id}"
@@ -197,6 +184,8 @@ def update_private_provider(
         provider.chat_completions_path = payload.chat_completions_path or None
     if payload.responses_path is not None:
         provider.responses_path = payload.responses_path or None
+    if payload.images_generations_path is not None:
+        provider.images_generations_path = payload.images_generations_path or None
     if payload.supported_api_styles is not None:
         # When explicitly provided, supported_api_styles becomes the
         # authoritative declaration of upstream API styles for this provider.
@@ -208,45 +197,22 @@ def update_private_provider(
     if payload.static_models is not None:
         provider.static_models = payload.static_models
 
-    session.add(provider)
     try:
-        session.commit()
+        provider = repo_persist_provider(session, provider=provider)
     except IntegrityError as exc:  # pragma: no cover - 并发场景保护
-        session.rollback()
         logger.error("Failed to update private provider: %s", exc)
         raise UserProviderServiceError("无法更新私有提供商") from exc
-    session.refresh(provider)
     return provider
 
 
 def count_user_private_providers(session: Session, owner_id: UUID) -> int:
     """统计用户的私有 Provider 数量，用于配额控制。"""
-    stmt = (
-        select(func.count())
-        .select_from(Provider)
-        .where(
-            Provider.owner_id == owner_id,
-            Provider.visibility.in_(("private", "restricted")),
-        )
-    )
-    return int(session.execute(stmt).scalar_one() or 0)
+    return repo_count_user_private_providers(session, owner_id=owner_id)
 
 
 def list_providers_shared_with_user(session: Session, user_id: UUID) -> list[Provider]:
     """列出通过私有分享授权给该用户的 Provider（不包含自己创建的）。"""
-    stmt: Select[tuple[Provider]] = (
-        select(Provider)
-        .join(
-            ProviderAllowedUser,
-            ProviderAllowedUser.provider_uuid == Provider.id,
-        )
-        .where(
-            Provider.visibility == "restricted",
-            ProviderAllowedUser.user_id == user_id,
-            Provider.owner_id != user_id,
-        )
-    )
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_providers_shared_with_user(session, user_id=user_id)
 
 
 def get_accessible_provider_ids(
@@ -257,26 +223,7 @@ def get_accessible_provider_ids(
     user = get_user_by_id(session, user_id)
     if user is None:
         return set()
-    if user.is_superuser:
-        stmt = select(Provider.provider_id)
-        return set(session.execute(stmt).scalars().all())
-
-    shared_exists = (
-        select(ProviderAllowedUser.id)
-        .where(
-            ProviderAllowedUser.provider_uuid == Provider.id,
-            ProviderAllowedUser.user_id == user_id,
-        )
-        .exists()
-    )
-    stmt = select(Provider.provider_id).where(
-        or_(
-            and_(Provider.visibility == "public", Provider.owner_id.is_(None)),
-            Provider.owner_id == user_id,
-            and_(Provider.visibility == "restricted", shared_exists),
-        )
-    )
-    return set(session.execute(stmt).scalars().all())
+    return repo_get_accessible_provider_ids(session, user_id=user_id, is_superuser=bool(user.is_superuser))
 
 
 def update_provider_shared_users(
@@ -287,7 +234,7 @@ def update_provider_shared_users(
 ) -> Provider:
     """更新私有 Provider 的共享列表并调整可见性。"""
 
-    provider = get_private_provider_by_id(session, owner_id, provider_id)
+    provider = repo_get_private_provider_by_id(session, owner_id=owner_id, provider_id=provider_id)
     if provider is None:
         raise UserProviderNotFoundError(
             f"Private provider '{provider_id}' not found for user {owner_id}"
@@ -314,27 +261,11 @@ def update_provider_shared_users(
         missing_str = ", ".join(str(item) for item in missing)
         raise UserProviderServiceError(f"以下用户不存在：{missing_str}")
 
-    existing_map = {link.user_id: link for link in provider.shared_users}
-    target_set = set(normalized)
-    added_user_ids = [uid for uid in target_set if uid not in existing_map]
-
-    # 删除已移除的授权
-    for link in list(provider.shared_users):
-        if link.user_id not in target_set:
-            provider.shared_users.remove(link)
-            session.delete(link)
-
-    # 新增授权
-    for uid in target_set:
-        if uid not in existing_map:
-            provider.shared_users.append(
-                ProviderAllowedUser(user_id=uid, provider_uuid=provider.id)
-            )
-
-    provider.visibility = "restricted" if target_set else "private"
-    session.add(provider)
-    session.commit()
-    session.refresh(provider)
+    provider, added_user_ids = repo_update_provider_shared_users(
+        session,
+        provider=provider,
+        target_user_ids=normalized,
+    )
 
     if added_user_ids:
         try:

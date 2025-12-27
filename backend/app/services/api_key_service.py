@@ -6,16 +6,23 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.models import APIKey, User
+from app.repositories.api_key_repository import (
+    api_key_name_exists,
+    create_api_key as repo_create_api_key,
+    delete_api_key as repo_delete_api_key,
+    find_api_key_by_hash as repo_find_api_key_by_hash,
+    get_api_key_by_id as repo_get_api_key_by_id,
+    list_api_keys_for_user as repo_list_api_keys_for_user,
+    persist_api_key as repo_persist_api_key,
+)
 from app.schemas.api_key import APIKeyCreateRequest, APIKeyExpiry, APIKeyUpdateRequest
 from app.settings import settings
 
 from .api_key_provider_restriction import (
-    APIKeyProviderRestrictionService,
     UnknownProviderError,
 )
 
@@ -61,50 +68,30 @@ def _name_exists(
     *,
     exclude_key_id: UUID | None = None,
 ) -> bool:
-    stmt: Select[tuple[APIKey]] = select(APIKey).where(
-        APIKey.user_id == user_id, APIKey.name == name
+    return api_key_name_exists(
+        session,
+        user_id=user_id,
+        name=name,
+        exclude_key_id=exclude_key_id,
     )
-    if exclude_key_id is not None:
-        stmt = stmt.where(APIKey.id != exclude_key_id)
-    return session.execute(stmt).scalars().first() is not None
 
 
 def list_api_keys_for_user(session: Session, user_id: UUID) -> list[APIKey]:
-    stmt: Select[tuple[APIKey]] = (
-        select(APIKey)
-        .where(APIKey.user_id == user_id)
-        .options(selectinload(APIKey.allowed_provider_links))
-        .order_by(APIKey.created_at.asc())
-    )
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_api_keys_for_user(session, user_id=user_id)
 
 
 def get_api_key_by_id(
     session: Session, key_id: UUID | str, *, user_id: UUID | None = None
 ) -> APIKey | None:
-    stmt: Select[tuple[APIKey]] = select(APIKey).options(
-        selectinload(APIKey.allowed_provider_links)
-    )
     try:
         key_uuid = UUID(str(key_id))
     except ValueError:
         return None
-    stmt = stmt.where(APIKey.id == key_uuid)
-    if user_id is not None:
-        stmt = stmt.where(APIKey.user_id == user_id)
-    return session.execute(stmt).scalars().first()
+    return repo_get_api_key_by_id(session, key_id=key_uuid, user_id=user_id)
 
 
 def find_api_key_by_hash(session: Session, key_hash: str) -> APIKey | None:
-    stmt: Select[tuple[APIKey]] = (
-        select(APIKey)
-        .where(APIKey.key_hash == key_hash)
-        .options(
-            selectinload(APIKey.allowed_provider_links),
-            selectinload(APIKey.user),
-        )
-    )
-    return session.execute(stmt).scalars().first()
+    return repo_find_api_key_by_hash(session, key_hash=key_hash)
 
 
 def create_api_key(
@@ -121,31 +108,23 @@ def create_api_key(
     if len(token.encode('utf-8')) > 72:
         token = token[:72]
         print(f"Truncated API token to: {len(token.encode('utf-8'))} bytes")
-    api_key = APIKey(
-        user_id=user.id,
-        name=payload.name,
-        key_hash=derive_api_key_hash(token),
-        key_prefix=build_api_key_prefix(token),
-        expiry_type=payload.expiry.value,
-        expires_at=_expires_at_for(payload.expiry),
-        is_active=True,
-        disabled_reason=None,
-    )
-
-    session.add(api_key)
-    session.flush()  # ensure api_key.id for relationship inserts
-    restrictions = APIKeyProviderRestrictionService(session)
     try:
-        if payload.allowed_provider_ids is not None:
-            restrictions.set_allowed_providers(api_key, payload.allowed_provider_ids)
-        session.commit()
+        api_key = repo_create_api_key(
+            session,
+            user_id=user.id,
+            name=payload.name,
+            key_hash=derive_api_key_hash(token),
+            key_prefix=build_api_key_prefix(token),
+            expiry_type=payload.expiry.value,
+            expires_at=_expires_at_for(payload.expiry),
+            is_active=True,
+            disabled_reason=None,
+            allowed_provider_ids=payload.allowed_provider_ids,
+        )
     except UnknownProviderError:
-        session.rollback()
         raise
     except IntegrityError as exc:  # pragma: no cover - 极低概率的并发写冲突
-        session.rollback()
         raise APIKeyServiceError("无法创建密钥") from exc
-    session.refresh(api_key)
     return api_key, token
 
 
@@ -176,25 +155,21 @@ def update_api_key(
             api_key.is_active = False
             api_key.disabled_reason = "expired"
 
-    restrictions = APIKeyProviderRestrictionService(session)
     try:
-        if payload.allowed_provider_ids is not None:
-            restrictions.set_allowed_providers(api_key, payload.allowed_provider_ids)
-        session.add(api_key)
-        session.commit()
+        api_key = repo_persist_api_key(
+            session,
+            api_key=api_key,
+            allowed_provider_ids=payload.allowed_provider_ids,
+        )
     except UnknownProviderError:
-        session.rollback()
         raise
     except IntegrityError as exc:  # pragma: no cover - 极低概率的并发写冲突
-        session.rollback()
         raise APIKeyServiceError("无法更新密钥") from exc
-    session.refresh(api_key)
     return api_key
 
 
 def delete_api_key(session: Session, api_key: APIKey) -> None:
-    session.delete(api_key)
-    session.commit()
+    repo_delete_api_key(session, api_key=api_key)
 
 
 __all__ = [

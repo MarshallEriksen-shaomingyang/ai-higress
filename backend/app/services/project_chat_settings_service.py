@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.jwt_auth import AuthenticatedUser
+from app.repositories.api_key_repository import persist_api_key as repo_persist_api_key
 from app.schemas import ProjectChatSettingsResponse, ProjectChatSettingsUpdateRequest
 from app.services.project_eval_config_service import resolve_project_context
 
@@ -51,9 +52,7 @@ def update_project_chat_settings(
     if "title_logical_model" in payload.model_fields_set:
         api_key.chat_title_logical_model = _normalize_optional_model(payload.title_logical_model)
 
-    db.add(api_key)
-    db.commit()
-    db.refresh(api_key)
+    repo_persist_api_key(db, api_key=api_key, allowed_provider_ids=None)
 
     return get_project_chat_settings(db, project_id=project_id, current_user=current_user)
 
@@ -63,4 +62,3 @@ __all__ = [
     "get_project_chat_settings",
     "update_project_chat_settings",
 ]
-

@@ -621,28 +621,32 @@ def recalc_recent_metrics(hours: int | None = None) -> int:
 
     session = SessionLocal()
     try:
-        # 计算重算区间的结束时间：为避免与最新写入强竞争，可以向历史偏移一段保护时间。
-        now = _now_utc_minute()
-        guard_hours = max(settings.offline_metrics_guard_hours, 0)
-        end = now - dt.timedelta(hours=guard_hours) if guard_hours else now
+        with _PgAdvisoryLock(session, lock_id=8102003) as lock:
+            if session.get_bind().dialect.name == "postgresql" and not lock.acquired:
+                return 0
 
-        lookback = hours or settings.offline_metrics_lookback_hours
-        if lookback <= 0:
-            return 0
-        start = end - dt.timedelta(hours=lookback)
+            # 计算重算区间的结束时间：为避免与最新写入强竞争，可以向历史偏移一段保护时间。
+            now = _now_utc_minute()
+            guard_hours = max(settings.offline_metrics_guard_hours, 0)
+            end = now - dt.timedelta(hours=guard_hours) if guard_hours else now
 
-        total_written = 0
-        for window in settings.offline_metrics_windows:
-            recalculator = _build_recalculator()
-            total_written += recalculator.recalculate_and_persist(
-                session,
-                start=start,
-                end=end,
-                window_seconds=window,
-            )
+            lookback = hours or settings.offline_metrics_lookback_hours
+            if lookback <= 0:
+                return 0
+            start = end - dt.timedelta(hours=lookback)
 
-        session.commit()
-        return total_written
+            total_written = 0
+            for window in settings.offline_metrics_windows:
+                recalculator = _build_recalculator()
+                total_written += recalculator.recalculate_and_persist(
+                    session,
+                    start=start,
+                    end=end,
+                    window_seconds=window,
+                )
+
+            session.commit()
+            return total_written
     finally:
         session.close()
 

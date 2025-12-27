@@ -148,6 +148,12 @@ class OfflineMetricsRecalculator:
         transport: str | None = None,
         is_stream: bool | None = None,
     ) -> int:
+        # 关键修正：按窗口粒度向下对齐 start。
+        # 否则当 start 落在窗口中间时（例如 06:11），minute 桶会被聚合到 06:00 的 window_start，
+        # 但 _load_existing() 用原始 start（06:11）查询会漏掉已存在的 06:00 记录，
+        # 进而在 flush 时触发 uq_aggregate_metrics_bucket 的重复插入错误。
+        start = _align_window(start, window_seconds)
+
         payloads = self.recalculate(
             session,
             start=start,

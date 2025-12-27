@@ -362,7 +362,8 @@ export type ModelCapability =
   | "embedding"
   | "vision"
   | "audio"
-  | "function_calling";
+  | "function_calling"
+  | "image_generation";
 
 export type ApiStyle = "openai" | "responses" | "claude";
 
@@ -397,6 +398,37 @@ export interface LogicalModelsResponse {
 
 export interface LogicalModelUpstreamsResponse {
   upstreams: LogicalModelUpstream[];
+}
+
+// ============= 图片生成 / Image Generation =============
+
+export interface ImageGenerationRequest {
+  model: string;
+  prompt: string;
+  n?: number;
+  size?: string;
+  response_format?: "url" | "b64_json" | null;
+  quality?: "standard" | "hd" | "low" | "medium" | "high" | "auto";
+  style?: "vivid" | "natural";
+  background?: "transparent" | "opaque" | "auto";
+  moderation?: "low" | "auto";
+  output_format?: "png" | "jpeg" | "webp";
+  output_compression?: number;
+  stream?: boolean;
+  partial_images?: number;
+  extra_body?: Record<string, any>;
+  user?: string;
+}
+
+export interface ImageGenerationImage {
+  url?: string;
+  b64_json?: string;
+  revised_prompt?: string;
+}
+
+export interface ImageGenerationResponse {
+  created: number;
+  data: ImageGenerationImage[];
 }
 
 export type UpdateGatewayConfigRequest = GatewayConfig;
@@ -911,6 +943,20 @@ export interface Message {
   conversation_id: string;
   role: 'user' | 'assistant';
   content: string;
+  image_generation?: {
+    type: "image_generation";
+    status: "pending" | "succeeded" | "failed";
+    prompt: string;
+    params: ImageGenerationRequest;
+    images: Array<{
+      url?: string;
+      object_key?: string | null;
+      b64_json?: string;
+      revised_prompt?: string | null;
+    }>;
+    error?: string;
+    created?: number;
+  };
   run_id?: string; // assistant 消息关联的 run_id
   created_at: string;
 }
@@ -964,6 +1010,8 @@ export interface SendMessageResponse {
   message_id: string;
   baseline_run: RunSummary;
 }
+
+export type RegenerateMessageRequest = Omit<SendMessageRequest, "content" | "streaming">;
 
 export interface RegenerateMessageResponse {
   assistant_message_id: string;

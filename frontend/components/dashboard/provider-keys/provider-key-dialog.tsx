@@ -11,13 +11,13 @@ import { useI18n } from "@/lib/i18n-context";
 import { Loader2 } from "lucide-react";
 import type { ProviderKey } from "@/lib/api-types";
 import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -90,6 +90,18 @@ export function ProviderKeyDialog({
       },
   });
 
+  useEffect(() => {
+    if (!open) {
+      reset({
+        key: "",
+        label: "",
+        weight: 1.0,
+        max_qps: 0,
+        status: "active",
+      });
+    }
+  }, [open, reset]);
+
   // 当编辑密钥变化时，更新表单
   useEffect(() => {
     if (editingKey) {
@@ -130,21 +142,21 @@ export function ProviderKeyDialog({
   };
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="mx-auto w-full max-w-lg">
-        <DrawerHeader>
-          <DrawerTitle>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6">
+          <DialogTitle>
             {isEditing ? t("provider_keys.dialog_edit_title") : t("provider_keys.dialog_create_title")}
-          </DrawerTitle>
-          <DrawerDescription>
+          </DialogTitle>
+          <DialogDescription>
             {isEditing
               ? t("provider_keys.dialog_edit_description")
               : t("provider_keys.dialog_create_description")}
-          </DrawerDescription>
-        </DrawerHeader>
+          </DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit(handleFormSubmit)} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 space-y-4">
             {!isEditing && (
               <div className="space-y-2">
                 <Label htmlFor="key">
@@ -242,24 +254,22 @@ export function ProviderKeyDialog({
             </div>
           </div>
 
-          <DrawerFooter className="border-t bg-background/80 backdrop-blur">
-            <div className="flex w-full justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isSubmitting}
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {isEditing ? t("providers.btn_save") : t("providers.btn_create")}
-              </Button>
-            </div>
-          </DrawerFooter>
+          <DialogFooter className="border-t bg-background/80 backdrop-blur px-6 py-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {isEditing ? t("providers.btn_save") : t("providers.btn_create")}
+            </Button>
+          </DialogFooter>
         </form>
-      </DrawerContent>
-    </Drawer>
+      </DialogContent>
+    </Dialog>
   );
 }

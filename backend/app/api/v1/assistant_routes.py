@@ -27,12 +27,14 @@ from app.schemas import (
     AssistantPresetListResponse,
     AssistantPresetResponse,
     AssistantPresetUpdateRequest,
+    ConversationImageGenerationRequest,
     ConversationCreateRequest,
     ConversationItem,
     ConversationListResponse,
     ConversationUpdateRequest,
     MessageCreateRequest,
     MessageCreateResponse,
+    MessageRegenerateRequest,
     MessageRegenerateResponse,
     MessageListResponse,
     RunDetailResponse,
@@ -57,6 +59,12 @@ from app.services.chat_history_service import (
     update_assistant,
     update_conversation,
 )
+from app.services.image_storage_service import build_signed_image_url
+from app.services.image_generation_chat_service import (
+    create_image_generation_and_queue_run,
+    execute_image_generation_inline,
+)
+from app.services.chat_history_service import finalize_assistant_image_generation_after_user_sequence
 
 router = APIRouter(
     tags=["assistants"],
@@ -112,6 +120,40 @@ def _conversation_to_item(obj) -> dict:
         "created_at": obj.created_at,
         "updated_at": obj.updated_at,
     }
+
+
+def _hydrate_image_generation_content(content: dict) -> dict:
+    """
+    将存储在 DB 中的 image_generation content（通常只保存 object_key）补全为带短链 url 的响应体。
+    """
+    if not isinstance(content, dict):
+        return content
+    if str(content.get("type") or "") != "image_generation":
+        return content
+
+    images = content.get("images")
+    if not isinstance(images, list) or not images:
+        return content
+
+    hydrated: list[dict[str, Any]] = []
+    for item in images:
+        if not isinstance(item, dict):
+            continue
+        object_key = item.get("object_key")
+        url = item.get("url")
+        b64_json = item.get("b64_json")
+        next_item = dict(item)
+        if isinstance(object_key, str) and object_key.strip():
+            next_item["url"] = build_signed_image_url(object_key.strip())
+        elif isinstance(url, str) and url.strip():
+            next_item["url"] = url.strip()
+        elif isinstance(b64_json, str) and b64_json.strip():
+            next_item["url"] = f"data:image/png;base64,{b64_json.strip()}"
+        hydrated.append(next_item)
+
+    next_content = dict(content)
+    next_content["images"] = hydrated
+    return next_content
 
 
 def _run_to_summary(run) -> RunSummary:
@@ -484,6 +526,275 @@ async def create_message_endpoint(
     return MessageCreateResponse(message_id=message_id, baseline_run=_run_to_summary(run))
 
 
+@router.post("/v1/conversations/{conversation_id}/image-generations")
+async def create_image_generation_endpoint(
+    conversation_id: UUID,
+    request: Request,
+    payload: ConversationImageGenerationRequest,
+    db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    client: Any = Depends(get_http_client),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> Any:
+    """
+    会话内文生图（写入聊天历史）。
+
+    - 默认推荐 SSE（streaming=true 或 Accept:text/event-stream），以获得更好的等待体验；
+    - 生产环境通过 Celery 异步执行，并通过 RunEvent 推送状态；
+    - 测试环境下跳过 Celery，沿用“请求内执行”。
+    """
+    accept_header = request.headers.get("accept", "")
+    wants_event_stream = "text/event-stream" in accept_header.lower()
+    stream = bool(payload.streaming) or wants_event_stream
+
+    omit_upstream_response_format = payload.response_format is None
+    image_request = payload.model_dump(exclude_none=True)
+    prompt = str(image_request.pop("prompt") or "").strip()
+    image_request.pop("streaming", None)
+
+    # Chat 历史里强制使用 url（走 OSS + /media/images），避免把 b64 写入 DB。
+    image_request["response_format"] = "url"
+    if omit_upstream_response_format:
+        extra_body = image_request.get("extra_body")
+        if not isinstance(extra_body, dict):
+            extra_body = {}
+        gateway = extra_body.get("gateway")
+        if not isinstance(gateway, dict):
+            gateway = {}
+        gateway["omit_response_format"] = True
+        extra_body["gateway"] = gateway
+        image_request["extra_body"] = extra_body
+    image_request["model"] = str(image_request.get("model") or "").strip()
+    if not image_request["model"]:
+        return Response(status_code=status.HTTP_400_BAD_REQUEST, content="model required")
+
+    # 测试环境下跳过真正的 Celery 调度，避免 broker 依赖导致卡住。
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        (
+            user_message_id,
+            run_id,
+            assistant_message_id,
+            created_payload,
+            _created_seq,
+            api_key,
+        ) = create_image_generation_and_queue_run(
+            db,
+            redis=redis,
+            current_user=current_user,
+            conversation_id=conversation_id,
+            prompt=prompt,
+            image_request=image_request,
+            streaming=stream,
+        )
+
+        async def _finalize(content_with_urls: dict[str, Any]) -> None:
+            # DB 持久化：只保存 object_key（url 由 list_messages 时动态续签）。
+            stored = dict(content_with_urls)
+            imgs = stored.get("images")
+            kept: list[dict[str, Any]] = []
+            if isinstance(imgs, list):
+                for it in imgs:
+                    if not isinstance(it, dict):
+                        continue
+                    obj = it.get("object_key")
+                    url = it.get("url")
+                    revised = it.get("revised_prompt")
+                    if isinstance(obj, str) and obj.strip():
+                        kept.append({"object_key": obj.strip(), "revised_prompt": revised})
+                    elif isinstance(url, str) and url.strip():
+                        kept.append({"url": url.strip(), "revised_prompt": revised})
+            stored["images"] = kept
+
+            user_msg = db.get(Message, user_message_id)
+            if user_msg is None:
+                return
+            finalize_assistant_image_generation_after_user_sequence(
+                db,
+                conversation_id=conversation_id,
+                user_sequence=int(getattr(user_msg, "sequence", 0) or 0),
+                content=stored,
+                preview_text=f"[图片] {prompt[:60]}",
+            )
+
+        async def _gen():
+            if stream:
+                yield _encode_sse_event(event_type="message.created", data=created_payload)
+                yield _encode_sse_event(
+                    event_type="message.delta",
+                    data={
+                        "type": "message.delta",
+                        "conversation_id": str(conversation_id),
+                        "assistant_message_id": str(assistant_message_id) if assistant_message_id else None,
+                        "delta": "正在生成图片…",
+                        "kind": "image_generation",
+                    },
+                )
+
+            content_with_urls = await execute_image_generation_inline(
+                db=db,
+                redis=redis,
+                client=client,
+                api_key=api_key,
+                prompt=prompt,
+                image_request=image_request,
+            )
+            await _finalize(content_with_urls)
+
+            run = get_run_detail(db, run_id=run_id, user_id=UUID(str(current_user.id)))
+            run.status = "succeeded"
+            run.output_preview = f"[图片] {prompt[:60]}".strip()
+            run.response_payload = content_with_urls
+            db.add(run)
+            db.commit()
+
+            if stream:
+                yield _encode_sse_event(
+                    event_type="message.completed",
+                    data={
+                        "type": "message.completed",
+                        "conversation_id": str(conversation_id),
+                        "assistant_message_id": str(assistant_message_id) if assistant_message_id else None,
+                        "baseline_run": _run_to_summary(run),
+                        "kind": "image_generation",
+                        "image_generation": content_with_urls,
+                    },
+                )
+                yield _encode_sse_event(event_type="done", data="[DONE]")
+            else:
+                return
+
+        if stream:
+            return StreamingResponse(_gen(), media_type="text/event-stream")
+
+        content_with_urls = await execute_image_generation_inline(
+            db=db,
+            redis=redis,
+            client=client,
+            api_key=api_key,
+            prompt=prompt,
+            image_request=image_request,
+        )
+        await _finalize(content_with_urls)
+        run = get_run_detail(db, run_id=run_id, user_id=UUID(str(current_user.id)))
+        run.status = "succeeded"
+        run.output_preview = f"[图片] {prompt[:60]}".strip()
+        run.response_payload = content_with_urls
+        db.add(run)
+        db.commit()
+        return MessageCreateResponse(message_id=user_message_id, baseline_run=_run_to_summary(run))
+
+    (
+        message_id,
+        run_id,
+        assistant_message_id,
+        created_payload,
+        created_seq,
+        _api_key,
+    ) = create_image_generation_and_queue_run(
+        db,
+        redis=redis,
+        current_user=current_user,
+        conversation_id=conversation_id,
+        prompt=prompt,
+        image_request=image_request,
+        streaming=stream,
+    )
+
+    try:
+        from app.celery_app import celery_app
+
+        celery_app.send_task(
+            "tasks.execute_image_generation_run",
+            args=[str(run_id), str(assistant_message_id) if assistant_message_id is not None else None, bool(stream)],
+        )
+    except Exception:
+        # 入队失败：让后续等待流程/前端拿到明确失败（由 run 终态事件驱动），这里不吞掉错误。
+        raise
+
+    async def _wait_for_terminal_event(*, run_id: UUID, after_seq: int) -> None:
+        last_seq = int(after_seq or 0)
+        for ev in list_run_events(db, run_id=run_id, after_seq=last_seq, limit=1000):
+            seq = int(getattr(ev, "seq", 0) or 0)
+            if seq <= last_seq:
+                continue
+            last_seq = seq
+            et = str(getattr(ev, "event_type", "") or "")
+            if et in {"message.completed", "message.failed"}:
+                return
+
+        async for env in subscribe_run_events(redis, run_id=run_id, after_seq=last_seq, request=request):
+            if not isinstance(env, dict):
+                continue
+            if str(env.get("type") or "") == "heartbeat":
+                continue
+            try:
+                seq = int(env.get("seq") or 0)
+            except Exception:
+                seq = 0
+            if seq <= last_seq:
+                continue
+            last_seq = seq
+            et = str(env.get("event_type") or "")
+            if et in {"message.completed", "message.failed"}:
+                return
+
+    if stream:
+        async def _gen():
+            last_seq = int(created_seq or 0)
+            yield _encode_sse_event(event_type="message.created", data=created_payload)
+
+            for ev in list_run_events(db, run_id=run_id, after_seq=last_seq, limit=1000):
+                seq = int(getattr(ev, "seq", 0) or 0)
+                if seq <= last_seq:
+                    continue
+                last_seq = seq
+                et = str(getattr(ev, "event_type", "") or "")
+                if not et.startswith("message."):
+                    continue
+                data = getattr(ev, "payload", None) or {}
+                if et == "message.completed" and isinstance(data, dict):
+                    img = data.get("image_generation")
+                    if isinstance(img, dict):
+                        data["image_generation"] = _hydrate_image_generation_content(img)
+                yield _encode_sse_event(event_type=et, data=data)
+                if et in {"message.completed", "message.failed"}:
+                    yield _encode_sse_event(event_type="done", data="[DONE]")
+                    return
+
+            async for env in subscribe_run_events(redis, run_id=run_id, after_seq=last_seq, request=request):
+                if not isinstance(env, dict):
+                    continue
+                if str(env.get("type") or "") == "heartbeat":
+                    continue
+                try:
+                    seq = int(env.get("seq") or 0)
+                except Exception:
+                    seq = 0
+                if seq <= last_seq:
+                    continue
+                last_seq = seq
+
+                et = str(env.get("event_type") or "")
+                if not et.startswith("message."):
+                    continue
+                data = env.get("payload") if isinstance(env.get("payload"), dict) else {}
+                if et == "message.completed" and isinstance(data, dict):
+                    img = data.get("image_generation")
+                    if isinstance(img, dict):
+                        data["image_generation"] = _hydrate_image_generation_content(img)
+                yield _encode_sse_event(event_type=et, data=data)
+                if et in {"message.completed", "message.failed"}:
+                    break
+
+            yield _encode_sse_event(event_type="done", data="[DONE]")
+
+        return StreamingResponse(_gen(), media_type="text/event-stream")
+
+    await _wait_for_terminal_event(run_id=run_id, after_seq=int(created_seq or 0))
+    run = get_run_detail(db, run_id=run_id, user_id=UUID(str(current_user.id)))
+    return MessageCreateResponse(message_id=message_id, baseline_run=_run_to_summary(run))
+
+
 @router.get("/v1/conversations/{conversation_id}/messages", response_model=MessageListResponse)
 def list_messages_endpoint(
     conversation_id: UUID,
@@ -503,11 +814,14 @@ def list_messages_endpoint(
     items = []
     for msg in messages:
         runs = runs_by_message.get(UUID(str(msg.id)), []) if msg.role == "user" else []
+        content = msg.content
+        if isinstance(content, dict) and str(content.get("type") or "") == "image_generation":
+            content = _hydrate_image_generation_content(content)
         items.append(
             {
                 "message_id": msg.id,
                 "role": msg.role,
-                "content": msg.content,
+                "content": content,
                 "created_at": msg.created_at,
                 "runs": [_run_to_summary(r) for r in runs],
             }
@@ -776,6 +1090,7 @@ async def stream_run_events_endpoint(
 @router.post("/v1/messages/{assistant_message_id}/regenerate", response_model=MessageRegenerateResponse)
 async def regenerate_message_endpoint(
     assistant_message_id: UUID,
+    payload: MessageRegenerateRequest | None = None,
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
     client: Any = Depends(get_http_client),
@@ -787,6 +1102,11 @@ async def regenerate_message_endpoint(
         client=client,
         current_user=current_user,
         assistant_message_id=assistant_message_id,
+        override_logical_model=(payload.override_logical_model if payload is not None else None),
+        model_preset=(payload.model_preset if payload is not None else None),
+        bridge_agent_id=(payload.bridge_agent_id if payload is not None else None),
+        bridge_agent_ids=(payload.bridge_agent_ids if payload is not None else None),
+        bridge_tool_selections=(payload.bridge_tool_selections if payload is not None else None),
     )
     run = get_run_detail(db, run_id=run_id, user_id=UUID(str(current_user.id)))
     return MessageRegenerateResponse(

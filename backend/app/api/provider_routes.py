@@ -23,10 +23,12 @@ from app.provider.health import HealthStatus
 from app.provider.sdk_selector import list_registered_sdk_vendors
 from app.schemas import (
     ModelAliasUpdateRequest,
+    ModelCapabilitiesUpdateRequest,
     ModelDisableUpdateRequest,
     ProviderAPIKey,
     ProviderConfig,
     ProviderModelAliasResponse,
+    ProviderModelCapabilitiesResponse,
     ProviderModelDisabledResponse,
     ProviderSubmissionStatus,
     RoutingMetrics,
@@ -289,6 +291,13 @@ def _sync_provider_models_to_db(
                 db.add(row)
                 existing_by_model_id[model_id] = row
             else:
+                gateway_meta: dict[str, Any] | None = None
+                existing_meta = getattr(row, "metadata_json", None)
+                if isinstance(existing_meta, dict) and isinstance(existing_meta.get("_gateway"), dict):
+                    gateway_meta = dict(existing_meta.get("_gateway") or {})
+                    override = gateway_meta.get("capabilities_override")
+                    if isinstance(override, list):
+                        capabilities = override
                 row.family = family
                 row.display_name = display_name
                 row.context_length = context_length_int
@@ -296,7 +305,15 @@ def _sync_provider_models_to_db(
                 # 若已有人为配置的 pricing，则不覆盖；否则可从缓存补充默认值。
                 if row.pricing is None and isinstance(pricing, dict):
                     row.pricing = pricing
-                row.metadata_json = metadata
+                if gateway_meta:
+                    if isinstance(metadata, dict):
+                        merged = dict(metadata)
+                        merged["_gateway"] = gateway_meta
+                        row.metadata_json = merged
+                    else:
+                        row.metadata_json = {"_gateway": gateway_meta, "upstream": metadata}
+                else:
+                    row.metadata_json = metadata
                 row.meta_hash = meta_hash
 
         db.commit()
@@ -401,6 +418,12 @@ async def get_provider_models(
                 if isinstance(getattr(row, "alias", None), str)
                 and getattr(row, "alias", "").strip()
             }
+            capabilities_by_model_id: dict[str, list[Any]] = {
+                row.model_id: list(getattr(row, "capabilities") or [])
+                for row in model_rows
+                if isinstance(getattr(row, "capabilities", None), list)
+                and getattr(row, "capabilities") is not None
+            }
             disabled_by_model_id: dict[str, bool] = {
                 row.model_id: True
                 for row in model_rows
@@ -416,6 +439,11 @@ async def get_provider_models(
                     model_id = item.get("model_id") or item.get("id")
                     if isinstance(model_id, str) and model_id in alias_by_model_id:
                         item["alias"] = alias_by_model_id[model_id]
+            if capabilities_by_model_id:
+                for item in items:
+                    model_id = item.get("model_id") or item.get("id")
+                    if isinstance(model_id, str) and model_id in capabilities_by_model_id:
+                        item["capabilities"] = capabilities_by_model_id[model_id]
             if disabled_by_model_id:
                 for item in items:
                     model_id = item.get("model_id") or item.get("id")
@@ -610,6 +638,142 @@ def update_provider_model_mapping(
         provider_id=provider_row.provider_id,
         model_id=model_row.model_id,
         alias=model_row.alias,
+    )
+
+
+def _apply_gateway_capabilities_override(
+    model_row: ProviderModel, capabilities: list[str]
+) -> None:
+    """
+    Persist gateway-managed overrides into metadata_json under reserved key `_gateway`.
+    """
+    existing = getattr(model_row, "metadata_json", None)
+    gateway: dict[str, Any] = {}
+    if isinstance(existing, dict) and isinstance(existing.get("_gateway"), dict):
+        gateway = dict(existing.get("_gateway") or {})
+    gateway["capabilities_override"] = capabilities
+    if isinstance(existing, dict):
+        merged = dict(existing)
+        merged["_gateway"] = gateway
+        model_row.metadata_json = merged
+    else:
+        model_row.metadata_json = {"_gateway": gateway, "upstream": existing}
+
+
+@router.get(
+    "/providers/{provider_id}/models/{model_id:path}/capabilities",
+    response_model=ProviderModelCapabilitiesResponse,
+)
+def get_provider_model_capabilities(
+    provider_id: str,
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderModelCapabilitiesResponse:
+    """
+    获取指定 provider+model 的能力配置。
+
+    - 仅允许超级管理员或该私有 Provider 的所有者访问；
+    - 若 provider_models 中尚无该模型行，则返回空列表（表示未配置覆盖）。
+    """
+    provider_row = _ensure_can_edit_provider_models(db, provider_id, current_user)
+    model_row = (
+        db.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider_row.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    caps: list[Any] = []
+    if model_row is not None and isinstance(getattr(model_row, "capabilities", None), list):
+        caps = list(getattr(model_row, "capabilities") or [])
+    return ProviderModelCapabilitiesResponse(
+        provider_id=provider_row.provider_id,
+        model_id=model_id,
+        capabilities=caps,  # type: ignore[arg-type]
+    )
+
+
+@router.put(
+    "/providers/{provider_id}/models/{model_id:path}/capabilities",
+    response_model=ProviderModelCapabilitiesResponse,
+)
+async def update_provider_model_capabilities(
+    provider_id: str,
+    model_id: str,
+    payload: ModelCapabilitiesUpdateRequest,
+    db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderModelCapabilitiesResponse:
+    """
+    更新指定 provider+model 的能力配置（覆盖上游 /models 返回的 capabilities）。
+    """
+    provider_row = _ensure_can_edit_provider_models(db, provider_id, current_user)
+
+    model_row = (
+        db.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider_row.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if model_row is None:
+        model_row = ProviderModel(
+            provider_id=provider_row.id,
+            model_id=model_id,
+            family=model_id[:50],
+            display_name=model_id[:100],
+            context_length=8192,
+            capabilities=["chat"],
+            pricing=None,
+            metadata_json=None,
+            meta_hash=None,
+        )
+        db.add(model_row)
+        db.flush()
+
+    # 去重并保持顺序
+    desired: list[str] = []
+    for cap in payload.capabilities or []:
+        value = getattr(cap, "value", None) or str(cap)
+        if value and value not in desired:
+            desired.append(value)
+    model_row.capabilities = desired
+    _apply_gateway_capabilities_override(model_row, desired)
+    db.add(model_row)
+    db.commit()
+    db.refresh(model_row)
+
+    # 缓存失效：/models 聚合缓存 + 逻辑模型缓存（llm:logical:*）增量刷新
+    if hasattr(redis, "delete"):
+        try:
+            await redis.delete(MODELS_CACHE_KEY)  # type: ignore[attr-defined]
+        except Exception:
+            logger.warning("Failed to invalidate MODELS cache key", exc_info=True)
+
+        try:
+            from app.services.logical_model_sync import sync_logical_models
+
+            await sync_logical_models(redis, session=db, provider_ids=[provider_id])
+        except Exception:
+            logger.warning(
+                "Failed to sync logical models after updating capabilities for %s/%s",
+                provider_id,
+                model_id,
+                exc_info=True,
+            )
+
+    return ProviderModelCapabilitiesResponse(
+        provider_id=provider_row.provider_id,
+        model_id=model_row.model_id,
+        capabilities=desired,  # type: ignore[arg-type]
     )
 
 

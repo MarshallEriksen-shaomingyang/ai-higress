@@ -1,4 +1,4 @@
-import { AssistantPageClient } from "./components/assistant-page-client";
+import { ChatHomeClient } from "../components/chat-home-client";
 
 export default async function AssistantPage({
   params,
@@ -6,5 +6,5 @@ export default async function AssistantPage({
   params: { assistant_id: string } | Promise<{ assistant_id: string }>;
 }) {
   const resolvedParams = await params;
-  return <AssistantPageClient assistantId={resolvedParams.assistant_id} />;
+  return <ChatHomeClient assistantId={resolvedParams.assistant_id} />;
 }

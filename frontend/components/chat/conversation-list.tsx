@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
@@ -8,6 +8,8 @@ import { ConversationItem } from "./conversation-item";
 import { useCachePreloader } from "@/lib/swr/cache";
 import { conversationService } from "@/http/conversation";
 import type { Conversation } from "@/lib/api-types";
+import { SidebarSearchInput } from "./sidebar-search-input";
+import { useChatSidebarSearchStore } from "@/lib/stores/chat-sidebar-search-store";
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -44,6 +46,47 @@ export function ConversationList({
 }: ConversationListProps) {
   const { t } = useI18n();
   const { preloadData } = useCachePreloader();
+  const conversationQuery = useChatSidebarSearchStore((s) => s.conversationQuery);
+  const setConversationQuery = useChatSidebarSearchStore((s) => s.setConversationQuery);
+
+  const normalizedQuery = useMemo(
+    () => conversationQuery.trim().toLowerCase(),
+    [conversationQuery]
+  );
+  const filteredConversations = useMemo(() => {
+    if (!normalizedQuery) return conversations;
+    return conversations.filter((conversation) => {
+      const title = (conversation.title || "").toLowerCase();
+      const id = (conversation.conversation_id || "").toLowerCase();
+      return title.includes(normalizedQuery) || id.includes(normalizedQuery);
+    });
+  }, [conversations, normalizedQuery]);
+
+  const isInitialLoading = isLoading && conversations.length === 0;
+  const header = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">{t("chat.conversation.title")}</h2>
+        <Button
+          size="sm"
+          disabled={isInitialLoading}
+          onClick={isInitialLoading ? undefined : onCreateConversation}
+          aria-label={t("chat.conversation.create")}
+        >
+          <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+          {t("chat.conversation.create")}
+        </Button>
+      </div>
+      <SidebarSearchInput
+        value={conversationQuery}
+        onValueChange={setConversationQuery}
+        placeholder={t("chat.conversation.search_placeholder")}
+        ariaLabel={t("chat.conversation.search_placeholder")}
+        clearAriaLabel={t("chat.search.clear")}
+        disabled={isInitialLoading}
+      />
+    </div>
+  );
 
   // 预加载下一页数据（缓存优化）
   useEffect(() => {
@@ -69,13 +112,7 @@ export function ConversationList({
   if (isLoading && conversations.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{t("chat.conversation.title")}</h2>
-          <Button size="sm" disabled aria-label={t("chat.conversation.create")}>
-            <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-            {t("chat.conversation.create")}
-          </Button>
-        </div>
+        {header}
         <div 
           className="flex items-center justify-center py-12"
           role="status"
@@ -92,13 +129,7 @@ export function ConversationList({
   if (!isLoading && conversations.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{t("chat.conversation.title")}</h2>
-          <Button size="sm" onClick={onCreateConversation} aria-label={t("chat.conversation.create")}>
-            <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-            {t("chat.conversation.create")}
-          </Button>
-        </div>
+        {header}
         <div 
           className="flex flex-col items-center justify-center py-12 text-center"
           role="status"
@@ -123,30 +154,29 @@ export function ConversationList({
 
   return (
     <div className="space-y-4" role="region" aria-label={t("chat.conversation.list_label")}>
-      {/* 标题和创建按钮 */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{t("chat.conversation.title")}</h2>
-        <Button size="sm" onClick={onCreateConversation} aria-label={t("chat.conversation.create")}>
-          <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-          {t("chat.conversation.create")}
-        </Button>
-      </div>
+      {header}
 
       {/* 会话列表 */}
-      <div className="space-y-3" role="list" aria-label={t("chat.conversation.list")}>
-        {conversations.map((conversation) => (
-          <div key={conversation.conversation_id} role="listitem">
-            <ConversationItem
-              conversation={conversation}
-              isSelected={selectedConversationId === conversation.conversation_id}
-              onSelect={onSelectConversation}
-              onArchive={onArchiveConversation}
-              onRename={onRenameConversation}
-              onDelete={onDeleteConversation}
-            />
-          </div>
-        ))}
-      </div>
+      {normalizedQuery && filteredConversations.length === 0 ? (
+        <div className="py-10 text-center text-sm text-muted-foreground" role="status">
+          {t("chat.conversation.search_empty")}
+        </div>
+      ) : (
+        <div className="space-y-3" role="list" aria-label={t("chat.conversation.list")}>
+          {filteredConversations.map((conversation) => (
+            <div key={conversation.conversation_id} role="listitem">
+              <ConversationItem
+                conversation={conversation}
+                isSelected={selectedConversationId === conversation.conversation_id}
+                onSelect={onSelectConversation}
+                onArchive={onArchiveConversation}
+                onRename={onRenameConversation}
+                onDelete={onDeleteConversation}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 加载更多按钮 */}
       {hasMore && (

@@ -51,6 +51,7 @@ export function ProviderPresetForm({
   const [messagesPath, setMessagesPath] = useState("");
   const [chatCompletionsPath, setChatCompletionsPath] = useState("/v1/chat/completions");
   const [responsesPath, setResponsesPath] = useState("");
+  const [imagesGenerationsPath, setImagesGenerationsPath] = useState("");
   const [apiStyles, setApiStyles] = useState<string[]>([]);
   const [retryableCodesText, setRetryableCodesText] = useState("");
   const [customHeadersText, setCustomHeadersText] = useState("{}");
@@ -75,6 +76,7 @@ export function ProviderPresetForm({
         setMessagesPath(preset.messages_path || "");
         setChatCompletionsPath(preset.chat_completions_path);
         setResponsesPath(preset.responses_path || "");
+        setImagesGenerationsPath(preset.images_generations_path || "");
         setApiStyles(preset.supported_api_styles || []);
         setRetryableCodesText(
           preset.retryable_status_codes?.join(", ") || ""
@@ -105,6 +107,7 @@ export function ProviderPresetForm({
     setMessagesPath("");
     setChatCompletionsPath("/v1/chat/completions");
     setResponsesPath("");
+    setImagesGenerationsPath("");
     setApiStyles([]);
     setRetryableCodesText("");
     setCustomHeadersText("{}");
@@ -149,6 +152,7 @@ export function ProviderPresetForm({
       { value: messagesPath, name: "messagesPath", label: "消息路径" },
       { value: chatCompletionsPath, name: "chatCompletionsPath", label: "聊天完成路径" },
       { value: responsesPath, name: "responsesPath", label: "响应路径" },
+      { value: imagesGenerationsPath, name: "imagesGenerationsPath", label: "文生图路径" },
     ];
 
     paths.forEach(({ value, name, label }) => {
@@ -227,6 +231,7 @@ export function ProviderPresetForm({
           messages_path: messagesPath || undefined,
           chat_completions_path: chatCompletionsPath,
           responses_path: responsesPath || undefined,
+          images_generations_path: imagesGenerationsPath || undefined,
           supported_api_styles: apiStyles.length > 0 ? apiStyles as any : undefined,
           retryable_status_codes: retryableCodes.length > 0 ? retryableCodes : undefined,
           custom_headers: customHeaders,
@@ -249,6 +254,7 @@ export function ProviderPresetForm({
           messages_path: messagesPath || undefined,
           chat_completions_path: chatCompletionsPath,
           responses_path: responsesPath || undefined,
+          images_generations_path: imagesGenerationsPath || undefined,
           supported_api_styles: apiStyles.length > 0 ? apiStyles as any : undefined,
           retryable_status_codes: retryableCodes.length > 0 ? retryableCodes : undefined,
           custom_headers: customHeaders,
@@ -479,6 +485,24 @@ export function ProviderPresetForm({
                   onChange={(e) => setResponsesPath(e.target.value)}
                   placeholder="/v1/responses"
                 />
+              </div>
+
+              {/* 文生图路径（可选） */}
+              <div className="space-y-2">
+                <Label htmlFor="imagesGenerationsPath">文生图路径（可选）</Label>
+                <Input
+                  id="imagesGenerationsPath"
+                  value={imagesGenerationsPath}
+                  onChange={(e) => setImagesGenerationsPath(e.target.value)}
+                  placeholder="/v1/images/generations"
+                  className={errors.imagesGenerationsPath ? "border-destructive" : ""}
+                />
+                {errors.imagesGenerationsPath && (
+                  <p className="text-sm text-destructive">{errors.imagesGenerationsPath}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  上游 OpenAI Images API 路径覆盖；留空则由后端从聊天路径推导。
+                </p>
               </div>
 
               {/* 支持的API风格 */}

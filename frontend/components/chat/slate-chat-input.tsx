@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import { createEditor, Descendant, Editor, Transforms, Element as SlateElement } from "slate";
 import { withReact, ReactEditor } from "slate-react";
@@ -12,6 +12,7 @@ import { useChatModelParametersStore } from "@/lib/stores/chat-model-parameters-
 import { useUserPreferencesStore } from "@/lib/stores/user-preferences-store";
 import { cn } from "@/lib/utils";
 
+import type { ComposerSubmitPayload } from "@/lib/chat/composer-submit";
 import { ChatEditor } from "./chat-input/chat-editor";
 import { ChatToolbar } from "./chat-input/chat-toolbar";
 import { ImagePreviewGrid } from "./chat-input/image-attachments";
@@ -19,8 +20,12 @@ import { buildModelPreset } from "./chat-input/model-preset";
 import { encodeImageFileToCompactDataUrl } from "./chat-input/image-encoding";
 import { composeMessageContent, isMessageTooLong } from "./chat-input/message-content";
 import type { ModelParameters } from "./chat-input/types";
+import { type ImageGenParams } from "./chat-input/image-gen-params-bar";
+import type { ComposerMode } from "./chat-input/chat-toolbar";
+import { ImageGenSettingsDrawer } from "./chat-input/image-gen-settings-drawer";
 
 export type { ModelParameters } from "./chat-input/types";
+export type { ImageGenParams };
 
 // Slate 类型定义
 type CustomElement = 
@@ -43,7 +48,17 @@ const MAX_IMAGES = 3;
 export interface SlateChatInputProps {
   conversationId: string;
   assistantId?: string;
+  projectId?: string | null;
   disabled?: boolean;
+  
+  // Mode support
+  mode?: ComposerMode;
+  onModeChange?: (mode: ComposerMode) => void;
+  imageGenParams?: ImageGenParams;
+  onImageGenParamsChange?: (params: ImageGenParams) => void;
+  hideModeSwitcher?: boolean;
+  imageSettingsShowModelSelect?: boolean;
+
   onSend?:
     | ((
         content: string,
@@ -58,14 +73,31 @@ export interface SlateChatInputProps {
           parameters: ModelParameters;
         }
       ) => Promise<void>);
+  
+  onImageSend?: (payload: {
+    prompt: string;
+    params: ImageGenParams;
+  }) => Promise<void>;
+
+  onSubmit?: (payload: ComposerSubmitPayload) => Promise<void>;
+
   onClearHistory?: () => Promise<void>;
   className?: string;
 }
 
 export function SlateChatInput({
   conversationId,
+  projectId = null,
   disabled = false,
+  mode = "chat",
+  onModeChange,
+  imageGenParams,
+  onImageGenParamsChange,
+  hideModeSwitcher = false,
+  imageSettingsShowModelSelect = true,
   onSend,
+  onImageSend,
+  onSubmit,
   onClearHistory,
   className,
 }: SlateChatInputProps) {
@@ -77,6 +109,7 @@ export function SlateChatInput({
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
+  const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
 
   // 模型参数状态（持久化）：用户设置后后续每次发送都会沿用
   const parameters = useChatModelParametersStore((s) => s.parameters);
@@ -206,27 +239,58 @@ export function SlateChatInput({
     setIsSending(true);
 
     try {
-      const composed = composeMessageContent(content, images);
-      if (!composed) {
-        toast.error(t("chat.message.input_placeholder"));
-        return;
-      }
-      if (isMessageTooLong(composed)) {
-        toast.error(t("chat.errors.message_too_long"));
-        return;
-      }
+      if (mode === "image") {
+        if (!imageGenParams) {
+          console.error("Image generation params missing");
+          return;
+        }
+        if (onSubmit) {
+          await onSubmit({
+            mode: "image",
+            prompt: content,
+            params: imageGenParams,
+          });
+        } else {
+          if (!onImageSend) {
+            console.error("Image generation handler missing");
+            return;
+          }
+          await onImageSend({
+            prompt: content,
+            params: imageGenParams,
+          });
+        }
+      } else {
+        const composed = composeMessageContent(content, images);
+        if (!composed) {
+          toast.error(t("chat.message.input_placeholder"));
+          return;
+        }
+        if (isMessageTooLong(composed)) {
+          toast.error(t("chat.errors.message_too_long"));
+          return;
+        }
 
-      const model_preset = buildModelPreset(parameters);
-      if (onSend) {
-        if (onSend.length <= 1) {
-          await (onSend as any)({
+        const model_preset = buildModelPreset(parameters);
+        if (onSubmit) {
+          await onSubmit({
+            mode: "chat",
             content: composed,
             images,
             model_preset,
             parameters,
           });
-        } else {
-          await (onSend as any)(composed, images, parameters);
+        } else if (onSend) {
+          if (onSend.length <= 1) {
+            await (onSend as any)({
+              content: composed,
+              images,
+              model_preset,
+              parameters,
+            });
+          } else {
+            await (onSend as any)(composed, images, parameters);
+          }
         }
       }
       
@@ -238,7 +302,7 @@ export function SlateChatInput({
     } finally {
       setIsSending(false);
     }
-  }, [getTextContent, images, disabled, onSend, parameters, clearEditor, t]);
+  }, [getTextContent, images, disabled, onSend, onImageSend, parameters, clearEditor, t, mode, imageGenParams]);
 
   // 清空历史记录
   const handleClearHistory = useCallback(async () => {
@@ -292,17 +356,25 @@ export function SlateChatInput({
     [handleSend, preferences.sendShortcut]
   );
 
+  useEffect(() => {
+    if (mode !== "image" && imageSettingsOpen) {
+      setImageSettingsOpen(false);
+    }
+  }, [imageSettingsOpen, mode]);
+
   return (
     <div className={cn("relative flex h-full flex-col bg-background", className)}>
-      <div className="flex min-h-0 flex-1 flex-col justify-end px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+      <div className="flex min-h-0 flex-1 flex-col justify-end px-4 pt-1  pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-3">
-          <ImagePreviewGrid
-            images={images}
-            disabled={disabled || isSending}
-            onRemoveImage={removeImage}
-            uploadedAltPrefix={t("chat.message.uploaded_image")}
-            removeLabel={t("chat.message.remove_image")}
-          />
+          {mode === "chat" && (
+            <ImagePreviewGrid
+              images={images}
+              disabled={disabled || isSending}
+              onRemoveImage={removeImage}
+              uploadedAltPrefix={t("chat.message.uploaded_image")}
+              removeLabel={t("chat.message.remove_image")}
+            />
+          )}
 
           <div
             className={cn(
@@ -319,14 +391,17 @@ export function SlateChatInput({
               disabled={disabled}
               isSending={isSending}
               placeholder={
-                disabled ? t("chat.conversation.archived_notice") : t("chat.message.input_placeholder")
+                disabled 
+                  ? t("chat.conversation.archived_notice") 
+                  : (mode === "image" ? t("chat.image_gen.prompt") : t("chat.message.input_placeholder"))
               }
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              className="flex-1 min-h-0"
             />
 
             <ChatToolbar
+              mode={mode}
+              onModeChange={onModeChange}
               conversationId={conversationId}
               disabled={disabled}
               isSending={isSending}
@@ -342,14 +417,32 @@ export function SlateChatInput({
                 resetModelParameters();
               }}
               onFilesSelected={handleFilesSelected}
+              hideModeSwitcher={hideModeSwitcher}
+              onOpenImageSettings={
+                mode === "image" && imageGenParams && onImageGenParamsChange
+                  ? () => setImageSettingsOpen(true)
+                  : undefined
+              }
             />
           </div>
 
           <div className="text-xs text-muted-foreground text-center">
-            {isSending ? t("chat.message.sending") : sendHint}
+            {isSending ? (mode === "image" ? t("chat.image_gen.generating") : t("chat.message.sending")) : sendHint}
           </div>
         </div>
       </div>
+
+      {imageGenParams && onImageGenParamsChange ? (
+        <ImageGenSettingsDrawer
+          projectId={projectId}
+          open={imageSettingsOpen}
+          onOpenChange={setImageSettingsOpen}
+          params={imageGenParams}
+          onChange={onImageGenParamsChange}
+          disabled={disabled || isSending}
+          showModelSelect={imageSettingsShowModelSelect}
+        />
+      ) : null}
     </div>
   );
 }

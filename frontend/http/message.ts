@@ -6,6 +6,7 @@ import type {
   MessagesResponse,
   RunDetail,
   RegenerateMessageResponse,
+  RegenerateMessageRequest,
 } from '@/lib/api-types';
 import {
   normalizeMessagesResponse,
@@ -59,11 +60,14 @@ export const messageService = {
   /**
    * 重新生成助手消息
    */
-  regenerateMessage: async (assistantMessageId: string): Promise<RegenerateMessageResponse> => {
+  regenerateMessage: async (
+    assistantMessageId: string,
+    request?: RegenerateMessageRequest
+  ): Promise<RegenerateMessageResponse> => {
     // 复用较长超时，避免大模型重新生成时被前端 10s 默认超时打断
     const { data } = await httpClient.post<RegenerateMessageResponse>(
       `/v1/messages/${assistantMessageId}/regenerate`,
-      undefined,
+      request,
       { timeout: SEND_MESSAGE_TIMEOUT_MS }
     );
     return data;

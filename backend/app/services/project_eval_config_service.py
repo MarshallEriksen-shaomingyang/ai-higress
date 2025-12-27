@@ -3,12 +3,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.errors import bad_request, forbidden, not_found
 from app.jwt_auth import AuthenticatedUser
-from app.models import APIKey, ProjectEvalConfig, Provider, ProviderAllowedUser
+from app.models import APIKey, ProjectEvalConfig
+from app.repositories.project_eval_config_repository import (
+    get_project_eval_config as repo_get_project_eval_config,
+    persist_project_eval_config as repo_persist_project_eval_config,
+)
+from app.repositories.provider_repository import (
+    list_private_provider_ids_for_user,
+    list_public_provider_ids,
+    list_shared_provider_ids_for_user,
+    provider_id_exists,
+)
 from app.services.api_key_service import get_api_key_by_id
 
 ALLOWED_PROVIDER_SCOPES = {"private", "shared", "public"}
@@ -45,9 +54,7 @@ def get_or_default_project_eval_config(
     *,
     project_id: UUID,
 ) -> ProjectEvalConfig:
-    cfg = db.execute(
-        select(ProjectEvalConfig).where(ProjectEvalConfig.api_key_id == project_id)
-    ).scalars().first()
+    cfg = repo_get_project_eval_config(db, project_id=project_id)
     if cfg is not None:
         return cfg
 
@@ -103,12 +110,9 @@ def upsert_project_eval_config(
     project_ai_enabled: bool | None = None,
     project_ai_provider_model: str | None = None,
 ) -> ProjectEvalConfig:
-    cfg = db.execute(
-        select(ProjectEvalConfig).where(ProjectEvalConfig.api_key_id == project_id)
-    ).scalars().first()
+    cfg = repo_get_project_eval_config(db, project_id=project_id)
     if cfg is None:
         cfg = ProjectEvalConfig(api_key_id=project_id)
-        db.add(cfg)
 
     if enabled is not None:
         cfg.enabled = bool(enabled)
@@ -153,19 +157,14 @@ def upsert_project_eval_config(
                     "project_ai_provider_model 格式非法，应为 'provider_id/model_id'",
                     details={"project_ai_provider_model": raw},
                 )
-            exists = db.execute(
-                select(Provider.id).where(Provider.provider_id == provider_id).limit(1)
-            ).scalar_one_or_none()
-            if exists is None:
+            if not provider_id_exists(db, provider_id=provider_id):
                 raise bad_request(
                     "project_ai_provider_model 的 provider_id 不存在",
                     details={"provider_id": provider_id},
                 )
             cfg.project_ai_provider_model = f"{provider_id}/{model_id}"
 
-    db.commit()
-    db.refresh(cfg)
-    return cfg
+    return repo_persist_project_eval_config(db, cfg=cfg)
 
 
 def get_effective_provider_ids_for_user(
@@ -185,35 +184,11 @@ def get_effective_provider_ids_for_user(
     normalized = _normalize_provider_scopes(scopes) or DEFAULT_PROVIDER_SCOPES
 
     # public
-    public_ids = set(
-        db.execute(
-            select(Provider.provider_id).where(
-                Provider.visibility == "public",
-                Provider.owner_id.is_(None),
-            )
-        ).scalars().all()
-    )
+    public_ids = list_public_provider_ids(db)
     # private（包含用户自己的 restricted/private）
-    private_ids = set(
-        db.execute(
-            select(Provider.provider_id).where(Provider.owner_id == user_id)
-        ).scalars().all()
-    )
+    private_ids = list_private_provider_ids_for_user(db, user_id=user_id)
     # shared（他人分享给我：restricted + link + owner != me）
-    shared_ids = set(
-        db.execute(
-            select(Provider.provider_id)
-            .join(
-                ProviderAllowedUser,
-                ProviderAllowedUser.provider_uuid == Provider.id,
-            )
-            .where(
-                Provider.visibility == "restricted",
-                ProviderAllowedUser.user_id == user_id,
-                Provider.owner_id != user_id,
-            )
-        ).scalars().all()
-    )
+    shared_ids = list_shared_provider_ids_for_user(db, user_id=user_id)
 
     union: set[str] = set()
     if "public" in normalized:

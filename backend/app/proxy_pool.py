@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 
 from app.logging_config import logger
-from app.services.upstream_proxy_redis import (
+from app.services.upstream_proxy.redis import (
     get_endpoint_proxy_url,
     get_runtime_config,
     pick_available_proxy_id,

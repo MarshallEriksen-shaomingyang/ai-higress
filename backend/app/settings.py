@@ -1,6 +1,6 @@
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
@@ -793,6 +793,50 @@ class Settings(BaseSettings):
             "（例如 https://bucket.oss-cn-hangzhou.aliyuncs.com）；"
             "此时用户头像只在数据库中保存对象 key，完整访问 URL 在读取时按该前缀拼接。"
         ),
+    )
+
+    # Generated images (text-to-image) OSS storage configuration
+    image_storage_provider: Literal["aliyun_oss", "s3"] = Field(
+        default="aliyun_oss",
+        alias="IMAGE_STORAGE_PROVIDER",
+        description="对象存储提供商，支持 aliyun_oss（默认）或 s3（AWS/MinIO/Cloudflare R2 等兼容接口）",
+    )
+    image_oss_endpoint: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_ENDPOINT",
+        description="对象存储 Endpoint；阿里 OSS 形如 https://oss-cn-hangzhou.aliyuncs.com；S3/R2 可填兼容 Endpoint",
+    )
+    image_oss_region: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_REGION",
+        description="S3/R2 兼容接口的 region（阿里 OSS 可留空）",
+    )
+    image_oss_bucket: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_BUCKET",
+        description="对象存储 Bucket 名称（建议私有读）",
+    )
+    image_oss_access_key_id: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_ACCESS_KEY_ID",
+        description="对象存储 AccessKeyId（用于后端上传与读取对象）",
+    )
+    image_oss_access_key_secret: str | None = Field(
+        default=None,
+        alias="IMAGE_OSS_ACCESS_KEY_SECRET",
+        description="对象存储 AccessKeySecret（用于后端上传与读取对象）",
+    )
+    image_oss_prefix: str = Field(
+        default="generated-images",
+        alias="IMAGE_OSS_PREFIX",
+        description="文生图对象 key 前缀，例如 generated-images",
+    )
+    image_signed_url_ttl_seconds: int = Field(
+        default=60 * 60,
+        alias="IMAGE_SIGNED_URL_TTL_SECONDS",
+        description="网关短链 URL 有效期（秒），用于文生图 response_format=url",
+        ge=60,
+        le=7 * 24 * 60 * 60,
     )
 
     @property

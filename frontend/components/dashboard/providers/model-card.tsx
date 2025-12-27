@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -12,20 +12,22 @@ import {
   Tag,
   ArrowDownToLine,
   ArrowUpFromLine,
-  Sparkles
+  Sparkles,
+  Settings2
 } from "lucide-react";
 import type { Model } from "@/http/provider";
 import { providerService } from "@/http/provider";
 import { useI18n } from "@/lib/i18n-context";
 import { useErrorDisplay } from "@/lib/errors";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CAPABILITY_META, normalize_capabilities } from "./model-capabilities";
 
 interface ModelCardProps {
   providerId: string;
   model: Model;
   canEdit: boolean;
-  onEditPricing: () => void;
-  onEditAlias: () => void;
+  onOpenSettings: () => void;
   onRefresh: () => Promise<void>;
 }
 
@@ -91,8 +93,7 @@ export function ModelCard({
   providerId,
   model,
   canEdit,
-  onEditPricing,
-  onEditAlias,
+  onOpenSettings,
   onRefresh,
 }: ModelCardProps) {
   const { t } = useI18n();
@@ -100,6 +101,7 @@ export function ModelCard({
   const [toggling, setToggling] = useState(false);
   const disabled = Boolean(model.disabled);
   const [localDisabled, setLocalDisabled] = useState(disabled);
+  const capabilities = useMemo(() => normalize_capabilities(model.capabilities), [model.capabilities]);
 
   useEffect(() => {
     setLocalDisabled(Boolean(model.disabled));
@@ -156,6 +158,26 @@ export function ModelCard({
           </div>
           <div className="flex flex-col items-end gap-2 shrink-0">
             <PricingBadge model={model} />
+            {capabilities.length > 0 ? (
+              <TooltipProvider>
+                <div className="flex items-center gap-1">
+                  {capabilities.map((cap) => {
+                    const meta = CAPABILITY_META[cap];
+                    const Icon = meta.icon;
+                    return (
+                      <Tooltip key={cap}>
+                        <TooltipTrigger asChild>
+                          <div className="rounded-md border bg-muted/30 p-1 text-muted-foreground">
+                            <Icon className="h-3.5 w-3.5" />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>{t(meta.labelKey)}</TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </TooltipProvider>
+            ) : null}
             {localDisabled && (
               <Badge variant="destructive" className="text-xs font-normal">
                 {t("providers.model_disabled_badge")}
@@ -221,23 +243,12 @@ export function ModelCard({
         <Button
           variant="outline"
           size="sm"
-          onClick={onEditPricing}
+          onClick={onOpenSettings}
           className="flex-1 h-9 text-xs gap-1.5 hover:bg-primary/5 hover:text-primary hover:border-primary/20"
         >
-          <DollarSign className="h-3.5 w-3.5" />
-          {t("providers.model_edit_pricing")}
+          <Settings2 className="h-3.5 w-3.5" />
+          {t("providers.model_settings_button")}
         </Button>
-        {canEdit && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onEditAlias}
-            className="flex-1 h-9 text-xs gap-1.5 hover:bg-primary/5 hover:text-primary hover:border-primary/20"
-          >
-            <Tag className="h-3.5 w-3.5" />
-            {t("providers.model_edit_alias")}
-          </Button>
-        )}
       </CardFooter>
     </Card>
   );

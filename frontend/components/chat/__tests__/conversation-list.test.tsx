@@ -1,8 +1,9 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConversationList } from '../conversation-list';
 import type { Conversation } from '@/lib/api-types';
+import { useChatSidebarSearchStore } from '@/lib/stores/chat-sidebar-search-store';
 
 // Mock i18n context
 vi.mock('@/lib/i18n-context', () => ({
@@ -11,6 +12,9 @@ vi.mock('@/lib/i18n-context', () => ({
       const translations: Record<string, string> = {
         'chat.conversation.title': 'Conversations',
         'chat.conversation.create': 'New Conversation',
+        'chat.conversation.search_placeholder': 'Search conversations...',
+        'chat.conversation.search_empty': 'No matching conversations',
+        'chat.search.clear': 'Clear search',
         'chat.conversation.empty': 'No Conversations',
         'chat.conversation.empty_description': 'Start a new conversation with this assistant',
         'chat.conversation.loading': 'Loading conversations...',
@@ -35,6 +39,10 @@ vi.mock('../conversation-item', () => ({
 }));
 
 describe('ConversationList', () => {
+  beforeEach(() => {
+    useChatSidebarSearchStore.getState().reset();
+  });
+
   const mockConversations: Conversation[] = [
     {
       conversation_id: 'conv-1',
@@ -64,6 +72,21 @@ describe('ConversationList', () => {
     expect(screen.getByText('Conversations')).toBeInTheDocument();
     expect(screen.getByTestId('conversation-conv-1')).toBeInTheDocument();
     expect(screen.getByTestId('conversation-conv-2')).toBeInTheDocument();
+  });
+
+  it('should filter conversations by search query', () => {
+    useChatSidebarSearchStore.getState().setConversationQuery('2');
+    render(<ConversationList conversations={mockConversations} />);
+
+    expect(screen.queryByTestId('conversation-conv-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('conversation-conv-2')).toBeInTheDocument();
+  });
+
+  it('should show empty search state when no conversations match', () => {
+    useChatSidebarSearchStore.getState().setConversationQuery('nope');
+    render(<ConversationList conversations={mockConversations} />);
+
+    expect(screen.getByText('No matching conversations')).toBeInTheDocument();
   });
 
   it('should show loading state', () => {

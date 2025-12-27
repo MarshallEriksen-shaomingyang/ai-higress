@@ -5,7 +5,6 @@ from typing import Literal
 from uuid import UUID
 
 import anyio
-from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.http_client import CurlCffiClient
@@ -19,6 +18,15 @@ from app.provider.config import get_provider_config
 from app.provider.health import HealthStatus
 from app.redis_client import get_redis_client
 from app.schemas import ProviderStatus
+from app.repositories.provider_audit_repository import (
+    commit_refresh as repo_commit_refresh,
+    get_latest_test_record as repo_get_latest_test_record,
+    get_provider_by_provider_id as repo_get_provider_by_provider_id,
+    list_audit_logs as repo_list_audit_logs,
+    list_test_records as repo_list_test_records,
+    persist_provider_audit_log as repo_persist_provider_audit_log,
+    persist_provider_test_record as repo_persist_provider_test_record,
+)
 from app.services.provider_health_service import persist_provider_health
 from app.services.user_probe_executor import execute_user_probe
 from app.settings import settings
@@ -64,8 +72,7 @@ def _pick_probe_model(provider: Provider, cfg) -> str | None:
 
 
 def _get_provider(session: Session, provider_id: str) -> Provider:
-    stmt: Select[tuple[Provider]] = select(Provider).where(Provider.provider_id == provider_id)
-    provider = session.execute(stmt).scalars().first()
+    provider = repo_get_provider_by_provider_id(session, provider_id=provider_id)
     if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
     return provider
@@ -95,7 +102,7 @@ def _record_audit_log(
         remark=remark,
         test_record_uuid=test_record.id if test_record else None,
     )
-    session.add(log)
+    repo_persist_provider_audit_log(session, log=log)
     return log
 
 
@@ -151,7 +158,7 @@ def trigger_provider_test(
             started_at=started_at,
             finished_at=finished_at,
         )
-        session.add(record)
+        repo_persist_provider_test_record(session, record=record)
         _record_audit_log(
             session,
             provider,
@@ -162,9 +169,7 @@ def trigger_provider_test(
             to_status=provider.audit_status,
             test_record=record,
         )
-        session.commit()
-        session.refresh(record)
-        session.refresh(provider)
+        repo_commit_refresh(session, provider=provider, record=record)
         return record
 
     probe_model = _pick_probe_model(provider, cfg)
@@ -192,7 +197,7 @@ def trigger_provider_test(
             started_at=started_at,
             finished_at=finished_at,
         )
-        session.add(record)
+        repo_persist_provider_test_record(session, record=record)
         _record_audit_log(
             session,
             provider,
@@ -203,9 +208,7 @@ def trigger_provider_test(
             to_status=provider.audit_status,
             test_record=record,
         )
-        session.commit()
-        session.refresh(record)
-        session.refresh(provider)
+        repo_commit_refresh(session, provider=provider, record=record)
         return record
 
     async def _run_probe():
@@ -284,7 +287,7 @@ def trigger_provider_test(
         started_at=started_at,
         finished_at=finished_at,
     )
-    session.add(record)
+    repo_persist_provider_test_record(session, record=record)
     _record_audit_log(
         session,
         provider,
@@ -295,9 +298,7 @@ def trigger_provider_test(
         to_status=provider.audit_status,
         test_record=record,
     )
-    session.commit()
-    session.refresh(record)
-    session.refresh(provider)
+    repo_commit_refresh(session, provider=provider, record=record)
     logger.info("Provider %s test recorded (mode=%s)", provider_id, mode)
     return record
 
@@ -327,8 +328,7 @@ def approve_provider(
         from_status=previous_status,
         to_status=provider.audit_status,
     )
-    session.commit()
-    session.refresh(provider)
+    repo_commit_refresh(session, provider=provider, record=None)
     return provider
 
 
@@ -352,8 +352,7 @@ def reject_provider(
         from_status=previous_status,
         to_status=provider.audit_status,
     )
-    session.commit()
-    session.refresh(provider)
+    repo_commit_refresh(session, provider=provider, record=None)
     return provider
 
 
@@ -380,46 +379,28 @@ def update_operation_status(
         operation_from_status=previous_status,
         operation_to_status=new_status,
     )
-    session.commit()
-    session.refresh(provider)
+    repo_commit_refresh(session, provider=provider, record=None)
     return provider
 
 
 def get_latest_test_record(
     session: Session, provider_uuid: UUID
 ) -> ProviderTestRecord | None:
-    stmt: Select[tuple[ProviderTestRecord]] = (
-        select(ProviderTestRecord)
-        .where(ProviderTestRecord.provider_uuid == provider_uuid)
-        .order_by(ProviderTestRecord.created_at.desc())
-    )
-    return session.execute(stmt).scalars().first()
+    return repo_get_latest_test_record(session, provider_uuid=provider_uuid)
 
 
 def list_test_records(
     session: Session, provider_id: str, limit: int = 20
 ) -> list[ProviderTestRecord]:
     provider = _get_provider(session, provider_id)
-    stmt: Select[tuple[ProviderTestRecord]] = (
-        select(ProviderTestRecord)
-        .where(ProviderTestRecord.provider_uuid == provider.id)
-        .order_by(ProviderTestRecord.created_at.desc())
-        .limit(limit)
-    )
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_test_records(session, provider_uuid=provider.id, limit=limit)
 
 
 def list_audit_logs(
     session: Session, provider_id: str, limit: int = 50
 ) -> list[ProviderAuditLog]:
     provider = _get_provider(session, provider_id)
-    stmt: Select[tuple[ProviderAuditLog]] = (
-        select(ProviderAuditLog)
-        .where(ProviderAuditLog.provider_uuid == provider.id)
-        .order_by(ProviderAuditLog.created_at.desc())
-        .limit(limit)
-    )
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_audit_logs(session, provider_uuid=provider.id, limit=limit)
 
 
 __all__ = [

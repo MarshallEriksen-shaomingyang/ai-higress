@@ -206,8 +206,8 @@ export function MyProvidersPageClient() {
   }, []);
 
   const handleManageKeys = useCallback(
-    (providerInternalId: string) => {
-      router.push(`/dashboard/providers/${providerInternalId}/keys`);
+    (providerId: string) => {
+      router.push(`/dashboard/providers/${providerId}/keys`);
     },
     [router]
   );

@@ -198,6 +198,11 @@ def _build_provider_config(provider: Provider) -> ProviderConfig | None:
     if responses_path:
         trimmed = responses_path.strip()
         data["responses_path"] = trimmed if trimmed else None
+
+    images_generations_path = getattr(provider, "images_generations_path", None)
+    if images_generations_path:
+        trimmed = images_generations_path.strip()
+        data["images_generations_path"] = trimmed if trimmed else None
     if provider.region:
         data["region"] = provider.region
     if provider.cost_input is not None:

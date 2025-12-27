@@ -20,7 +20,7 @@ from app.services.metrics_buffer import (
     MetricsStats,
     UserMetricsKey,
 )
-from app.services.upstream_proxy_utils import mask_proxy_url
+from app.services.upstream_proxy.utils import mask_proxy_url
 from app.settings import settings
 from app.upstream import UpstreamStreamError, stream_upstream
 

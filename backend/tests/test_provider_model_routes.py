@@ -4,7 +4,8 @@ from urllib.parse import quote
 
 from sqlalchemy import select
 
-from app.models import Provider, ProviderModel
+from app.models import Provider, ProviderAPIKey, ProviderModel
+from app.services.encryption import encrypt_secret
 from tests.utils import jwt_auth_headers, seed_user_and_key
 
 
@@ -151,3 +152,100 @@ def test_update_provider_model_mapping_accepts_slash_model_id(client, db_session
     )
     assert model_row is not None
     assert model_row.alias == "qwen3-120b"
+
+
+def test_update_provider_model_capabilities_accepts_slash_model_id(client, db_session):
+    admin = _create_admin(db_session)
+    provider = _create_provider(db_session, "provider-caps-update-slash")
+
+    headers = jwt_auth_headers(str(admin.id))
+    model_id = "provider-5/qwen3-235b"
+    encoded_model_id = quote(model_id, safe="")
+
+    # 预置聚合 /models 缓存，验证更新能力后会触发失效
+    redis = client.app.state._test_redis
+    assert redis is not None
+    # MODELS_CACHE_KEY = "gateway:models:all"
+    import asyncio
+    asyncio.run(redis.set("gateway:models:all", "cached"))
+
+    resp = client.put(
+        f"/providers/{provider.provider_id}/models/{encoded_model_id}/capabilities",
+        headers=headers,
+        json={"capabilities": ["chat", "image_generation"]},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["model_id"] == model_id
+    assert sorted(data["capabilities"]) == ["chat", "image_generation"]
+
+    model_row = (
+        db_session.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    assert model_row is not None
+    assert sorted(model_row.capabilities or []) == ["chat", "image_generation"]
+
+    assert asyncio.run(redis.get("gateway:models:all")) is None
+
+
+def test_provider_models_response_overlays_capabilities_override(client, db_session, monkeypatch):
+    admin = _create_admin(db_session)
+    provider = _create_provider(db_session, "provider-caps-overlay")
+
+    # ProviderConfig 构建需要至少一个 active API key
+    db_session.add(
+        ProviderAPIKey(
+            provider_uuid=provider.id,
+            encrypted_key=encrypt_secret("upstream-key"),
+            weight=1.0,
+            status="active",
+        )
+    )
+    db_session.commit()
+
+    headers = jwt_auth_headers(str(admin.id))
+    model_id = "chat-image-1"
+
+    resp = client.put(
+        f"/providers/{provider.provider_id}/models/{quote(model_id, safe='')}/capabilities",
+        headers=headers,
+        json={"capabilities": ["chat", "image_generation"]},
+    )
+    assert resp.status_code == 200
+
+    async def _fake_models_cached(*args, **kwargs):
+        return [
+            {
+                "model_id": model_id,
+                "provider_id": provider.provider_id,
+                "family": model_id,
+                "display_name": model_id,
+                "context_length": 8192,
+                "capabilities": ["chat"],
+                "pricing": None,
+                "metadata": {"owned_by": "system"},
+            }
+        ]
+
+    monkeypatch.setattr(
+        "app.api.provider_routes.ensure_provider_models_cached", _fake_models_cached
+    )
+
+    resp = client.get(
+        f"/providers/{provider.provider_id}/models",
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    models = payload.get("models") or []
+    assert models and models[0]["model_id"] == model_id
+    # 覆盖生效：即使上游缓存里只有 chat，响应也应反映已配置的 image_generation
+    assert "image_generation" in (models[0].get("capabilities") or [])

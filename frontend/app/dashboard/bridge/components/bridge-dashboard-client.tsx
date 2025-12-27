@@ -14,6 +14,7 @@ import { useI18n } from "@/lib/i18n-context";
 import { useBridgeAgents, useBridgeTools, useBridgeInvoke, useBridgeCancel } from "@/lib/swr/use-bridge";
 import { useBridgeEvents } from "@/lib/hooks/use-bridge-events";
 import { BridgeConfigGeneratorClient } from "./bridge-config-generator-client";
+import { BRIDGE_TOOL_TIMEOUT_MS } from "@/config/timeouts";
 
 export function BridgeDashboardClient() {
   const { t } = useI18n();
@@ -53,7 +54,7 @@ export function BridgeDashboardClient() {
       tool_name: toolName,
       arguments: args,
       stream: true,
-      timeout_ms: 60000,
+      timeout_ms: BRIDGE_TOOL_TIMEOUT_MS,
     });
     setActiveReqId(resp.req_id);
   };

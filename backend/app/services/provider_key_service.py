@@ -4,12 +4,21 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.logging_config import logger
 from app.models import Provider, ProviderAPIKey
+from app.repositories.provider_key_repository import (
+    create_provider_key as repo_create_provider_key,
+    delete_provider_key as repo_delete_provider_key,
+    find_key_by_label as repo_find_key_by_label,
+    get_provider_key_by_id as repo_get_provider_key_by_id,
+    list_provider_keys as repo_list_provider_keys,
+    list_provider_keys_plain as repo_list_provider_keys_plain,
+    persist_provider_key as repo_persist_provider_key,
+)
+from app.repositories.provider_repository import get_provider_by_provider_id
 from app.schemas import ProviderAPIKeyCreateRequest, ProviderAPIKeyUpdateRequest
 from app.services.encryption import decrypt_secret, encrypt_secret
 
@@ -41,8 +50,7 @@ def _get_provider_by_slug(session: Session, provider_id: str) -> Provider | None
     路由层传入的是短 ID，例如 `openai` / `moonshot-xxx`，而数据库外键
     使用的是 Provider.id（UUID）。该辅助函数负责完成二者的映射。
     """
-    stmt = select(Provider).where(Provider.provider_id == provider_id)
-    return session.execute(stmt).scalars().first()
+    return get_provider_by_provider_id(session, provider_id=provider_id)
 
 
 def _hash_provider_key(provider_id: str, raw_key: str) -> str:
@@ -77,13 +85,7 @@ def list_provider_keys(session: Session, provider_id: str) -> list[ProviderAPIKe
     if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
 
-    stmt = (
-        select(ProviderAPIKey)
-        .options(selectinload(ProviderAPIKey.provider))
-        .where(ProviderAPIKey.provider_uuid == provider.id)
-        .order_by(ProviderAPIKey.created_at.asc())
-    )
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_provider_keys(session, provider_uuid=provider.id)
 
 
 def get_provider_key_by_id(
@@ -100,7 +102,7 @@ def get_provider_key_by_id(
     if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
 
-    api_key = session.get(ProviderAPIKey, key_id)
+    api_key = repo_get_provider_key_by_id(session, key_id=key_id)
     if api_key is None or api_key.provider_uuid != provider.id:
         return None
     return api_key
@@ -151,12 +153,11 @@ def create_provider_key(
         raise InvalidProviderKeyError(f"Invalid API key for provider {provider_id}")
 
     # 检查标签是否已存在（同一 Provider 下 label 需唯一）
-    existing = session.execute(
-        select(ProviderAPIKey).where(
-            ProviderAPIKey.provider_uuid == provider.id,
-            ProviderAPIKey.label == payload.label,
-        )
-    ).scalars().first()
+    existing = repo_find_key_by_label(
+        session,
+        provider_uuid=provider.id,
+        label=payload.label,
+    )
     if existing:
         raise DuplicateProviderKeyLabelError(
             f"Label '{payload.label}' already exists for provider {provider_id}"
@@ -174,14 +175,10 @@ def create_provider_key(
         status=payload.status,
     )
 
-    session.add(api_key)
     try:
-        session.commit()
+        api_key = repo_create_provider_key(session, api_key=api_key)
     except IntegrityError as exc:
-        session.rollback()
         raise ProviderKeyServiceError(f"Failed to create provider key: {exc}") from exc
-
-    session.refresh(api_key)
     logger.info(
         "Created new API key for provider %s (label=%s, id=%s)",
         provider_id,
@@ -210,7 +207,7 @@ def update_provider_key(
     if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
 
-    api_key = session.get(ProviderAPIKey, key_id)
+    api_key = repo_get_provider_key_by_id(session, key_id=key_id)
     if api_key is None or api_key.provider_uuid != provider.id:
         raise ProviderKeyServiceError(
             f"Provider key {key_id} not found for provider {provider_id}"
@@ -226,13 +223,12 @@ def update_provider_key(
 
     # 检查标签是否与其他密钥冲突
     if payload.label and payload.label != api_key.label:
-        existing = session.execute(
-            select(ProviderAPIKey).where(
-                ProviderAPIKey.provider_uuid == provider.id,
-                ProviderAPIKey.label == payload.label,
-                ProviderAPIKey.id != key_id,
-            )
-        ).scalars().first()
+        existing = repo_find_key_by_label(
+            session,
+            provider_uuid=provider.id,
+            label=payload.label,
+            exclude_key_id=key_id,
+        )
         if existing:
             raise DuplicateProviderKeyLabelError(
                 f"Label '{payload.label}' already exists for provider {provider_id}"
@@ -249,14 +245,10 @@ def update_provider_key(
     if payload.status is not None:
         api_key.status = payload.status
 
-    session.add(api_key)
     try:
-        session.commit()
+        api_key = repo_persist_provider_key(session, api_key=api_key)
     except IntegrityError as exc:
-        session.rollback()
         raise ProviderKeyServiceError(f"Failed to update provider key: {exc}") from exc
-
-    session.refresh(api_key)
     logger.info("Updated API key %s for provider %s", key_id, provider_id)
     return api_key
 
@@ -278,17 +270,15 @@ def delete_provider_key(
     if provider is None:
         raise ProviderNotFoundError(f"Provider {provider_id} not found")
 
-    api_key = session.get(ProviderAPIKey, key_id)
+    api_key = repo_get_provider_key_by_id(session, key_id=key_id)
     if api_key is None or api_key.provider_uuid != provider.id:
         raise ProviderKeyServiceError(
             f"Provider key {key_id} not found for provider {provider_id}"
         )
 
-    session.delete(api_key)
     try:
-        session.commit()
+        repo_delete_provider_key(session, api_key=api_key)
     except IntegrityError as exc:
-        session.rollback()
         raise ProviderKeyServiceError(f"Failed to delete provider key: {exc}") from exc
 
     logger.info("Deleted API key %s for provider %s", key_id, provider_id)
@@ -309,10 +299,7 @@ def get_provider_key_by_hash(
     if provider is None:
         return None
 
-    stmt = select(ProviderAPIKey).where(
-        ProviderAPIKey.provider_uuid == provider.id,
-    )
-    for api_key in session.execute(stmt).scalars():
+    for api_key in repo_list_provider_keys_plain(session, provider_uuid=provider.id):
         try:
             plaintext = decrypt_secret(api_key.encrypted_key)
         except Exception:

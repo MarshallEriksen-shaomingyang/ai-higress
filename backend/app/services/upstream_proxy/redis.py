@@ -6,7 +6,7 @@ from uuid import UUID
 from app.logging_config import logger
 from app.services.encryption import decrypt_secret, encrypt_secret
 
-from .upstream_proxy_utils import compute_url_fingerprint
+from .utils import compute_url_fingerprint
 
 try:
     from redis.asyncio import Redis

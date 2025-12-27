@@ -515,6 +515,22 @@ def setup_logging() -> None:
     access_logger.propagate = True
     access_logger.addHandler(access_file_handler)
 
+    # Debug file for image upstream payloads，仅非生产环境启用，便于排查。
+    if getattr(settings, "environment", "development").lower() != "production":
+        image_debug_handler = DailyFolderFileHandler(
+            log_dir=log_dir,
+            filename="image-debug.log",
+            backup_days=backup_days,
+            encoding="utf-8",
+            timezone_name=getattr(settings, "log_timezone", None),
+        )
+        image_debug_handler.setFormatter(formatter)
+        image_debug_handler.addFilter(FixedBizFilter("image_debug"))
+        image_debug_logger = logging.getLogger("apiproxy.image_debug")
+        image_debug_logger.setLevel(logging.DEBUG)
+        image_debug_logger.propagate = False
+        image_debug_logger.addHandler(image_debug_handler)
+
     server_file_handler = DailyFolderFileHandler(
         log_dir=log_dir,
         filename="server.log",

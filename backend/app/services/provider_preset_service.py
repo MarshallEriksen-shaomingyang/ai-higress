@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.logging_config import logger
 from app.models import ProviderPreset
+from app.repositories.provider_preset_repository import (
+    create_provider_preset as repo_create_provider_preset,
+    delete_provider_preset as repo_delete_provider_preset,
+    get_provider_preset as repo_get_provider_preset,
+    list_provider_presets as repo_list_provider_presets,
+    persist_provider_preset as repo_persist_provider_preset,
+    rollback as repo_rollback,
+)
 from app.schemas.provider_control import (
     ProviderPresetBase,
     ProviderPresetCreateRequest,
@@ -30,13 +37,11 @@ class ProviderPresetNotFoundError(ProviderPresetServiceError):
 
 
 def list_provider_presets(session: Session) -> list[ProviderPreset]:
-    stmt: Select[tuple[ProviderPreset]] = select(ProviderPreset).order_by(ProviderPreset.created_at.desc())
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_provider_presets(session)
 
 
 def get_provider_preset(session: Session, preset_id: str) -> ProviderPreset:
-    stmt: Select[tuple[ProviderPreset]] = select(ProviderPreset).where(ProviderPreset.preset_id == preset_id)
-    preset = session.execute(stmt).scalars().first()
+    preset = repo_get_provider_preset(session, preset_id=preset_id)
     if preset is None:
         raise ProviderPresetNotFoundError(f"Preset {preset_id} not found")
     return preset
@@ -55,21 +60,18 @@ def create_provider_preset(session: Session, payload: ProviderPresetCreateReques
         messages_path=payload.messages_path,
         chat_completions_path=payload.chat_completions_path,
         responses_path=payload.responses_path,
+        images_generations_path=payload.images_generations_path,
         supported_api_styles=payload.supported_api_styles,
         retryable_status_codes=payload.retryable_status_codes,
         custom_headers=payload.custom_headers,
         static_models=payload.static_models,
     )
 
-    session.add(preset)
     try:
-        session.commit()
+        preset = repo_create_provider_preset(session, preset=preset)
     except IntegrityError as exc:  # pragma: no cover
-        session.rollback()
         logger.error("Failed to create provider preset: %s", exc)
         raise ProviderPresetIdExistsError("preset_id 已存在") from exc
-
-    session.refresh(preset)
     return preset
 
 
@@ -100,6 +102,8 @@ def update_provider_preset(
         preset.chat_completions_path = payload.chat_completions_path
     if payload.responses_path is not None:
         preset.responses_path = payload.responses_path
+    if payload.images_generations_path is not None:
+        preset.images_generations_path = payload.images_generations_path
     if payload.supported_api_styles is not None:
         preset.supported_api_styles = payload.supported_api_styles
     if payload.retryable_status_codes is not None:
@@ -109,16 +113,12 @@ def update_provider_preset(
     if payload.static_models is not None:
         preset.static_models = payload.static_models
 
-    session.add(preset)
-    session.commit()
-    session.refresh(preset)
-    return preset
+    return repo_persist_provider_preset(session, preset=preset)
 
 
 def delete_provider_preset(session: Session, preset_id: str) -> None:
     preset = get_provider_preset(session, preset_id)
-    session.delete(preset)
-    session.commit()
+    repo_delete_provider_preset(session, preset=preset)
 
 
 def export_provider_presets(session: Session) -> ProviderPresetExportResponse:
@@ -153,13 +153,13 @@ def import_provider_presets(session: Session, payload: ProviderPresetImportReque
             create_provider_preset(session, create_payload)
             result.created.append(preset_payload.preset_id)
         except ProviderPresetServiceError as exc:
-            session.rollback()
+            repo_rollback(session)
             logger.error("Failed to import provider preset %s: %s", preset_payload.preset_id, exc)
             result.failed.append(
                 ProviderPresetImportError(preset_id=preset_payload.preset_id, reason=str(exc))
             )
         except Exception as exc:  # pragma: no cover - unexpected branch
-            session.rollback()
+            repo_rollback(session)
             logger.exception(
                 "Unexpected error importing provider preset %s", preset_payload.preset_id
             )

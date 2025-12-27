@@ -18,6 +18,7 @@ import type { Conversation } from "@/lib/api-types";
 import { ConversationItemDialogs } from "./conversation-item-dialogs";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { Skeleton } from "@/components/ui/skeleton";
+import { sanitizeConversationTitle } from "@/lib/chat/sanitize-conversation-title";
 
 interface ConversationItemProps {
   conversation: Conversation;
@@ -41,12 +42,14 @@ export function ConversationItem({
   onDelete,
 }: ConversationItemProps) {
   const { t } = useI18n();
+  const sanitizedTitle = sanitizeConversationTitle(conversation.title);
+  const displayTitle = sanitizedTitle || t("chat.conversation.untitled");
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
-  const [draftTitle, setDraftTitle] = useState(conversation.title || "");
+  const [draftTitle, setDraftTitle] = useState(sanitizedTitle);
   const conversationPending =
     useChatStore((s) => s.conversationPending[conversation.conversation_id]) ?? false;
-  const hasTitle = !!(conversation.title && conversation.title.trim());
+  const hasTitle = !!sanitizedTitle;
   const showTitleSkeleton = !hasTitle && conversationPending;
 
   const handleCardClick = () => {
@@ -110,7 +113,7 @@ export function ConversationItem({
         onKeyDown={handleKeyDown}
         tabIndex={0}
         role="button"
-        aria-label={`${t("chat.conversation.select")} ${conversation.title || t("chat.conversation.untitled")}`}
+        aria-label={`${t("chat.conversation.select")} ${displayTitle}`}
         aria-pressed={isSelected}
       >
         <CardHeader>
@@ -123,7 +126,7 @@ export function ConversationItem({
                 </span>
               </div>
             ) : (
-              conversation.title || t("chat.conversation.untitled")
+              displayTitle
             )}
           </CardTitle>
           <CardDescription className="text-xs text-muted-foreground/75">
@@ -154,7 +157,7 @@ export function ConversationItem({
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
-                      setDraftTitle(conversation.title || "");
+                      setDraftTitle(sanitizedTitle);
                       setShowRenameDialog(true);
                     }}
                   >

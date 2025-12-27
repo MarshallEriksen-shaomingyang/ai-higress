@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.image import ImageGenerationRequest
 
 
 class AssistantPresetCreateRequest(BaseModel):
@@ -128,6 +130,16 @@ class MessageRegenerateResponse(BaseModel):
     baseline_run: RunSummary
 
 
+class MessageRegenerateRequest(BaseModel):
+    override_logical_model: str | None = Field(default=None, min_length=1, max_length=128)
+    model_preset: dict | None = None
+    bridge_agent_id: str | None = Field(default=None, min_length=1, max_length=128)
+    bridge_agent_ids: list[str] | None = Field(default=None, max_length=5)
+    bridge_tool_selections: list[BridgeToolSelection] | None = Field(default=None, max_length=5)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class RunSummary(BaseModel):
     run_id: UUID
     requested_logical_model: str
@@ -148,6 +160,23 @@ class MessageItem(BaseModel):
 
 class MessageListResponse(PaginatedResponse):
     items: list[MessageItem] = Field(default_factory=list)
+
+
+class ConversationImageGenerationRequest(ImageGenerationRequest):
+    """
+    Chat 应用侧的“会话内文生图”请求。
+
+    说明：
+    - JWT 鉴权（而非 X-API-Key）；
+    - 结果会写入会话历史（chat_messages），用于“历史记录/回放/多端同步”；
+    - 默认 response_format=url（走 OSS + /media/images 短链），避免把大体积 base64 写入历史。
+    """
+
+    prompt: str = Field(..., min_length=1, max_length=20000)
+    model: str = Field(..., min_length=1, max_length=128)
+    streaming: bool = Field(default=False, description="是否使用 SSE 推送生成状态与最终结果")
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class RunDetailResponse(RunSummary):
@@ -176,6 +205,7 @@ __all__ = [
     "MessageRegenerateResponse",
     "MessageItem",
     "MessageListResponse",
+    "ConversationImageGenerationRequest",
     "RunDetailResponse",
     "RunSummary",
 ]

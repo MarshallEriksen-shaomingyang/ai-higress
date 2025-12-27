@@ -161,28 +161,41 @@ export const cacheStrategies = {
   // 默认策略
   default: {
     revalidateOnFocus: false,
-    revalidateOnReconnect: true,
-    dedupingInterval: 2000,
+    revalidateOnReconnect: false,
+    revalidateIfStale: false,
+    refreshInterval: 0,
+    refreshWhenHidden: false,
+    refreshWhenOffline: false,
+    dedupingInterval: 5000,
   },
   // 频繁更新数据策略
   frequent: {
-    revalidateOnFocus: true,
-    revalidateOnReconnect: true,
-    refreshInterval: 30000, // 30秒
-    dedupingInterval: 1000,
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    revalidateIfStale: false,
+    refreshInterval: 0,
+    refreshWhenHidden: false,
+    refreshWhenOffline: false,
+    dedupingInterval: 5000,
   },
   // 静态数据策略
   static: {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
+    revalidateIfStale: false,
     refreshInterval: 0,
+    refreshWhenHidden: false,
+    refreshWhenOffline: false,
     dedupingInterval: 60000,
   },
   // 实时数据策略
   realtime: {
-    revalidateOnFocus: true,
+    revalidateOnFocus: false,
     revalidateOnReconnect: true,
+    revalidateIfStale: true,
     refreshInterval: 5000, // 5秒
+    refreshWhenHidden: false,
+    refreshWhenOffline: false,
     dedupingInterval: 500,
   },
 };

@@ -15,6 +15,7 @@ class ModelCapability(str, Enum):
     VISION = "vision"
     AUDIO = "audio"
     FUNCTION_CALLING = "function_calling"
+    IMAGE_GENERATION = "image_generation"
 
 
 class Model(BaseModel):
@@ -101,6 +102,34 @@ class ProviderModelAliasResponse(BaseModel):
     )
 
 
+class ModelCapabilitiesUpdateRequest(BaseModel):
+    """
+    更新单个物理模型「能力列表」的请求体。
+
+    - capabilities 为该物理模型的能力枚举列表；
+    - 该配置会覆盖上游 /models 返回的能力，用于处理上游未正确声明能力的情况。
+    """
+
+    capabilities: list[ModelCapability] = Field(
+        ...,
+        min_length=1,
+        description="要为该物理模型设置的能力列表",
+    )
+
+
+class ProviderModelCapabilitiesResponse(BaseModel):
+    """
+    返回 provider+model 维度的能力配置。
+    """
+
+    provider_id: str = Field(..., description="Provider 的短 ID（例如 moonshot-xxx）")
+    model_id: str = Field(..., description="上游模型 ID")
+    capabilities: list[ModelCapability] = Field(
+        default_factory=list,
+        description="当前配置的能力列表",
+    )
+
+
 class ModelDisableUpdateRequest(BaseModel):
     """
     更新单个物理模型「禁用状态」的请求体。
@@ -129,9 +158,11 @@ __all__ = [
     "Model",
     "ModelAliasUpdateRequest",
     "ModelCapability",
+    "ModelCapabilitiesUpdateRequest",
     "ModelDisableUpdateRequest",
     "ModelPricingUpdateRequest",
     "ProviderModelAliasResponse",
+    "ProviderModelCapabilitiesResponse",
     "ProviderModelDisabledResponse",
     "ProviderModelPricingResponse",
 ]

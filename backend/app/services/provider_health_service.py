@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.models import Provider
 from app.provider.health import HealthStatus
+from app.repositories.provider_health_repository import (
+    apply_health_status as repo_apply_health_status,
+    get_provider_by_provider_id as repo_get_provider_by_provider_id,
+)
 from app.redis_client import redis_get_json, redis_set_json
 from app.schemas import ProviderStatus
 from app.settings import settings
@@ -88,9 +92,7 @@ async def get_health_status_with_fallback(
     if cached is not None:
         return cached
 
-    provider = (
-        session.query(Provider).filter(Provider.provider_id == provider_id).first()
-    )
+    provider = repo_get_provider_by_provider_id(session, provider_id=provider_id)
     if provider is None:
         return None
 
@@ -105,14 +107,7 @@ async def persist_provider_health(
     *,
     cache_ttl_seconds: int | None = None,
 ) -> None:
-    provider.status = status.status.value
-    provider.last_check = datetime.fromtimestamp(status.timestamp, tz=UTC)
-    provider.metadata_json = {
-        "response_time_ms": status.response_time_ms,
-        "error_message": status.error_message,
-        "last_successful_check": status.last_successful_check,
-    }
-    session.add(provider)
+    repo_apply_health_status(session, provider=provider, status=status)
 
     ttl = cache_ttl_seconds or settings.provider_health_cache_ttl_seconds
     await cache_health_status(redis, status, ttl_seconds=ttl)

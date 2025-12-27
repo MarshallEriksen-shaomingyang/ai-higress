@@ -5,8 +5,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import httpx
-from sqlalchemy import Select, delete, func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.http_client import CurlCffiClient
 from app.logging_config import logger
@@ -14,6 +13,22 @@ from app.models import Provider
 from app.models.user_probe import UserProbeRun, UserProbeTask
 from app.provider.config import get_provider_config
 from app.provider.health import HealthStatus
+from app.repositories.provider_health_repository import apply_health_status as repo_apply_provider_health_status
+from app.repositories.user_probe_repository import (
+    count_user_tasks as repo_count_user_tasks,
+    create_task as repo_create_task,
+    delete_task as repo_delete_task,
+    get_provider_by_uuid as repo_get_provider_by_uuid,
+    get_task as repo_get_task,
+    list_runs as repo_list_runs,
+    list_tasks as repo_list_tasks,
+    mark_task_in_progress as repo_mark_task_in_progress,
+    mark_tasks_in_progress as repo_mark_tasks_in_progress,
+    persist_task as repo_persist_task,
+    persist_task_state as repo_persist_task_state,
+    save_run_and_update_task as repo_save_run_and_update_task,
+    select_due_tasks_for_update as repo_select_due_tasks_for_update,
+)
 from app.schemas import ProviderConfig, ProviderStatus
 from app.services.provider_health_service import persist_provider_health
 from app.services.user_probe_executor import ProbeApiStyle, execute_user_probe
@@ -88,8 +103,7 @@ def _load_provider_cfg(session: Session, provider_id: str) -> ProviderConfig:
 
 
 def _count_user_tasks(session: Session, user_id: UUID) -> int:
-    stmt = select(func.count()).select_from(UserProbeTask).where(UserProbeTask.user_id == user_id)
-    return int(session.execute(stmt).scalar() or 0)
+    return repo_count_user_tasks(session, user_id=user_id)
 
 
 def create_user_probe_task(
@@ -138,10 +152,7 @@ def create_user_probe_task(
         next_run_at=now if enabled else None,
         last_run_uuid=None,
     )
-    session.add(task)
-    session.commit()
-    session.refresh(task)
-    return task
+    return repo_create_task(session, task=task)
 
 
 def list_user_probe_tasks(
@@ -150,14 +161,7 @@ def list_user_probe_tasks(
     user_id: UUID,
     provider: Provider,
 ) -> list[UserProbeTask]:
-    stmt: Select[tuple[UserProbeTask]] = (
-        select(UserProbeTask)
-        .where(UserProbeTask.user_id == user_id)
-        .where(UserProbeTask.provider_uuid == provider.id)
-        .options(selectinload(UserProbeTask.last_run))
-        .order_by(UserProbeTask.created_at.desc())
-    )
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_tasks(session, user_id=user_id, provider_uuid=provider.id)
 
 
 def get_user_probe_task(
@@ -167,14 +171,7 @@ def get_user_probe_task(
     provider: Provider,
     task_id: UUID,
 ) -> UserProbeTask:
-    stmt: Select[tuple[UserProbeTask]] = (
-        select(UserProbeTask)
-        .where(UserProbeTask.id == task_id)
-        .where(UserProbeTask.user_id == user_id)
-        .where(UserProbeTask.provider_uuid == provider.id)
-        .options(selectinload(UserProbeTask.last_run))
-    )
-    task = session.execute(stmt).scalars().first()
+    task = repo_get_task(session, user_id=user_id, provider_uuid=provider.id, task_id=task_id)
     if task is None:
         raise UserProbeNotFoundError("探针任务不存在")
     return task
@@ -228,17 +225,13 @@ def update_user_probe_task(
         # 配置变更后让任务尽快生效（下一个 tick 会执行）
         task.next_run_at = _now_utc()
 
-    session.add(task)
-    session.commit()
-    session.refresh(task)
-    return task
+    return repo_persist_task(session, task=task)
 
 
 def delete_user_probe_task(session: Session, *, task: UserProbeTask) -> None:
     if task.in_progress:
         raise UserProbeConflictError("任务正在执行，暂不可删除")
-    session.delete(task)
-    session.commit()
+    repo_delete_task(session, task=task)
 
 
 def list_user_probe_runs(
@@ -247,14 +240,7 @@ def list_user_probe_runs(
     task: UserProbeTask,
     limit: int = 20,
 ) -> list[UserProbeRun]:
-    limit_value = max(1, min(int(limit), 200))
-    stmt: Select[tuple[UserProbeRun]] = (
-        select(UserProbeRun)
-        .where(UserProbeRun.task_uuid == task.id)
-        .order_by(UserProbeRun.created_at.desc())
-        .limit(limit_value)
-    )
-    return list(session.execute(stmt).scalars().all())
+    return repo_list_runs(session, task_id=task.id, limit=limit)
 
 
 def _status_from_probe_result(*, success: bool, status_code: int | None) -> ProviderStatus:
@@ -284,9 +270,7 @@ async def run_user_probe_task_once(
     if not task.enabled and not allow_disabled:
         raise UserProbeServiceError("任务已禁用")
 
-    task.in_progress = True
-    session.add(task)
-    session.commit()
+    repo_mark_task_in_progress(session, task=task, in_progress=True)
 
     return await _run_user_probe_task_in_progress(
         session,
@@ -350,14 +334,7 @@ async def _run_user_probe_task_in_progress(
                 cache_ttl_seconds=settings.provider_health_cache_ttl_seconds,
             )
         else:
-            provider.status = health_status.status.value
-            provider.last_check = finished_at
-            provider.metadata_json = {
-                "response_time_ms": health_status.response_time_ms,
-                "error_message": health_status.error_message,
-                "last_successful_check": health_status.last_successful_check,
-            }
-            session.add(provider)
+            repo_apply_provider_health_status(session, provider=provider, status=health_status)
     except Exception:  # pragma: no cover - 健康状态写入失败不应阻断探针记录落库
         logger.exception(
             "user_probe: failed to persist provider health provider=%s task=%s",
@@ -381,39 +358,18 @@ async def _run_user_probe_task_in_progress(
         started_at=started_at,
         finished_at=finished_at,
     )
-    session.add(run)
-    session.flush()  # ensure run.id
-
-    task.last_run_at = finished_at
-    task.last_run_uuid = run.id
-    task.next_run_at = (
-        finished_at + timedelta(seconds=int(task.interval_seconds))
-        if task.enabled
-        else None
+    next_run_at = (
+        finished_at + timedelta(seconds=int(task.interval_seconds)) if task.enabled else None
     )
-    session.add(task)
-
-    _prune_task_runs(session, task_id=task.id, keep=settings.user_probe_max_runs_per_task)
-
-    session.commit()
-    session.refresh(run)
-    session.refresh(task)
-    return run
-
-
-def _prune_task_runs(session: Session, *, task_id: UUID, keep: int) -> None:
-    keep_value = max(1, int(keep))
-    # 找到需要删除的旧记录（按 created_at 逆序保留 keep 条）
-    sub = (
-        select(UserProbeRun.id)
-        .where(UserProbeRun.task_uuid == task_id)
-        .order_by(UserProbeRun.created_at.desc())
-        .offset(keep_value)
+    return repo_save_run_and_update_task(
+        session,
+        task=task,
+        provider=provider,
+        run=run,
+        finished_at=finished_at,
+        next_run_at=next_run_at,
+        keep_runs=settings.user_probe_max_runs_per_task,
     )
-    ids = [row[0] for row in session.execute(sub).all()]
-    if not ids:
-        return
-    session.execute(delete(UserProbeRun).where(UserProbeRun.id.in_(ids)))
 
 
 async def run_due_user_probe_tasks(
@@ -431,23 +387,12 @@ async def run_due_user_probe_tasks(
     limit_value = int(max_tasks or settings.user_probe_max_due_tasks_per_tick)
     limit_value = max(1, limit_value)
 
-    stmt = (
-        select(UserProbeTask)
-        .where(UserProbeTask.enabled.is_(True))
-        .where(UserProbeTask.in_progress.is_(False))
-        .where((UserProbeTask.next_run_at.is_(None)) | (UserProbeTask.next_run_at <= now))
-        .order_by(UserProbeTask.next_run_at.asc().nullsfirst(), UserProbeTask.created_at.asc())
-        .limit(limit_value)
-        .with_for_update(skip_locked=True)
-    )
-    tasks: Sequence[UserProbeTask] = list(session.execute(stmt).scalars().all())
+    tasks: Sequence[UserProbeTask] = repo_select_due_tasks_for_update(session, now=now, limit=limit_value)
     if not tasks:
         return 0
 
     # 预先标记 in_progress，减少后续竞争；后续执行阶段不再做 in_progress 校验。
-    for t in tasks:
-        t.in_progress = True
-    session.commit()
+    repo_mark_tasks_in_progress(session, tasks=tasks)
 
     processed = 0
     async with CurlCffiClient(
@@ -456,12 +401,11 @@ async def run_due_user_probe_tasks(
         trust_env=True,
     ) as client:
         for t in tasks:
-            provider = session.get(Provider, t.provider_uuid)
+            provider = repo_get_provider_by_uuid(session, provider_uuid=t.provider_uuid)
             if provider is None:
                 # provider 已被删除（理论上会 cascade），保护性跳过
                 t.in_progress = False
-                session.add(t)
-                session.commit()
+                repo_persist_task_state(session, task=t)
                 continue
 
             # 仅允许 owner 的私有 Provider 参与任务执行；否则直接禁用任务
@@ -475,8 +419,7 @@ async def run_due_user_probe_tasks(
                 t.enabled = False
                 t.in_progress = False
                 t.next_run_at = None
-                session.add(t)
-                session.commit()
+                repo_persist_task_state(session, task=t)
                 continue
 
             try:
@@ -494,8 +437,7 @@ async def run_due_user_probe_tasks(
                 # 避免失败任务被立即重复触发：失败也按 interval 推迟
                 t.last_run_at = _now_utc()
                 t.next_run_at = t.last_run_at + timedelta(seconds=int(t.interval_seconds))
-                session.add(t)
-                session.commit()
+                repo_persist_task_state(session, task=t)
 
     return processed
 

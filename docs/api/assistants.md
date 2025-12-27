@@ -241,9 +241,118 @@ Response:
 当 `streaming=true`（或请求头包含 `Accept: text/event-stream`）时，返回 `text/event-stream`：
 
 - `event: message.created`：包含 `user_message_id` / `assistant_message_id` / `baseline_run`
+  - `request_context`（可选）：本次请求的上下文快照（模型 + 参数 + Bridge 工具选择），用于前端在“对比/重试/断线重连”等场景复用同一套配置。
 - `event: message.delta`：增量 token（字段 `delta`）
 - `event: message.completed` / `message.failed`：结束事件，包含最终 `baseline_run`
 - `event: done` + `data: [DONE]`
+
+### POST `/v1/conversations/{conversation_id}/image-generations`
+
+会话内文生图（写入聊天历史），用于在 Chat 页面里“像发消息一样出图”。
+
+特点：
+- 认证：JWT（同 Messages）
+- 结果会持久化到 `chat_messages`，可用于历史记录/多端同步
+- 推荐使用 SSE（等待体验更好）
+- 返回内容默认走 `response_format="url"`（OSS + `/media/images` 短链），避免把大体积 base64 写入历史
+
+Request:
+```json
+{
+  "prompt": "a cat sitting on a chair",
+  "model": "gpt-image-1",
+  "n": 1,
+  "size": "1024x1024",
+  "response_format": "url",
+  "extra_body": {
+    "google": {
+      "generationConfig": {
+        "imageConfig": {"aspectRatio": "16:9"}
+      }
+    }
+  },
+  "streaming": true
+}
+```
+
+说明：
+- `streaming=true` 或请求头包含 `Accept: text/event-stream` 时返回 SSE
+- `response_format` 当前会被服务端强制为 `url`（历史落库不写 base64）
+- `extra_body`（可选）：网关保留扩展字段；当 `model` 触发 Google lane 时，`extra_body.google` 会合并到上游请求体中（覆盖同名字段）
+
+#### Streaming (SSE) Response
+
+- `event: message.created`：包含 `user_message_id` / `assistant_message_id` / `baseline_run`
+- `event: message.delta`：阶段提示（字段 `delta`，例如“正在生成图片…”）
+- `event: message.completed` / `message.failed`：结束事件，包含最终 `baseline_run`
+  - `image_generation`：结构化结果（用于前端渲染图片卡片）
+- `event: done` + `data: [DONE]`
+
+`message.completed` 示例（截断）：
+```json
+{
+  "type": "message.completed",
+  "conversation_id": "uuid",
+  "assistant_message_id": "uuid",
+  "baseline_run": { "run_id": "uuid", "requested_logical_model": "gpt-image-1", "status": "succeeded" },
+  "kind": "image_generation",
+  "image_generation": {
+    "type": "image_generation",
+    "status": "succeeded",
+    "prompt": "a cat sitting on a chair",
+    "params": { "model": "gpt-image-1", "n": 1, "size": "1024x1024", "response_format": "url" },
+    "images": [{ "url": "https://<gateway>/media/images/<object_key>?expires=...&sig=..." }],
+    "created": 1700000000
+  }
+}
+```
+
+#### 历史消息 content（assistant）
+
+拉取消息列表 `GET /v1/conversations/{conversation_id}/messages` 时，assistant 的 `content` 会包含：
+```json
+{
+  "type": "image_generation",
+  "status": "pending|succeeded|failed",
+  "prompt": "...",
+  "params": { "model": "...", "n": 1, "size": "1024x1024", "response_format": "url" },
+  "images": [{ "object_key": "...", "url": "https://<gateway>/media/images/...&sig=..." }],
+  "error": "..." 
+}
+```
+
+说明：
+- 服务端会基于 `object_key` 动态生成新的 `/media/images` 签名短链 `url`，避免历史里长期存储过期签名。
+
+### POST `/v1/messages/{assistant_message_id}/regenerate`
+
+基于已有的 user 消息重新生成一条 assistant 回复（会清空原 assistant 消息并生成新内容）。
+
+Request（可选 Body，用于显式携带模型参数与工具选择，避免“重试不带工具/参数”）：
+```json
+{
+  "override_logical_model": "gpt-4.1",
+  "model_preset": {"temperature": 0.2},
+  "bridge_agent_id": "aws-dev-server",
+  "bridge_agent_ids": ["aws-dev-server", "home-nas"],
+  "bridge_tool_selections": [
+    {"agent_id": "aws-dev-server", "tool_names": ["search", "summarize"]}
+  ]
+}
+```
+
+Response:
+```json
+{
+  "assistant_message_id": "uuid",
+  "baseline_run": {
+    "run_id": "uuid",
+    "requested_logical_model": "gpt-4.1",
+    "status": "succeeded",
+    "output_preview": "..."
+  }
+}
+```
 
 ### GET `/v1/conversations/{conversation_id}/messages`
 

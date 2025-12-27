@@ -12,6 +12,7 @@ from app.deps import get_db, get_redis
 from app.errors import bad_request, forbidden, not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.models import UpstreamProxyConfig, UpstreamProxyEndpoint, UpstreamProxySource
+from app.repositories.upstream_proxy_repository import get_or_create_proxy_config, upsert_endpoints
 from app.schemas import (
     UpstreamProxyConfigResponse,
     UpstreamProxyConfigUpdateRequest,
@@ -29,14 +30,9 @@ from app.schemas import (
     UpstreamProxyTaskResponse,
 )
 from app.services.encryption import encrypt_secret
-from app.services.upstream_proxy_db_service import (
-    get_or_create_proxy_config,
-    set_source_remote_headers,
-    set_source_remote_url,
-    upsert_endpoints,
-)
-from app.services.upstream_proxy_redis import clear_runtime_pool, set_runtime_config
-from app.services.upstream_proxy_utils import ParsedProxy, normalize_scheme, parse_proxy_line, split_proxy_text
+from app.services.upstream_proxy.redis import clear_runtime_pool, set_runtime_config
+from app.services.upstream_proxy.secrets import set_source_remote_headers, set_source_remote_url
+from app.services.upstream_proxy.utils import ParsedProxy, normalize_scheme, parse_proxy_line, split_proxy_text
 
 try:
     from redis.asyncio import Redis
@@ -294,7 +290,7 @@ def create_upstream_proxy_endpoint(
 
     # Fetch the endpoint back.
     # We locate by identity_hash computed in upsert_endpoints, so reconstruct via parsing.
-    from app.services.upstream_proxy_utils import compute_identity_hash
+    from app.services.upstream_proxy.utils import compute_identity_hash
 
     identity_hash = compute_identity_hash(
         scheme=scheme,

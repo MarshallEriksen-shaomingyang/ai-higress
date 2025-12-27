@@ -52,6 +52,7 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     messages_path: Mapped[str | None] = Column(String(100), nullable=True)
     chat_completions_path: Mapped[str | None] = Column(String(100), nullable=True)
     responses_path: Mapped[str | None] = Column(String(100), nullable=True)
+    images_generations_path: Mapped[str | None] = Column(String(100), nullable=True)
     static_models = Column(JSONBCompat(), nullable=True)
     supported_api_styles = Column(JSONBCompat(), nullable=True)
     status: Mapped[str] = Column(String(16), nullable=False, server_default=text("'healthy'"))

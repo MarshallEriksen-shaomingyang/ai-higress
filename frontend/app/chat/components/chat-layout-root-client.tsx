@@ -348,7 +348,7 @@ export function ChatLayoutRootClient({
           onValueChange={(value) =>
             setActiveTab(value as "assistants" | "conversations")
           }
-          className="flex flex-1 flex-col"
+          className="flex flex-1 flex-col min-h-0"
         >
           <div className="border-b px-4 pt-4">
             <TabsList className="w-full">
@@ -367,7 +367,7 @@ export function ChatLayoutRootClient({
 
           <TabsContent
             value="assistants"
-            className="flex-1 overflow-y-auto p-4 mt-0"
+            className="flex-1 overflow-y-auto p-4 mt-0 min-h-0"
           >
             {assistantsError ? (
               <ErrorAlert error={assistantsError} />
@@ -386,7 +386,7 @@ export function ChatLayoutRootClient({
 
           <TabsContent
             value="conversations"
-            className="flex-1 overflow-y-auto p-4 mt-0"
+            className="flex-1 overflow-y-auto p-4 mt-0 min-h-0"
           >
             {conversationsError ? (
               <ErrorAlert error={conversationsError} />
@@ -394,6 +394,7 @@ export function ChatLayoutRootClient({
               <ConversationList
                 conversations={conversations}
                 isLoading={isLoadingConversations}
+                assistantId={selectedAssistantId || undefined}
                 selectedConversationId={selectedConversationId || undefined}
                 onSelectConversation={handleSelectConversation}
                 onCreateConversation={handleCreateConversation}

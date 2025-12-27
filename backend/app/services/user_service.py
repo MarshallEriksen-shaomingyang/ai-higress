@@ -1,13 +1,21 @@
 from __future__ import annotations
 
-import uuid
 from uuid import UUID
 
-from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import User
+from app.repositories.user_repository import (
+    create_user as repo_create_user,
+    email_exists as repo_email_exists,
+    find_unique_username as repo_find_unique_username,
+    get_user_by_id as repo_get_user_by_id,
+    has_any_user as repo_has_any_user,
+    persist_user as repo_persist_user,
+    set_user_active_and_list_key_hashes as repo_set_user_active_and_list_key_hashes,
+    username_exists as repo_username_exists,
+)
 from app.schemas.user import UserCreateRequest, UserUpdateRequest
 from app.services.credit_service import get_or_create_account_for_user
 from app.services.jwt_auth_service import hash_password
@@ -59,42 +67,21 @@ def assign_default_role(
     service.set_user_roles(user_id, [role.id])
 
 
-def _record_exists(
-    session: Session,
-    stmt: Select[tuple[User]],
-) -> bool:
-    return session.execute(stmt).scalars().first() is not None
-
-
 def _username_exists(
     session: Session, username: str, *, exclude_user_id: UUID | None = None
 ) -> bool:
-    stmt = select(User).where(User.username == username)
-    if exclude_user_id is not None:
-        stmt = stmt.where(User.id != exclude_user_id)
-    return _record_exists(session, stmt)
+    return repo_username_exists(session, username=username, exclude_user_id=exclude_user_id)
 
 
 def _email_exists(
     session: Session, email: str, *, exclude_user_id: UUID | None = None
 ) -> bool:
-    stmt = select(User).where(User.email == email)
-    if exclude_user_id is not None:
-        stmt = stmt.where(User.id != exclude_user_id)
-    return _record_exists(session, stmt)
+    return repo_email_exists(session, email=email, exclude_user_id=exclude_user_id)
 
 
 def get_user_by_id(session: Session, user_id: UUID | str) -> User | None:
     """Return a user by primary key."""
-
-    if isinstance(user_id, str):
-        try:
-            user_uuid = uuid.UUID(user_id)
-        except ValueError:
-            return None
-    else:
-        user_uuid = user_id
-    return session.get(User, user_uuid)
+    return repo_get_user_by_id(session, user_id=user_id)
 
 
 def create_user(
@@ -118,16 +105,7 @@ def create_user(
     else:
         # 如果没有提供用户名，根据邮箱自动生成
         username_prefix = payload.email.split("@")[0]
-        # 确保用户名唯一性
-        existing_user = session.execute(select(User).where(User.username == username_prefix)).scalar_one_or_none()
-
-        # 如果存在，添加数字后缀
-        counter = 1
-        username = username_prefix
-        while existing_user is not None:
-            username = f"{username_prefix}{counter}"
-            existing_user = session.execute(select(User).where(User.username == username)).scalar_one_or_none()
-            counter += 1
+        username = repo_find_unique_username(session, base_username=username_prefix)
 
     user = User(
         username=username,
@@ -138,14 +116,10 @@ def create_user(
         is_superuser=is_superuser,
         is_active=is_active,
     )
-
-    session.add(user)
     try:
-        session.commit()
+        user = repo_create_user(session, user=user)
     except IntegrityError as exc:  # pragma: no cover - safety net for rare races
-        session.rollback()
         raise UserServiceError("Failed to create user") from exc
-    session.refresh(user)
     return user
 
 
@@ -195,13 +169,10 @@ def update_user(session: Session, user: User, payload: UserUpdateRequest) -> Use
     if payload.password is not None:
         user.hashed_password = hash_password(payload.password)
 
-    session.add(user)
     try:
-        session.commit()
+        user = repo_persist_user(session, user=user)
     except IntegrityError as exc:  # pragma: no cover - safety net for rare races
-        session.rollback()
         raise UserServiceError("Failed to update user") from exc
-    session.refresh(user)
     return user
 
 
@@ -209,21 +180,12 @@ def set_user_active(
     session: Session, user: User, *, is_active: bool
 ) -> tuple[User, list[str]]:
     """Toggle whether a user is active and return related API key hashes."""
-
-    user.is_active = is_active
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-
-    key_hashes = [key.key_hash for key in user.api_keys]
-    return user, key_hashes
+    return repo_set_user_active_and_list_key_hashes(session, user=user, is_active=is_active)
 
 
 def has_any_user(session: Session) -> bool:
     """Return whether at least one user already exists."""
-
-    stmt = select(User.id).limit(1)
-    return session.execute(stmt).first() is not None
+    return repo_has_any_user(session)
 
 
 __all__ = [

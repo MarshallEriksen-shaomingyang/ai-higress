@@ -86,8 +86,9 @@ frontend/.pnpm-debug.log*
 
 # bridge
 bin/
-
 nginx/
+# start sh
+scripts/start_*.sh
 
 # ============================================
 # IDE & Tools

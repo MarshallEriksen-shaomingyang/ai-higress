@@ -67,4 +67,38 @@ describe("chat normalizers: messages shape", () => {
     const normalized = normalizeMessagesResponse(backend, "conv-3");
     expect(normalized.items[0].message.content.trim()).toBe("https://example.com/a.png");
   });
+
+  it("normalizeMessagesResponse: 支持 image_generation 结构化消息", () => {
+    const backend = {
+      items: [
+        {
+          message_id: "msg-4",
+          role: "assistant",
+          content: {
+            type: "image_generation",
+            status: "succeeded",
+            prompt: "a cat",
+            params: {
+              model: "gpt-image-1",
+              prompt: "a cat",
+              n: 1,
+              size: "1024x1024",
+              response_format: "url",
+            },
+            images: [{ url: "http://api.test/media/images/x?expires=1&sig=abc" }],
+            created: 1700000000,
+          },
+          created_at: "2025-01-04T00:00:00Z",
+          runs: [],
+        },
+      ],
+      next_cursor: undefined,
+    } as any;
+
+    const normalized = normalizeMessagesResponse(backend, "conv-4");
+    expect(normalized.items[0].message.image_generation?.type).toBe("image_generation");
+    expect(normalized.items[0].message.image_generation?.status).toBe("succeeded");
+    expect(normalized.items[0].message.image_generation?.images?.[0]?.url).toContain("/media/images/");
+    expect(normalized.items[0].message.content).toContain("[图片]");
+  });
 });

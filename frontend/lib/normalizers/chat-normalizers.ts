@@ -37,6 +37,7 @@ import type {
   Conversation,
   ConversationsResponse,
   Message,
+  ImageGenerationRequest,
   RunSummary,
   RunDetail,
   MessagesResponse,
@@ -182,10 +183,76 @@ function stringifyContentSegment(segment: any): string {
   return '';
 }
 
+function toRecord(value: unknown): Record<string, any> | null {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, any>;
+}
+
+function normalizeImageGenerationContent(content: unknown): Message["image_generation"] | null {
+  const record = toRecord(content);
+  if (!record) return null;
+  if (record.type !== "image_generation") return null;
+
+  const status =
+    record.status === "pending" || record.status === "succeeded" || record.status === "failed"
+      ? (record.status as "pending" | "succeeded" | "failed")
+      : "pending";
+  const prompt = typeof record.prompt === "string" ? record.prompt : "";
+  const paramsRaw = toRecord(record.params) ?? {};
+
+  const model = typeof paramsRaw.model === "string" ? paramsRaw.model : "";
+  const n = typeof paramsRaw.n === "number" ? paramsRaw.n : 1;
+  const size = typeof paramsRaw.size === "string" ? paramsRaw.size : undefined;
+  const response_format =
+    paramsRaw.response_format === "b64_json" || paramsRaw.response_format === "url"
+      ? (paramsRaw.response_format as "url" | "b64_json")
+      : undefined;
+
+  const params: ImageGenerationRequest = {
+    model,
+    prompt,
+    ...(typeof n === "number" ? { n } : {}),
+    ...(size ? { size } : {}),
+    ...(response_format ? { response_format } : {}),
+  };
+
+  const imagesRaw = Array.isArray(record.images) ? record.images : [];
+  const images = imagesRaw
+    .map((img) => {
+      const r = toRecord(img);
+      if (!r) return null;
+      return {
+        url: typeof r.url === "string" ? r.url : undefined,
+        object_key: typeof r.object_key === "string" ? r.object_key : (r.object_key === null ? null : undefined),
+        b64_json: typeof r.b64_json === "string" ? r.b64_json : undefined,
+        revised_prompt: typeof r.revised_prompt === "string" ? r.revised_prompt : (r.revised_prompt === null ? null : undefined),
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
+
+  return {
+    type: "image_generation",
+    status,
+    prompt,
+    params,
+    images,
+    error: typeof record.error === "string" ? record.error : undefined,
+    created: typeof record.created === "number" ? record.created : undefined,
+  };
+}
+
 export function normalizeMessageContent(content: MessageContent | unknown): string {
   // 兼容后端返回字符串或未知结构，尽量保留已有文本，避免回流时把流式内容清空
   if (typeof content === 'string') {
     return content;
+  }
+
+  // 文生图消息：不强行塞进文本（由 UI 专用组件渲染），这里只给一个稳定的兜底。
+  const imgGen = normalizeImageGenerationContent(content);
+  if (imgGen) {
+    if (imgGen.status === "failed") return "[图片生成失败]";
+    if (imgGen.status === "pending") return "[图片生成中]";
+    return "[图片]";
   }
 
   if (Array.isArray(content)) {
@@ -217,11 +284,13 @@ export function normalizeMessageContent(content: MessageContent | unknown): stri
  * @returns 前端使用的消息数据
  */
 export function normalizeMessage(backend: MessageBackend): Message {
+  const image_generation = normalizeImageGenerationContent(backend.content);
   return {
     message_id: backend.message_id,
     conversation_id: backend.conversation_id,
     role: backend.role,
     content: normalizeMessageContent(backend.content), // 转换为字符串
+    image_generation: image_generation ?? undefined,
     created_at: backend.created_at,
   };
 }
@@ -278,11 +347,13 @@ export function normalizeMessagesResponse(
 ): MessagesResponse {
   return {
     items: backend.items.map((item) => {
+      const image_generation = normalizeImageGenerationContent(item.content);
       const normalizedMessage: Message = {
         message_id: item.message_id,
         conversation_id: conversationId,
         role: item.role,
         content: normalizeMessageContent(item.content),
+        image_generation: image_generation ?? undefined,
         created_at: item.created_at,
       };
 

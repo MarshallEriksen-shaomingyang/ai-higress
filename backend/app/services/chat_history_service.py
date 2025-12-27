@@ -427,6 +427,31 @@ def create_assistant_message_placeholder_after_user(
     return msg
 
 
+def create_assistant_image_generation_placeholder_after_user(
+    db: Session,
+    *,
+    conversation_id: UUID,
+    user_sequence: int,
+    content: dict,
+) -> Message:
+    """
+    创建一个 assistant 占位消息（结构化 content），用于文生图/文生视频等“非文本产物”的生成流程。
+
+    - 不更新 conversation 的 last_message_content / unread_count（等最终结果写入时再更新）
+    """
+    seq = int(user_sequence) + 1
+    msg = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=content,
+        sequence=seq,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg
+
+
 def finalize_assistant_message_after_user_sequence(
     db: Session,
     *,
@@ -468,6 +493,59 @@ def finalize_assistant_message_after_user_sequence(
         conv.last_activity_at = datetime.now(UTC)
         # 仅在占位为空时补一次未读计数，避免重复累加。
         if not previous_text.strip():
+            conv.unread_count += 1
+        db.add(conv)
+
+    db.commit()
+    db.refresh(msg)
+    return msg
+
+
+def finalize_assistant_image_generation_after_user_sequence(
+    db: Session,
+    *,
+    conversation_id: UUID,
+    user_sequence: int,
+    content: dict,
+    preview_text: str,
+) -> Message:
+    """
+    将 assistant 占位消息写入最终“文生图”内容，并同步更新 conversation 的预览与未读计数。
+
+    - content：结构化 JSON（建议包含 type=image_generation 等信息）
+    - preview_text：写入 Conversation.last_message_content 的精简预览文本
+    """
+    assistant_seq = int(user_sequence) + 1
+    msg = db.execute(
+        select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.sequence == assistant_seq,
+            Message.role == "assistant",
+        )
+    ).scalars().first()
+
+    if msg is None:
+        msg = Message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=content,
+            sequence=assistant_seq,
+        )
+        db.add(msg)
+        previous_empty = True
+    else:
+        previous_empty = False
+        if isinstance(msg.content, dict):
+            t = str(msg.content.get("text") or "").strip()
+            previous_empty = not t
+        msg.content = content
+        db.add(msg)
+
+    conv = db.get(Conversation, conversation_id)
+    if conv:
+        conv.last_message_content = (preview_text or "").strip()
+        conv.last_activity_at = datetime.now(UTC)
+        if previous_empty:
             conv.unread_count += 1
         db.add(conv)
 
@@ -602,12 +680,14 @@ __all__ = [
     "clear_conversation_messages",
     "create_assistant",
     "create_assistant_message_after_user",
+    "create_assistant_image_generation_placeholder_after_user",
     "create_assistant_message_placeholder_after_user",
     "create_conversation",
     "create_user_message",
     "delete_assistant",
     "delete_conversation",
     "finalize_assistant_message_after_user_sequence",
+    "finalize_assistant_image_generation_after_user_sequence",
     "get_assistant",
     "get_conversation",
     "get_conversation_any",

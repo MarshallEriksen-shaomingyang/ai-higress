@@ -1,5 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createElement } from 'react';
+import { SWRConfig } from 'swr';
 import {
   useClearConversationMessages,
   useMessages,
@@ -8,7 +10,23 @@ import {
   useSendMessageToConversation,
 } from '../use-messages';
 import { messageService } from '@/http/message';
+import { streamSSERequest } from '@/lib/bridge/sse';
 import type { MessagesResponse, RunDetail, SendMessageResponse } from '@/lib/api-types';
+
+const mockUseBridgeAgents = vi.fn(() => ({
+  agents: [],
+  error: null,
+  loading: false,
+  refresh: vi.fn(),
+}));
+
+const resetBridgeAgentsMock = () =>
+  mockUseBridgeAgents.mockReturnValue({
+    agents: [],
+    error: null,
+    loading: false,
+    refresh: vi.fn(),
+  });
 
 // Mock messageService
 vi.mock('@/http/message', () => ({
@@ -20,12 +38,29 @@ vi.mock('@/http/message', () => ({
   },
 }));
 
+vi.mock('@/lib/bridge/sse', () => ({
+  streamSSERequest: vi.fn(),
+}));
+
+vi.mock('@/lib/swr/use-bridge', () => ({
+  useBridgeAgents: () => mockUseBridgeAgents(),
+}));
+
+vi.mock('@/lib/hooks/use-conversation-pending', () => ({
+  useConversationPending: () => ({ setPending: vi.fn() }),
+}));
+
 // Mock SWR provider wrapper
 const wrapper = ({ children }: { children: React.ReactNode }) => children;
+
+const swrWrapper = ({ children }: { children: React.ReactNode }) => (
+  createElement(SWRConfig, { value: { provider: () => new Map(), dedupingInterval: 0 } }, children)
+);
 
 describe('useMessages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetBridgeAgentsMock();
   });
 
   it('should fetch messages with pagination support', async () => {
@@ -84,6 +119,7 @@ describe('useMessages', () => {
 describe('useRun', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetBridgeAgentsMock();
   });
 
   it('should fetch run details lazily', async () => {
@@ -125,6 +161,7 @@ describe('useRun', () => {
 describe('useSendMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetBridgeAgentsMock();
   });
 
   it('should send message and return response', async () => {
@@ -196,11 +233,76 @@ describe('useSendMessage', () => {
       'Failed to send message'
     );
   });
+
+  it('should handle run.event enveloped streaming events', async () => {
+    vi.mocked(streamSSERequest).mockImplementation(
+      async (_url, _init, onMessage, _signal) => {
+        onMessage({
+          event: 'message.created',
+          data: JSON.stringify({
+            type: 'run.event',
+            run_id: 'run-1',
+            seq: 1,
+            event_type: 'message.created',
+            payload: {
+              type: 'message.created',
+              user_message_id: 'msg-user-1',
+              assistant_message_id: 'msg-assistant-1',
+              baseline_run: {
+                run_id: 'run-1',
+                requested_logical_model: 'gpt-4',
+                status: 'running',
+              },
+            },
+          }),
+        });
+
+        onMessage({
+          event: 'message.delta',
+          data: JSON.stringify({
+            type: 'run.event',
+            run_id: 'run-1',
+            seq: 2,
+            event_type: 'message.delta',
+            payload: { type: 'message.delta', delta: 'hi' },
+          }),
+        });
+
+        onMessage({
+          event: 'message.completed',
+          data: JSON.stringify({
+            type: 'run.event',
+            run_id: 'run-1',
+            seq: 3,
+            event_type: 'message.completed',
+            payload: {
+              type: 'message.completed',
+              output_text: 'hi',
+              baseline_run: {
+                run_id: 'run-1',
+                requested_logical_model: 'gpt-4',
+                status: 'succeeded',
+                output_preview: 'hi',
+              },
+            },
+          }),
+        });
+      }
+    );
+
+    const { result } = renderHook(() => useSendMessage('conv-1'), { wrapper: swrWrapper });
+
+    const response = await result.current({ content: 'Hello' }, { streaming: true });
+
+    expect(response.baseline_run.status).toBe('succeeded');
+    expect(streamSSERequest).toHaveBeenCalled();
+  });
 });
 
 describe('useSendMessageToConversation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetBridgeAgentsMock();
   });
 
   it('should send message with provided conversationId', async () => {
@@ -253,11 +355,78 @@ describe('useSendMessageToConversation', () => {
       override_logical_model: 'test-model',
     });
   });
+
+  it('should drop bridge payload when no bridge agents are available', async () => {
+    const mockResponse: SendMessageResponse = {
+      message_id: 'msg-3',
+      baseline_run: {
+        run_id: 'run-3',
+        requested_logical_model: 'gpt-4',
+        status: 'succeeded',
+        output_preview: 'Hi there!',
+        latency: 900,
+      },
+    };
+
+    mockUseBridgeAgents.mockReturnValue({
+      agents: [],
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+    vi.mocked(messageService.sendMessage).mockResolvedValue(mockResponse);
+
+    const { result } = renderHook(() => useSendMessageToConversation(), { wrapper });
+
+    await result.current('conv-1', {
+      content: 'Hello',
+      bridge_agent_ids: ['agent-1'],
+      bridge_tool_selections: [{ agent_id: 'agent-1', tool_names: ['search'] }],
+    });
+
+    expect(messageService.sendMessage).toHaveBeenCalledWith('conv-1', {
+      content: 'Hello',
+    });
+  });
+
+  it('should keep bridge payload when bridge agents are available', async () => {
+    const mockResponse: SendMessageResponse = {
+      message_id: 'msg-4',
+      baseline_run: {
+        run_id: 'run-4',
+        requested_logical_model: 'gpt-4',
+        status: 'succeeded',
+        output_preview: 'Hi there!',
+        latency: 800,
+      },
+    };
+
+    mockUseBridgeAgents.mockReturnValue({
+      agents: [{ agent_id: 'agent-1' }],
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+    vi.mocked(messageService.sendMessage).mockResolvedValue(mockResponse);
+
+    const { result } = renderHook(() => useSendMessageToConversation(), { wrapper });
+
+    const payload = {
+      content: 'Hello',
+      bridge_agent_ids: ['agent-1'],
+      bridge_tool_selections: [{ agent_id: 'agent-1', tool_names: ['search'] }],
+    };
+
+    await result.current('conv-1', payload);
+
+    expect(messageService.sendMessage).toHaveBeenCalledWith('conv-1', payload);
+  });
 });
 
 describe('useClearConversationMessages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetBridgeAgentsMock();
   });
 
   it('should clear messages and keep conversation id', async () => {

@@ -39,6 +39,7 @@ celery_app.conf.update(
     imports=(
         "app.tasks",
         "app.tasks.chat_run",
+        "app.tasks.image_generation_run",
         "app.tasks.registration",
         "app.tasks.conversation_title",
         "app.tasks.api_key_health",

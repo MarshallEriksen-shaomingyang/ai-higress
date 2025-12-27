@@ -117,7 +117,7 @@ export interface ProviderCardProps {
   onDelete?: (providerId: string) => void;
   onViewDetails?: (providerId: string) => void;
   onViewModels?: (providerId: string) => void;
-  onManageKeys?: (providerInternalId: string) => void;
+  onManageKeys?: (providerId: string) => void;
   canModify?: boolean;
   canManageKeys?: boolean;
 }
@@ -303,7 +303,8 @@ export function ProviderCard({
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => onManageKeys(provider.id)}
+                    data-testid="provider-card-manage-keys"
+                    onClick={() => onManageKeys(provider.provider_id)}
                   >
                     <Key className="h-4 w-4" />
                   </Button>

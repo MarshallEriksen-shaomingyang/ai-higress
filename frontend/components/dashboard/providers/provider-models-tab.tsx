@@ -10,8 +10,7 @@ interface ProviderModelsTabProps {
   providerId: string;
   models?: ModelsResponse;
   canEdit: boolean;
-  onEditPricing: (modelId: string) => void;
-  onEditAlias: (modelId: string) => void;
+  onOpenSettings: (model: Model) => void;
   onRefresh: () => Promise<void>;
   translations: {
     title: string;
@@ -24,8 +23,7 @@ export const ProviderModelsTab = ({
   providerId,
   models,
   canEdit,
-  onEditPricing,
-  onEditAlias,
+  onOpenSettings,
   onRefresh,
   translations
 }: ProviderModelsTabProps) => {
@@ -114,8 +112,7 @@ export const ProviderModelsTab = ({
                     providerId={providerId}
                     model={model}
                     canEdit={canEdit}
-                    onEditPricing={() => onEditPricing(model.model_id)}
-                    onEditAlias={() => onEditAlias(model.model_id)}
+                    onOpenSettings={() => onOpenSettings(model)}
                     onRefresh={onRefresh}
                   />
                 ))}

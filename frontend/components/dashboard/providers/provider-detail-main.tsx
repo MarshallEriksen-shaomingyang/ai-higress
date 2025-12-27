@@ -13,10 +13,10 @@ import type { LucideIcon } from "lucide-react";
 import { useProviderDetail } from "@/lib/hooks/use-provider-detail";
 import { useProviderAudit } from "@/lib/hooks/use-provider-audit";
 import type {
-  ProviderModelPricing,
   ProviderAuditStatus,
   ProviderOperationStatus,
   ProviderTestResult,
+  Model,
 } from "@/http/provider";
 import { providerService } from "@/http/provider";
 import { useI18n } from "@/lib/i18n-context";
@@ -26,8 +26,7 @@ import type { ProviderSubmission, SubmissionStatus } from "@/http/provider-submi
 import { toast } from "sonner";
 import { useErrorDisplay } from "@/lib/errors";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import { ModelPricingDialog } from "./model-pricing-dialog";
-import { ModelAliasDialog } from "./model-alias-dialog";
+import { ModelSettingsDialog } from "./model-settings-dialog";
 import { StatusBadge } from "./status-badges";
 import { ProviderOverviewTab } from "./provider-overview-tab";
 import { ProviderSharingConfig } from "./provider-sharing-config";
@@ -143,15 +142,7 @@ export function ProviderDetailMain({ providerId, currentUserId, translations }: 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancellingSubmission, setIsCancellingSubmission] = useState(false);
   const [isUserOwnedPrivate, setIsUserOwnedPrivate] = useState<boolean>(false);
-  const [editingModelId, setEditingModelId] = useState<string | null>(null);
-  const [pricingDraft, setPricingDraft] = useState<{ input: string; output: string }>({
-    input: "",
-    output: "",
-  });
-  const [pricingLoading, setPricingLoading] = useState(false);
-  const [editingAliasModelId, setEditingAliasModelId] = useState<string | null>(null);
-  const [aliasDraft, setAliasDraft] = useState("");
-  const [aliasLoading, setAliasLoading] = useState(false);
+  const [settingsModel, setSettingsModel] = useState<Model | null>(null);
   const { provider, models, health, metrics, loading, error, refresh } = useProviderDetail({
     providerId,
   });
@@ -411,84 +402,9 @@ export function ProviderDetailMain({ providerId, currentUserId, translations }: 
     }
   }, [latestSubmission, t, showError, refreshSubmissionStatus]);
 
-  const openPricingEditor = useCallback(async (modelId: string) => {
-    if (!providerId) return;
-    setEditingModelId(modelId);
-    setPricingLoading(true);
-    try {
-      let pricing: ProviderModelPricing | null = null;
-      try {
-        pricing = await providerService.getProviderModelPricing(providerId, modelId);
-      } catch (err: any) {
-        if (err?.response?.status !== 404) {
-          throw err;
-        }
-      }
-      setPricingDraft({
-        input: pricing?.pricing?.input != null ? String(pricing.pricing.input) : "",
-        output: pricing?.pricing?.output != null ? String(pricing.pricing.output) : "",
-      });
-    } catch (err: any) {
-      showError(err, {
-        context: t("providers.pricing_load_error"),
-      });
-      setEditingModelId(null);
-    } finally {
-      setPricingLoading(false);
-    }
-  }, [providerId, showError, t]);
-
-  const savePricing = useCallback(async () => {
-    if (!providerId || !editingModelId) return;
-    setPricingLoading(true);
-    try {
-      const payload: { input?: number; output?: number } = {};
-      if (pricingDraft.input.trim() !== "") {
-        payload.input = Number(pricingDraft.input);
-      }
-      if (pricingDraft.output.trim() !== "") {
-        payload.output = Number(pricingDraft.output);
-      }
-      const body = Object.keys(payload).length > 0 ? payload : null;
-      await providerService.updateProviderModelPricing(providerId, editingModelId, body);
-      toast.success(t("providers.pricing_save_success"));
-      await refresh();
-      setEditingModelId(null);
-    } catch (err: any) {
-      showError(err, {
-        context: t("providers.pricing_save_error"),
-      });
-    } finally {
-      setPricingLoading(false);
-    }
-  }, [providerId, editingModelId, pricingDraft.input, pricingDraft.output, t, refresh, showError]);
-
-  const openAliasEditor = useCallback((modelId: string) => {
-    const model = models?.models.find((m) => m.model_id === modelId);
-    setEditingAliasModelId(modelId);
-    setAliasDraft(model?.alias ?? "");
-  }, [models?.models]);
-
-  const saveAlias = useCallback(async () => {
-    if (!providerId || !editingAliasModelId) return;
-    setAliasLoading(true);
-    try {
-      const payload: { alias?: string | null } = {};
-      const trimmed = aliasDraft.trim();
-      payload.alias = trimmed === "" ? null : trimmed;
-
-      await providerService.updateProviderModelAlias(providerId, editingAliasModelId, payload);
-      toast.success(t("providers.alias_save_success"));
-      await refresh();
-      setEditingAliasModelId(null);
-    } catch (err: any) {
-      showError(err, {
-        context: t("providers.alias_save_error"),
-      });
-    } finally {
-      setAliasLoading(false);
-    }
-  }, [providerId, editingAliasModelId, aliasDraft, t, refresh, showError]);
+  const openModelSettings = useCallback((model: Model) => {
+    setSettingsModel(model);
+  }, []);
 
   const latestTest: ProviderTestResult | null | undefined = useMemo(() => 
     provider?.latest_test_result, [provider?.latest_test_result]
@@ -665,8 +581,7 @@ export function ProviderDetailMain({ providerId, currentUserId, translations }: 
             providerId={providerId}
             models={models}
             canEdit={!!permissions.canEditModelMapping}
-            onEditPricing={openPricingEditor}
-            onEditAlias={openAliasEditor}
+            onOpenSettings={openModelSettings}
             onRefresh={refresh}
             translations={translations.models}
           />
@@ -675,6 +590,7 @@ export function ProviderDetailMain({ providerId, currentUserId, translations }: 
         {/* API 密钥标签页 */}
         <TabsContent value="keys">
           <ProviderKeysTab
+            providerId={providerId}
             provider={provider}
             canManage={permissions.canManageKeys}
             translations={translations.keys}
@@ -735,34 +651,13 @@ export function ProviderDetailMain({ providerId, currentUserId, translations }: 
         )}
       </Tabs>
 
-      {/* 计费编辑对话框 */}
-      <ModelPricingDialog
-        open={editingModelId !== null}
-        onOpenChange={(open) => !open && setEditingModelId(null)}
-        providerId={provider?.provider_id ?? ""}
-        modelId={editingModelId ?? ""}
-        inputPrice={pricingDraft.input}
-        outputPrice={pricingDraft.output}
-        onInputPriceChange={(value) =>
-          setPricingDraft((prev) => ({ ...prev, input: value }))
-        }
-        onOutputPriceChange={(value) =>
-          setPricingDraft((prev) => ({ ...prev, output: value }))
-        }
-        onSave={savePricing}
-        loading={pricingLoading}
-      />
-
-      {/* 别名编辑对话框 */}
-      <ModelAliasDialog
-        open={editingAliasModelId !== null}
-        onOpenChange={(open) => !open && setEditingAliasModelId(null)}
-        providerId={provider?.provider_id ?? ""}
-        modelId={editingAliasModelId ?? ""}
-        alias={aliasDraft}
-        onAliasChange={setAliasDraft}
-        onSave={saveAlias}
-        loading={aliasLoading}
+      <ModelSettingsDialog
+        open={settingsModel !== null}
+        onOpenChange={(open) => !open && setSettingsModel(null)}
+        providerId={providerId}
+        model={settingsModel}
+        canEditModelMapping={!!permissions.canEditModelMapping}
+        onRefresh={refresh}
       />
 
       {/* 探针配置 Drawer */}

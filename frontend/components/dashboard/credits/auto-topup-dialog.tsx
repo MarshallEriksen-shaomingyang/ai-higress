@@ -7,20 +7,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useI18n } from "@/lib/i18n-context";
 import { useErrorDisplay } from "@/lib/errors";
 import { useAdminUserAutoTopup } from "@/lib/swr/use-credits";
 import { toast } from "sonner";
 import { Info, Loader2, ShieldOff } from "lucide-react";
 
-// 动态加载 Dialog 和 Tooltip 组件
-const Dialog = dynamic(() => import("@/components/ui/dialog").then(mod => ({ default: mod.Dialog })), { ssr: false });
-const DialogContent = dynamic(() => import("@/components/ui/dialog").then(mod => ({ default: mod.DialogContent })), { ssr: false });
-const DialogDescription = dynamic(() => import("@/components/ui/dialog").then(mod => ({ default: mod.DialogDescription })), { ssr: false });
-const DialogFooter = dynamic(() => import("@/components/ui/dialog").then(mod => ({ default: mod.DialogFooter })), { ssr: false });
-const DialogHeader = dynamic(() => import("@/components/ui/dialog").then(mod => ({ default: mod.DialogHeader })), { ssr: false });
-const DialogTitle = dynamic(() => import("@/components/ui/dialog").then(mod => ({ default: mod.DialogTitle })), { ssr: false });
-
+// 动态加载 Tooltip 组件
 const Tooltip = dynamic(() => import("@/components/ui/tooltip").then(mod => ({ default: mod.Tooltip })), { ssr: false });
 const TooltipContent = dynamic(() => import("@/components/ui/tooltip").then(mod => ({ default: mod.TooltipContent })), { ssr: false });
 const TooltipTrigger = dynamic(() => import("@/components/ui/tooltip").then(mod => ({ default: mod.TooltipTrigger })), { ssr: false });

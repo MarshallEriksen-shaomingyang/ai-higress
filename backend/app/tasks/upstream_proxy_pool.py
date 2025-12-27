@@ -22,23 +22,22 @@ from app.db import SessionLocal
 from app.http_client import CurlCffiClient
 from app.logging_config import logger
 from app.models import UpstreamProxyConfig, UpstreamProxyEndpoint, UpstreamProxySource
+from app.repositories.upstream_proxy_repository import get_or_create_proxy_config, upsert_endpoints
 from app.redis_client import get_redis_client
-from app.services.upstream_proxy_db_service import (
-    build_endpoint_proxy_url,
-    get_or_create_proxy_config,
-    get_source_remote_headers,
-    get_source_remote_url,
-    upsert_endpoints,
-    utcnow,
-)
-from app.services.upstream_proxy_redis import (
+from app.services.upstream_proxy.redis import (
     clear_runtime_pool,
     in_cooldown,
     mark_available,
     put_endpoint_proxy_url,
     set_runtime_config,
 )
-from app.services.upstream_proxy_utils import parse_proxy_line, split_proxy_text
+from app.services.upstream_proxy.secrets import (
+    build_endpoint_proxy_url,
+    get_source_remote_headers,
+    get_source_remote_url,
+    utcnow,
+)
+from app.services.upstream_proxy.utils import parse_proxy_line, split_proxy_text
 from app.settings import settings
 
 try:

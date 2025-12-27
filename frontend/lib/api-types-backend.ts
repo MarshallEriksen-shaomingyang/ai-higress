@@ -54,16 +54,48 @@ export interface ConversationsResponseBackend {
 
 // ============= 消息相关 =============
 
+export interface TextMessageContentBackend {
+  type: "text";
+  text: string;
+}
+
+export interface ImageMessageContentBackend {
+  type: "image" | "image_url" | "input_image";
+  image_url?: string | { url?: string };
+  text?: string;
+}
+
+export interface FileMessageContentBackend {
+  type: "file";
+  file_url?: string;
+  text?: string;
+}
+
+export interface ImageGenerationMessageContentBackend {
+  type: "image_generation";
+  status: "pending" | "succeeded" | "failed";
+  prompt: string;
+  params: Record<string, any>;
+  images: Array<{
+    url?: string;
+    object_key?: string | null;
+    b64_json?: string;
+    revised_prompt?: string | null;
+  }>;
+  error?: string;
+  created?: number;
+}
+
 /**
  * 消息内容结构
  * 后端返回的是结构化对象，而非字符串
  */
-export interface MessageContent {
-  type: 'text' | 'image' | 'image_url' | 'input_image' | 'file';
-  text?: string;
-  image_url?: string | { url?: string };
-  file_url?: string;
-}
+export type MessageContent =
+  | TextMessageContentBackend
+  | ImageMessageContentBackend
+  | FileMessageContentBackend
+  | ImageGenerationMessageContentBackend
+  | Record<string, any>;
 
 /**
  * 后端实际返回的消息类型

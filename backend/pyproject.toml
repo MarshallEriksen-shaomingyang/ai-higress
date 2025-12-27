@@ -28,6 +28,9 @@ dependencies = [
     "python-multipart>=0.0.20",
     "httpx-curl-cffi>=0.1.5",
     "curl-cffi>=0.7.0",
+    "oss2>=2.19.1",
+    "alibabacloud-oss-v2>=1.2.2",
+    "boto3>=1.34.0",
 ]
 
 [project.scripts]
