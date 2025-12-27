@@ -29,7 +29,15 @@ export function useConversationComposer(conversationId: string) {
   );
 
   const setImageParams = useCallback(
-    (updates: { model?: string; size?: string; n?: number }) =>
+    (
+      updates: {
+        model?: string;
+        size?: string;
+        n?: number;
+        enableGoogleSearch?: boolean;
+        sendResponseFormat?: boolean;
+      }
+    ) =>
       setImageState(conversationId, updates),
     [conversationId, setImageState]
   );
@@ -44,4 +52,3 @@ export function useConversationComposer(conversationId: string) {
     [snapshot.activeMode, snapshot.image, setImageParams, setMode]
   );
 }
-

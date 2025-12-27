@@ -407,7 +407,7 @@ export interface ImageGenerationRequest {
   prompt: string;
   n?: number;
   size?: string;
-  response_format?: "url" | "b64_json";
+  response_format?: "url" | "b64_json" | null;
   quality?: "standard" | "hd" | "low" | "medium" | "high" | "auto";
   style?: "vivid" | "natural";
   background?: "transparent" | "opaque" | "auto";

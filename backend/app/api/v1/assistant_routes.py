@@ -547,12 +547,23 @@ async def create_image_generation_endpoint(
     wants_event_stream = "text/event-stream" in accept_header.lower()
     stream = bool(payload.streaming) or wants_event_stream
 
+    omit_upstream_response_format = payload.response_format is None
     image_request = payload.model_dump(exclude_none=True)
     prompt = str(image_request.pop("prompt") or "").strip()
     image_request.pop("streaming", None)
 
     # Chat 历史里强制使用 url（走 OSS + /media/images），避免把 b64 写入 DB。
     image_request["response_format"] = "url"
+    if omit_upstream_response_format:
+        extra_body = image_request.get("extra_body")
+        if not isinstance(extra_body, dict):
+            extra_body = {}
+        gateway = extra_body.get("gateway")
+        if not isinstance(gateway, dict):
+            gateway = {}
+        gateway["omit_response_format"] = True
+        extra_body["gateway"] = gateway
+        image_request["extra_body"] = extra_body
     image_request["model"] = str(image_request.get("model") or "").strip()
     if not image_request["model"]:
         return Response(status_code=status.HTTP_400_BAD_REQUEST, content="model required")

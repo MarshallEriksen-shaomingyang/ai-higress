@@ -92,6 +92,44 @@ def test_images_generations_openai_lane_happy_path(client, db_session, monkeypat
     assert payload["data"][0]["b64_json"] == "AAAB"
 
 
+def test_images_generations_omits_response_format_when_null(
+    client, db_session, monkeypatch, api_key_auth_header
+):
+    _seed_provider_with_image_model(db_session, provider_id="openai-like", model_id="gpt-image-1")
+
+    seen: dict[str, object] = {}
+
+    async def _fake_call(**kwargs):
+        seen["json_body"] = kwargs.get("json_body")
+        return httpx.Response(
+            200,
+            json={
+                "created": 1700000000,
+                "data": [{"b64_json": "AAAB", "revised_prompt": "a cat"}],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.services.image_app_service.call_upstream_http_with_metrics", _fake_call
+    )
+
+    resp = client.post(
+        "/v1/images/generations",
+        headers=api_key_auth_header,
+        json={
+            "prompt": "a cat",
+            "model": "gpt-image-1",
+            "n": 1,
+            "response_format": None,
+        },
+    )
+    assert resp.status_code == 200
+    assert isinstance(seen.get("json_body"), dict)
+    assert "response_format" not in seen["json_body"]
+    payload = resp.json()
+    assert payload["data"][0]["b64_json"] == "AAAB"
+
+
 @pytest.mark.parametrize(
     "model_id",
     ["gemini-2.5-flash-image", "gemini-3-pro-image-preview", "nano-banana"],

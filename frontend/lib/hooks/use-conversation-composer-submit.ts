@@ -96,6 +96,7 @@ export function useConversationComposerSubmit({
           size: payload.params.size,
           quality: payload.params.quality,
           enableGoogleSearch: payload.params.enableGoogleSearch,
+          sendResponseFormat: payload.params.sendResponseFormat,
         });
         toast.success(t("chat.image_gen.success"));
       } catch (error: any) {

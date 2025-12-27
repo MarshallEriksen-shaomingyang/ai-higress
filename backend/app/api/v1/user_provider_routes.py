@@ -7,10 +7,17 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.deps import get_db
+try:
+    from redis.asyncio import Redis
+except ModuleNotFoundError:  # pragma: no cover
+    Redis = object  # type: ignore
+
+from app.deps import get_db, get_redis
 from app.errors import bad_request, forbidden, not_found
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
+from app.logging_config import logger
 from app.models import Provider
+from app.model_cache import MODELS_CACHE_KEY
 from app.schemas.provider import ProviderResponse
 from app.schemas.provider_control import (
     UserProviderCreateRequest,
@@ -27,11 +34,32 @@ from app.services.user_provider_service import (
     list_providers_shared_with_user,
     update_private_provider,
 )
+from app.storage.redis_service import PROVIDER_MODELS_KEY_TEMPLATE, invalidate_logical_models_cache
 
 router = APIRouter(
     tags=["user-providers"],
     dependencies=[Depends(require_jwt_token)],
 )
+
+
+async def _invalidate_provider_model_caches(redis: Redis, provider_id: str) -> None:
+    """
+    清理与 provider 模型列表相关的缓存：
+    - `gateway:models:all`：全局 /models 聚合缓存（MODELS_CACHE_KEY）
+    - `llm:vendor:{provider_id}:models`：单 provider 的模型列表缓存
+
+    逻辑模型缓存由 invalidate_logical_models_cache 处理。
+    """
+    if redis is object:
+        return
+    keys = [
+        MODELS_CACHE_KEY,
+        PROVIDER_MODELS_KEY_TEMPLATE.format(provider_id=provider_id),
+    ]
+    try:
+        await redis.delete(*keys)  # type: ignore[attr-defined]
+    except Exception:
+        logger.warning("Failed to invalidate provider model caches for %s", provider_id, exc_info=True)
 
 
 @router.get(
@@ -119,10 +147,11 @@ def list_user_private_providers_endpoint(
     response_model=ProviderResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_user_private_provider_endpoint(
+async def create_user_private_provider_endpoint(
     user_id: UUID,
     payload: UserProviderCreateRequest,
     db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
 ) -> ProviderResponse:
     """创建用户私有提供商。"""
@@ -145,20 +174,29 @@ def create_user_private_provider_endpoint(
 
     try:
         provider = create_private_provider(db, user_id, payload)
-        return ProviderResponse.model_validate(provider)
     except UserProviderServiceError as exc:
         raise bad_request(str(exc))
+
+    # 缓存失效：逻辑模型 + 模型列表
+    try:
+        await invalidate_logical_models_cache(redis)
+    except Exception:
+        logger.warning("Failed to invalidate logical models cache after provider create", exc_info=True)
+    await _invalidate_provider_model_caches(redis, provider.provider_id)
+
+    return ProviderResponse.model_validate(provider)
 
 
 @router.put(
     "/users/{user_id}/private-providers/{provider_id}",
     response_model=ProviderResponse,
 )
-def update_user_private_provider_endpoint(
+async def update_user_private_provider_endpoint(
     user_id: UUID,
     provider_id: str,
     payload: UserProviderUpdateRequest,
     db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
 ) -> ProviderResponse:
     """更新用户私有提供商。"""
@@ -169,21 +207,30 @@ def update_user_private_provider_endpoint(
 
     try:
         provider = update_private_provider(db, user_id, provider_id, payload)
-        return ProviderResponse.model_validate(provider)
     except UserProviderNotFoundError:
         raise not_found(f"私有提供商 '{provider_id}' 不存在")
     except UserProviderServiceError as exc:
         raise bad_request(str(exc))
+
+    # 缓存失效：逻辑模型 + 模型列表
+    try:
+        await invalidate_logical_models_cache(redis)
+    except Exception:
+        logger.warning("Failed to invalidate logical models cache after provider update", exc_info=True)
+    await _invalidate_provider_model_caches(redis, provider_id)
+
+    return ProviderResponse.model_validate(provider)
 
 
 @router.delete(
     "/users/{user_id}/private-providers/{provider_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_user_private_provider_endpoint(
+async def delete_user_private_provider_endpoint(
     user_id: UUID,
     provider_id: str,
     db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
 ) -> None:
     """删除用户私有提供商。"""
@@ -198,6 +245,13 @@ def delete_user_private_provider_endpoint(
 
     db.delete(provider)
     db.commit()
+
+    # 缓存失效：逻辑模型 + 模型列表
+    try:
+        await invalidate_logical_models_cache(redis)
+    except Exception:
+        logger.warning("Failed to invalidate logical models cache after provider delete", exc_info=True)
+    await _invalidate_provider_model_caches(redis, provider_id)
 
 
 __all__ = ["router"]

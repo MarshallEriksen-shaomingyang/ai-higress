@@ -32,56 +32,24 @@ export function ChatSettingsPageClient() {
 
   const [savingProject, setSavingProject] = useState(false);
 
-  const rawProjectDefaultModel = settings?.default_logical_model ?? null;
-  const projectDefaultModel =
-    rawProjectDefaultModel && rawProjectDefaultModel !== "auto"
-      ? rawProjectDefaultModel
-      : null;
   const projectTitleModelValue =
     settings?.title_logical_model && settings.title_logical_model !== "auto"
       ? settings.title_logical_model
       : null;
 
-  const { options: selectableModels, filterOptions } = useSelectableChatModels(
+  const { filterOptions } = useSelectableChatModels(
     selectedProjectId,
     {
       includeAuto: false,
-      extraModels: [projectDefaultModel ?? undefined, projectTitleModelValue ?? undefined],
+      extraModels: [projectTitleModelValue ?? undefined],
     }
   );
-  const [projectDefaultSearch, setProjectDefaultSearch] = useState("");
   const [projectTitleSearch, setProjectTitleSearch] = useState("");
 
-  const resolvedProjectDefaultModel = useMemo(
-    () => projectDefaultModel ?? selectableModels[0]?.value ?? "",
-    [projectDefaultModel, selectableModels]
-  );
-
-  const projectDefaultModels = useMemo(() => {
-    const models = filterOptions(projectDefaultSearch);
-    if (!resolvedProjectDefaultModel) return models;
-    if (models.some((model) => model.value === resolvedProjectDefaultModel)) return models;
-    return [{ value: resolvedProjectDefaultModel, label: resolvedProjectDefaultModel }, ...models];
-  }, [filterOptions, projectDefaultSearch, resolvedProjectDefaultModel]);
   const projectTitleModels = useMemo(
     () => filterOptions(projectTitleSearch),
     [filterOptions, projectTitleSearch]
   );
-
-  const updateProjectDefaultModel = async (value: string) => {
-    if (!selectedProjectId) return;
-    setSavingProject(true);
-    try {
-      await updateProjectSettings(selectedProjectId, { default_logical_model: value });
-      await mutateProjectSettings();
-      toast.success(t("chat.settings.saved"));
-    } catch (error) {
-      console.error("Failed to update project chat default model:", error);
-      toast.error(t("chat.settings.save_failed"));
-    } finally {
-      setSavingProject(false);
-    }
-  };
 
   const updateProjectTitleModel = async (value: string) => {
     if (!selectedProjectId) return;
@@ -137,39 +105,6 @@ export function ChatSettingsPageClient() {
                 <CardDescription>{t("chat.settings.project.description")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-2">
-                  <div className="text-sm font-medium">{t("chat.settings.project.default_model")}</div>
-                  <Select
-                    value={resolvedProjectDefaultModel}
-                    onValueChange={(value) => void updateProjectDefaultModel(value)}
-                    onOpenChange={(open) => {
-                      if (!open) setProjectDefaultSearch("");
-                    }}
-                  >
-                    <SelectTrigger disabled={savingProject}>
-                      <SelectValue placeholder={t("chat.header.model_placeholder")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <div className="p-2 pb-1">
-                        <Input
-                          value={projectDefaultSearch}
-                          onChange={(event) => setProjectDefaultSearch(event.target.value)}
-                          placeholder={t("chat.model.search_placeholder")}
-                          className="h-9"
-                        />
-                      </div>
-                      {projectDefaultModels.map((model) => (
-                        <SelectItem key={model.value} value={model.value}>
-                          {model.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="text-xs text-muted-foreground">
-                    {t("chat.settings.project.default_model_help")}
-                  </div>
-                </div>
-
                 <div className="grid gap-2">
                   <div className="text-sm font-medium">{t("chat.settings.project.title_model")}</div>
                   <Select

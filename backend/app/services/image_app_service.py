@@ -414,11 +414,14 @@ class ImageAppService:
         vendor_extra = _get_vendor_extra(request, "openai")
         if vendor_extra:
             _deep_merge_dict(upstream_payload, vendor_extra)
+        gateway_extra = _get_vendor_extra(request, "gateway") or {}
         upstream_payload["model"] = model_id
         upstream_payload.pop("extra_body", None)
         # 网关当前不支持上游 Images SSE；防止用户误传导致 resp.json 失败。
         upstream_payload.pop("stream", None)
         upstream_payload.pop("partial_images", None)
+        if bool(gateway_extra.get("omit_response_format")):
+            upstream_payload.pop("response_format", None)
 
         if image_debug_logger.isEnabledFor(logging.DEBUG):
             image_debug_logger.debug(
@@ -445,6 +448,18 @@ class ImageAppService:
             mismatch = resp.status_code in (404, 405)
             retryable = True if mismatch else _is_retryable_upstream_status(provider_id, resp.status_code)
             record_key_failure(key_selection, retryable=retryable, status_code=resp.status_code, redis=self.redis)
+            # 仅在错误时输出上游 payload（避免丢调试信息）；屏蔽 prompt 以减少隐私暴露。
+            safe_payload = dict(upstream_payload)
+            if "prompt" in safe_payload:
+                safe_payload["prompt"] = "[omitted]"
+            logger.warning(
+                "openai_images upstream error: status=%s provider=%s model_id=%s url=%s payload=%s",
+                resp.status_code,
+                provider_id,
+                model_id,
+                url,
+                safe_payload,
+            )
             if retryable and resp.status_code in (500, 502, 503, 504, 429, 404, 405):
                 await self.routing_state.increment_provider_failure(provider_id)
                 raise _RetryableCandidateError()

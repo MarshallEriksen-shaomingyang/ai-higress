@@ -19,6 +19,7 @@ export interface ImageGenParams {
   n: number;
   quality?: "auto" | "low" | "medium" | "high";
   enableGoogleSearch?: boolean;
+  sendResponseFormat?: boolean;
 }
 
 interface ImageGenParamsBarProps {
@@ -150,6 +151,16 @@ export function ImageGenParamsBar({
         <Switch
           checked={!!params.enableGoogleSearch}
           onCheckedChange={(val) => onChange({ ...params, enableGoogleSearch: val })}
+          disabled={disabled}
+        />
+      </div>
+
+      {/* Response format toggle */}
+      <div className="flex items-center gap-2">
+        <Label className="text-muted-foreground whitespace-nowrap">{t("chat.image_gen.response_format")}</Label>
+        <Switch
+          checked={params.sendResponseFormat !== false}
+          onCheckedChange={(val) => onChange({ ...params, sendResponseFormat: val })}
           disabled={disabled}
         />
       </div>

@@ -9,6 +9,8 @@ export interface ImageComposerState {
   model: string;
   size: string;
   n: number;
+  enableGoogleSearch?: boolean;
+  sendResponseFormat?: boolean;
 }
 
 export interface ConversationComposerState {
@@ -18,6 +20,7 @@ export interface ConversationComposerState {
 
 interface ChatComposerState {
   byConversationId: Record<string, ConversationComposerState>;
+  imageDefaults: ImageComposerState;
 
   ensureConversation: (conversationId: string) => void;
   setActiveMode: (conversationId: string, mode: ComposerMode) => void;
@@ -25,16 +28,21 @@ interface ChatComposerState {
     conversationId: string,
     updates: Partial<ImageComposerState>
   ) => void;
+  setImageDefaults: (updates: Partial<ImageComposerState>) => void;
   resetConversation: (conversationId: string) => void;
 }
 
+const defaultImageState = (): ImageComposerState => ({
+  model: "",
+  size: "1024x1024",
+  n: 1,
+  enableGoogleSearch: false,
+  sendResponseFormat: true,
+});
+
 const defaultConversationState = (): ConversationComposerState => ({
   activeMode: "chat",
-  image: {
-    model: "",
-    size: "1024x1024",
-    n: 1,
-  },
+  image: defaultImageState(),
 });
 
 const fallbackConversationState: ConversationComposerState = (() => {
@@ -50,17 +58,19 @@ export const useChatComposerStore = create<ChatComposerState>()(
   persist(
     (set) => ({
       byConversationId: {},
+      imageDefaults: defaultImageState(),
 
       ensureConversation: (conversationId) =>
         set((state) => {
           const key = String(conversationId || "").trim();
           if (!key) return state;
           if (state.byConversationId[key]) return state;
+          const defaults = state.imageDefaults || defaultImageState();
           return {
             ...state,
             byConversationId: {
               ...state.byConversationId,
-              [key]: defaultConversationState(),
+              [key]: { activeMode: "chat", image: { ...defaults } },
             },
           };
         }),
@@ -89,12 +99,16 @@ export const useChatComposerStore = create<ChatComposerState>()(
           if (
             nextImage.model === prev.image.model &&
             nextImage.size === prev.image.size &&
-            nextImage.n === prev.image.n
+            nextImage.n === prev.image.n &&
+            nextImage.enableGoogleSearch === prev.image.enableGoogleSearch &&
+            nextImage.sendResponseFormat === prev.image.sendResponseFormat
           ) {
             return state;
           }
+          const nextDefaults = { ...(state.imageDefaults || defaultImageState()), ...updates };
           return {
             ...state,
+            imageDefaults: nextDefaults,
             byConversationId: {
               ...state.byConversationId,
               [key]: {
@@ -103,6 +117,12 @@ export const useChatComposerStore = create<ChatComposerState>()(
               },
             },
           };
+        }),
+
+      setImageDefaults: (updates) =>
+        set((state) => {
+          const merged = { ...(state.imageDefaults || defaultImageState()), ...updates };
+          return { ...state, imageDefaults: merged };
         }),
 
       resetConversation: (conversationId) =>
@@ -116,18 +136,19 @@ export const useChatComposerStore = create<ChatComposerState>()(
     }),
     {
       name: "chat-composer-store",
-      version: 1,
+      version: 3,
       migrate: (persistedState: unknown) => {
         if (!persistedState || typeof persistedState !== "object") {
-          return { byConversationId: {} };
+          return { byConversationId: {}, imageDefaults: defaultImageState() };
         }
         const state = persistedState as Record<string, unknown>;
         const raw = state.byConversationId;
         if (!raw || typeof raw !== "object") {
-          return { byConversationId: {} };
+          return { byConversationId: {}, imageDefaults: defaultImageState() };
         }
 
         const byConversationId: Record<string, ConversationComposerState> = {};
+        const imageDefaults = defaultImageState();
         for (const [conversationId, value] of Object.entries(
           raw as Record<string, unknown>
         )) {
@@ -146,10 +167,24 @@ export const useChatComposerStore = create<ChatComposerState>()(
             if (typeof img.n === "number" && Number.isFinite(img.n)) {
               normalized.image.n = img.n;
             }
+            if (typeof (img as any).enableGoogleSearch === "boolean") {
+              normalized.image.enableGoogleSearch = (img as any).enableGoogleSearch;
+            }
+            if (typeof (img as any).sendResponseFormat === "boolean") {
+              normalized.image.sendResponseFormat = (img as any).sendResponseFormat;
+            }
+            // 兼容旧版本未保存 sendResponseFormat 的数据
+            if (normalized.image.sendResponseFormat === undefined) {
+              normalized.image.sendResponseFormat = true;
+            }
+            // 兼容旧版本未保存 enableGoogleSearch 的数据
+            if (normalized.image.enableGoogleSearch === undefined) {
+              normalized.image.enableGoogleSearch = false;
+            }
           }
           byConversationId[conversationId] = normalized;
         }
-        return { byConversationId };
+        return { byConversationId, imageDefaults };
       },
     }
   )

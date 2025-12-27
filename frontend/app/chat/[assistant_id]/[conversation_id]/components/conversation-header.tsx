@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n-context";
 import { useChatLayoutStore } from "@/lib/stores/chat-layout-store";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useUserPreferencesStore } from "@/lib/stores/user-preferences-store";
 import { useConversationComposer } from "@/lib/hooks/use-conversation-composer";
 import { useAssistant } from "@/lib/swr/use-assistants";
 import { useLogicalModels } from "@/lib/swr/use-logical-models";
@@ -54,12 +55,22 @@ export function ConversationHeader({
     chatStreamingEnabled,
     setChatStreamingEnabled,
   } = useChatStore();
+  const {
+    preferences,
+    setPreferredChatModel,
+    setPreferredImageModel,
+  } = useUserPreferencesStore();
 
   const { assistant } = useAssistant(assistantId);
   const { settings: projectSettings } = useProjectChatSettings(selectedProjectId);
   const { models: logicalModels } = useLogicalModels(selectedProjectId);
 
   const currentOverride = conversationModelOverrides[conversationId] ?? null;
+
+  const preferredChatModel =
+    selectedProjectId ? preferences.preferredChatModelByProject[selectedProjectId] ?? null : null;
+  const preferredImageModel =
+    selectedProjectId ? preferences.preferredImageModelByProject[selectedProjectId] ?? null : null;
 
   const rawAssistantDefaultModel =
     assistant?.default_logical_model === PROJECT_INHERIT_SENTINEL
@@ -78,23 +89,47 @@ export function ConversationHeader({
     }
   );
 
+  const isModelSelectable = useCallback(
+    (model: string | null | undefined) => {
+      if (!model) return false;
+      return selectableModels.some((item) => item.value === model);
+    },
+    [selectableModels]
+  );
+
+  const preferredChatModelCandidate = useMemo(
+    () => (isModelSelectable(preferredChatModel) ? preferredChatModel : null),
+    [isModelSelectable, preferredChatModel]
+  );
+
+  const assistantDefaultModelCandidate = useMemo(
+    () => (isModelSelectable(assistantDefaultModel) ? assistantDefaultModel : null),
+    [assistantDefaultModel, isModelSelectable]
+  );
+
   const resolvedDefaultModel = useMemo(() => {
-    if (assistantDefaultModel) return assistantDefaultModel;
+    if (preferredChatModelCandidate) return preferredChatModelCandidate;
+    if (assistantDefaultModelCandidate) return assistantDefaultModelCandidate;
     return selectableModels[0]?.value ?? "";
-  }, [assistantDefaultModel, selectableModels]);
+  }, [assistantDefaultModelCandidate, preferredChatModelCandidate, selectableModels]);
 
   const effectiveSelectedModel = currentOverride ?? resolvedDefaultModel;
   const [modelSearch, setModelSearch] = useState("");
 
   useEffect(() => {
     if (currentOverride) return;
-    if (assistantDefaultModel) return;
-    if (!resolvedDefaultModel) return;
-    setConversationModelOverride(conversationId, resolvedDefaultModel);
+    if (preferredChatModelCandidate) {
+      setConversationModelOverride(conversationId, preferredChatModelCandidate);
+      return;
+    }
+    if (!assistantDefaultModelCandidate && resolvedDefaultModel) {
+      setConversationModelOverride(conversationId, resolvedDefaultModel);
+    }
   }, [
-    assistantDefaultModel,
+    assistantDefaultModelCandidate,
     conversationId,
     currentOverride,
+    preferredChatModelCandidate,
     resolvedDefaultModel,
     setConversationModelOverride,
   ]);
@@ -131,10 +166,18 @@ export function ConversationHeader({
     const selected = image.model;
     const valid = selected && imageModels.some((m) => m.value === selected);
     if (valid) return;
+    const preferred =
+      preferredImageModel && imageModels.some((m) => m.value === preferredImageModel)
+        ? preferredImageModel
+        : null;
+    if (preferred) {
+      setImageParams({ model: preferred });
+      return;
+    }
     const first = imageModels[0];
     if (!first) return;
     setImageParams({ model: first.value });
-  }, [image.model, imageModels, mode, setImageParams]);
+  }, [image.model, imageModels, mode, preferredImageModel, setImageParams]);
 
   useEffect(() => {
     setModelSearch("");
@@ -228,7 +271,10 @@ export function ConversationHeader({
           {mode === "image" ? (
             <Select
               value={image.model}
-              onValueChange={(value) => setImageParams({ model: value })}
+              onValueChange={(value) => {
+                setImageParams({ model: value });
+                setPreferredImageModel(selectedProjectId, value);
+              }}
               onOpenChange={(open) => {
                 if (!open) setModelSearch("");
               }}
@@ -257,9 +303,12 @@ export function ConversationHeader({
             <Select
               value={effectiveSelectedModel ?? ""}
               onValueChange={(value) => {
+                setPreferredChatModel(selectedProjectId, value);
+                const shouldClearOverride =
+                  assistantDefaultModelCandidate && value === assistantDefaultModelCandidate;
                 setConversationModelOverride(
                   conversationId,
-                  value === resolvedDefaultModel ? null : value
+                  shouldClearOverride ? null : value
                 );
               }}
               onOpenChange={(open) => {

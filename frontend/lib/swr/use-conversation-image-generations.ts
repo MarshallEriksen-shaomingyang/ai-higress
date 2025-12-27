@@ -18,6 +18,7 @@ type SendConversationImageGenerationPayload = Pick<
   "prompt" | "model" | "n" | "size" | "quality" | "extra_body"
 > & {
   enableGoogleSearch?: boolean;
+  sendResponseFormat?: boolean;
 };
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -127,7 +128,7 @@ export function useSendConversationImageGeneration(conversationId: string | null
               n: payload.n,
               size: payload.size,
               quality: payload.quality,
-              response_format: "url" as const,
+              ...(payload.sendResponseFormat === false ? {} : { response_format: "url" as const }),
             },
             images: [],
           },
@@ -177,10 +178,14 @@ export function useSendConversationImageGeneration(conversationId: string | null
               size: payload.size,
               quality: payload.quality,
               streaming: true,
-              response_format: "url",
+              response_format: payload.sendResponseFormat === false ? null : ("url" as const),
               extra_body:
                 payload.enableGoogleSearch || payload.extra_body
                   ? {
+                      openai: {
+                        ...(payload.enableGoogleSearch ? { tools: [{ google_search: {} }] } : {}),
+                        ...(payload.extra_body?.openai ?? {}),
+                      },
                       google: {
                         ...(payload.enableGoogleSearch
                           ? { tools: [{ googleSearch: {} }], responseModalities: ["TEXT", "IMAGE"] }
@@ -189,7 +194,9 @@ export function useSendConversationImageGeneration(conversationId: string | null
                       },
                       ...(payload.extra_body
                         ? Object.fromEntries(
-                            Object.entries(payload.extra_body).filter(([k]) => k !== "google")
+                            Object.entries(payload.extra_body).filter(
+                              ([k]) => k !== "google" && k !== "openai"
+                            )
                           )
                         : {}),
                     }
@@ -310,7 +317,7 @@ export function useSendConversationImageGeneration(conversationId: string | null
                                   n: payload.n,
                                   size: payload.size,
                                   quality: payload.quality,
-                                  response_format: "url",
+                                  ...(payload.sendResponseFormat === false ? {} : { response_format: "url" }),
                                 }) as any,
                               images: [],
                               error,
