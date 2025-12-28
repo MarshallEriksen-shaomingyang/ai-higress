@@ -102,6 +102,10 @@ export function normalizeConversation(backend: ConversationBackend): Conversatio
     title: backend.title,
     archived: backend.archived_at != null, // 转换为 boolean（兼容 undefined）
     last_activity_at: backend.last_activity_at,
+    summary_text: backend.summary_text ?? null,
+    summary_until_sequence:
+      typeof backend.summary_until_sequence === "number" ? backend.summary_until_sequence : undefined,
+    summary_updated_at: backend.summary_updated_at ?? null,
     created_at: backend.created_at,
     updated_at: backend.updated_at,
   };

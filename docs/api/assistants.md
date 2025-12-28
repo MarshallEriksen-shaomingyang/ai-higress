@@ -107,7 +107,15 @@ Response（摘要）:
   "project_id": "uuid",
   "title": "可选标题",
   "last_activity_at": "datetime",
-  "archived_at": null
+  "archived_at": null,
+  "is_pinned": false,
+  "last_message_content": null,
+  "unread_count": 0,
+  "summary_text": null,
+  "summary_until_sequence": 0,
+  "summary_updated_at": null,
+  "created_at": "datetime",
+  "updated_at": "datetime"
 }
 ```
 
@@ -129,12 +137,14 @@ Request:
 ```json
 {
   "title": "可选新标题",
-  "archived": true
+  "archived": true,
+  "summary": "可选摘要（用户可见，可编辑；传 null/空字符串表示清空）"
 }
 ```
 
 说明：
 - 归档后会话不会出现在会话列表中，但仍可通过 messages 接口读取历史。
+- `summary` 用于“压缩上下文”：服务端会将 `summary_text` 作为 system message 注入上游请求，并仅携带 `summary_until_sequence` 之后的消息作为上下文（等价于在同一会话内重置模型会话）。
 
 ### DELETE `/v1/conversations/{conversation_id}`
 

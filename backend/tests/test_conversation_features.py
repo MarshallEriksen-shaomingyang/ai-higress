@@ -93,3 +93,18 @@ def test_conversation_features(client: TestClient, db_session: Session):
     resp = client.get(f"/v1/conversations?assistant_id={assistant_id}", headers=headers)
     item = [i for i in resp.json()["items"] if i["conversation_id"] == str(c1.id)][0]
     assert item["unread_count"] == 0
+
+    # 6. Summary is user-visible and editable via conversation update
+    resp = client.put(f"/v1/conversations/{c1.id}", headers=headers, json={"summary": "SUM"})
+    assert resp.status_code == 200
+    assert resp.json()["summary_text"] == "SUM"
+    assert resp.json()["summary_until_sequence"] == 2
+
+    resp = client.get(f"/v1/conversations?assistant_id={assistant_id}", headers=headers)
+    item = [i for i in resp.json()["items"] if i["conversation_id"] == str(c1.id)][0]
+    assert item["summary_text"] == "SUM"
+
+    resp = client.put(f"/v1/conversations/{c1.id}", headers=headers, json={"summary": None})
+    assert resp.status_code == 200
+    assert resp.json()["summary_text"] is None
+    assert resp.json()["summary_until_sequence"] == 0

@@ -32,14 +32,14 @@
 ---
 
 ### 🎨 前端文档
-**位置**: [`docs/fronted/`](./fronted/)
+**位置**: [`docs/fronted/`](./fronted/) & [`docs/frontend/`](./frontend/)
 
-前端架构设计、组件设计和功能实现文档。
+前端采用 **“新中式数字水墨 (Digital Ink)”** 设计哲学，追求呼吸感、秩序感与琉璃质感的统一。
 
-#### 核心参考文档
-- [缺失页面分析](./fronted/missing-ui-pages-analysis.md) - 待开发页面规划
-- [错误处理改进方案](./fronted/error-handling-improvement-plan.md) - 错误处理设计
-- [Dashboard 概览重构](./fronted/dashboard-overview-refactor.md) - 仪表盘概览页设计
+#### 核心设计与视觉
+- [设计规范 v2.0 (ui-prompt)](../ui-prompt.md) - 全局设计灵魂与 AI 提示词
+- [Chat UI 设计规范](./frontend/chat-ui-design.md) - 对话流视觉美学
+- [Dashboard 概览重构](./fronted/dashboard-overview-refactor.md) - 便当盒布局实践
 
 #### 功能模块文档
 **位置**: [`docs/fronted/features/`](./fronted/features/)

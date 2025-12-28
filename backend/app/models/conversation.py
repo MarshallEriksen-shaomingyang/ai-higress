@@ -47,5 +47,18 @@ class Conversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_message_content: Mapped[str | None] = Column(Text, nullable=True)
     unread_count: Mapped[int] = Column(Integer, default=0, nullable=False)
 
+    summary_text: Mapped[str | None] = Column(Text, nullable=True, doc="会话摘要（用户可见、可编辑）")
+    summary_until_sequence: Mapped[int] = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="摘要覆盖到的最后一条消息序号（含）；0 表示未启用摘要",
+    )
+    summary_updated_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        doc="摘要最后更新时间（UTC）",
+    )
+
 
 __all__ = ["Conversation"]

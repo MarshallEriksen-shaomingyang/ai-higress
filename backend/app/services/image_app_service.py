@@ -367,6 +367,17 @@ def _map_openai_size_to_google_image_config(size: str | None) -> dict[str, str] 
     if w <= 0 or h <= 0:
         return None
 
+    # OpenAI 常见非整数比例尺寸（用于与 Google 支持的 aspectRatio 对齐）
+    # - 1792x1024 -> 16:9
+    # - 1024x1792 -> 9:16
+    # - 1024x1024 -> 1:1（后续 gcd 也可覆盖，但这里先明确）
+    known = {
+        (1024, 1024): "1:1",
+        (1792, 1024): "16:9",
+        (1024, 1792): "9:16",
+    }
+    aspect_ratio = known.get((w, h))
+
     # Google discovery: aspectRatio supports: 1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 21:9
     ratio_map: dict[tuple[int, int], str] = {
         (1, 1): "1:1",
@@ -386,7 +397,8 @@ def _map_openai_size_to_google_image_config(size: str | None) -> dict[str, str] 
 
     g = _gcd(w, h)
     rw, rh = w // g, h // g
-    aspect_ratio = ratio_map.get((rw, rh))
+    if aspect_ratio is None:
+        aspect_ratio = ratio_map.get((rw, rh))
 
     # Google discovery: imageSize supports: 1K, 2K, 4K
     max_dim = max(w, h)

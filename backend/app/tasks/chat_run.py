@@ -26,6 +26,7 @@ from app.services.chat_history_service import (
     finalize_assistant_message_after_user_sequence,
 )
 from app.services.chat_run_service import execute_run_non_stream
+from app.services.conversation_summary_service import maybe_update_conversation_summary
 from app.services.project_eval_config_service import (
     DEFAULT_PROVIDER_SCOPES,
     get_effective_provider_ids_for_user,
@@ -427,6 +428,24 @@ async def execute_chat_run(
                         user_sequence=int(message.sequence or 0),
                         content_text=run.output_text,
                     )
+                    try:
+                        await maybe_update_conversation_summary(
+                            db,
+                            redis=redis,
+                            client=client,
+                            api_key=auth_key,
+                            effective_provider_ids=effective_provider_ids,
+                            conversation_id=UUID(str(conv.id)),
+                            assistant_id=UUID(str(assistant.id)),
+                            requested_logical_model=requested_model,
+                            new_until_sequence=int(getattr(assistant_msg, "sequence", 0) or 0),
+                        )
+                    except Exception:  # pragma: no cover - best-effort only
+                        logger.debug(
+                            "chat_run: conversation summary update failed (conversation_id=%s)",
+                            str(conv.id),
+                            exc_info=True,
+                        )
 
                 _append_run_event_and_publish_best_effort(
                     db,
@@ -643,6 +662,24 @@ async def execute_chat_run(
                     user_sequence=int(message.sequence or 0),
                     content_text=run.output_text,
                 )
+                try:
+                    await maybe_update_conversation_summary(
+                        db,
+                        redis=redis,
+                        client=client,
+                        api_key=auth_key,
+                        effective_provider_ids=effective_provider_ids,
+                        conversation_id=UUID(str(conv.id)),
+                        assistant_id=UUID(str(assistant.id)),
+                        requested_logical_model=requested_model,
+                        new_until_sequence=int(message.sequence or 0) + 1,
+                    )
+                except Exception:  # pragma: no cover - best-effort only
+                    logger.debug(
+                        "chat_run: conversation summary update failed (conversation_id=%s)",
+                        str(conv.id),
+                        exc_info=True,
+                    )
 
             _append_run_event_and_publish_best_effort(
                 db,

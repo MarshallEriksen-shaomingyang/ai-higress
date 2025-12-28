@@ -898,6 +898,9 @@ export interface Conversation {
   title?: string;
   archived: boolean;
   last_activity_at: string;
+  summary_text?: string | null;
+  summary_until_sequence?: number;
+  summary_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -911,6 +914,7 @@ export interface CreateConversationRequest {
 export interface UpdateConversationRequest {
   title?: string;
   archived?: boolean;
+  summary?: string | null;
 }
 
 export interface GetConversationsParams {

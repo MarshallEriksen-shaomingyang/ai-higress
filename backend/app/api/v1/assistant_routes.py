@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from fastapi.encoders import jsonable_encoder
 
 try:
     from redis.asyncio import Redis
@@ -86,7 +87,9 @@ def _encode_sse_event(*, event_type: str, data: Any) -> bytes:
     elif isinstance(data, str):
         lines.append(f"data: {data}")
     else:
-        lines.append(f"data: {json.dumps(data, ensure_ascii=False)}")
+        # 兼容 Pydantic/BaseModel、UUID、datetime 等对象（例如 baseline_run）
+        serializable = jsonable_encoder(data)
+        lines.append(f"data: {json.dumps(serializable, ensure_ascii=False)}")
 
     return ("\n".join(lines) + "\n\n").encode("utf-8")
 
@@ -117,6 +120,9 @@ def _conversation_to_item(obj) -> dict:
         "is_pinned": obj.is_pinned,
         "last_message_content": obj.last_message_content,
         "unread_count": obj.unread_count,
+        "summary_text": getattr(obj, "summary_text", None),
+        "summary_until_sequence": int(getattr(obj, "summary_until_sequence", 0) or 0),
+        "summary_updated_at": getattr(obj, "summary_updated_at", None),
         "created_at": obj.created_at,
         "updated_at": obj.updated_at,
     }
@@ -306,6 +312,8 @@ def update_conversation_endpoint(
         archived=payload.archived,
         is_pinned=payload.is_pinned,
         unread_count=payload.unread_count,
+        summary_text=payload.summary,
+        summary_text_set="summary" in payload.model_fields_set,
     )
     return _conversation_to_item(conv)
 

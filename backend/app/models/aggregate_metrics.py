@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Index, Integer, String, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Column, Float, Index, Integer, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped
+
+from app.db.types import UTCDateTime
 
 from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -69,7 +71,7 @@ class AggregateRoutingMetrics(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    window_start = Column(DateTime(timezone=True), nullable=False, index=True)
+    window_start = Column(UTCDateTime(), nullable=False, index=True)
     window_duration: Mapped[int] = Column(
         Integer,
         nullable=False,
@@ -89,7 +91,7 @@ class AggregateRoutingMetrics(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     success_qps: Mapped[float] = Column(Float, nullable=False)
     status: Mapped[str] = Column(String(16), nullable=False)
 
-    recalculated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    recalculated_at = Column(UTCDateTime(), nullable=False, server_default=func.now())
     source_version: Mapped[str] = Column(String(32), nullable=False, server_default=text("'offline-recalc'"))
 
 

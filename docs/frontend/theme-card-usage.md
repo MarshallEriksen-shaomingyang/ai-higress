@@ -2,10 +2,10 @@
 
 ## 概述
 
-`ThemeCard` 是一个主题感知的卡片组件，能够根据当前主题自动切换样式：
+`ThemeCard` 是实现 **“新中式数字水墨 (Digital Ink)”** 设计哲学的核心组件。它能够根据当前主题自动切换样式：
 
-- **默认主题** (light/dark)：使用标准卡片样式
-- **特殊主题** (christmas/ocean/spring)：自动应用玻璃拟态（glassmorphism）效果
+- **默认/水墨主题**：使用纯白背景 (`#FFFFFF`)，配合弥散阴影，营造悬浮感（见 `ui-prompt.md`）。
+- **特殊主题** (christmas/ocean/spring)：自动应用琉璃/磨砂玻璃（glassmorphism）效果。
 
 ## 基本用法
 

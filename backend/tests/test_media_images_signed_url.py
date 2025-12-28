@@ -21,7 +21,7 @@ def test_media_images_endpoint_valid_signature_returns_redirect(client, monkeypa
         _fake_presign_image_get_url,
     )
 
-    resp = client.get(path, allow_redirects=False)
+    resp = client.get(path, follow_redirects=False)
     assert resp.status_code == 302
     assert resp.headers.get("location") == "https://oss.example.com/presigned"
 

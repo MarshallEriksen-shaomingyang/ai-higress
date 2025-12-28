@@ -58,6 +58,8 @@ AI Higress 项目的完整 API 接口文档。
 ### [LinuxDo OAuth 接入](./linuxdo-oauth.md)
 **说明**: LinuxDo Connect OAuth 登录流程、配置及回调接口
 
+### [Workflows（工作流自动化）](./workflows.md)
+**说明**: `/v1/workflows` 与 `/v1/workflow-runs/*`（Spec 模版、执行实例、SSE 事件流）
 
 ---
 

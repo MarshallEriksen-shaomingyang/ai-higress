@@ -46,6 +46,7 @@ from .api.v1.provider_key_routes import router as provider_key_router
 from .api.v1.provider_submission_routes import (
     router as provider_submission_router,
 )
+from .api.v1.workflow_routes import router as workflow_router
 from .api.v1.session_routes import router as user_session_router
 from .api.v1.user_provider_routes import router as user_provider_router
 from .api.v1.user_routes import router as user_router
@@ -94,13 +95,41 @@ async def lifespan(app: FastAPI):
         auto_upgrade_database()
         # 确保初始管理员账号存在
         ensure_initial_admin(session)
+        # Startup Sweep：将因进程中断而遗留的 running 工作流实例标记为 paused
+        try:
+            from sqlalchemy import text
+
+            session.execute(
+                text(
+                    "UPDATE workflow_runs "
+                    "SET status='paused', paused_reason='engine_interrupted' "
+                    "WHERE status='running'"
+                )
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
     finally:
         session.close()
+
+    # 启动工作流运行时（Bridge 全局分发器）
+    try:
+        from app.services.workflow_runtime import get_workflow_runtime
+
+        await get_workflow_runtime().ensure_started()
+    except Exception:
+        logger.exception("WorkflowRuntime 启动失败（将影响 /v1/workflow-runs 执行能力）")
 
     # 让应用继续启动并处理请求
     yield
 
-    # 这里可以按需添加关闭时清理逻辑
+    # 关闭时清理
+    try:
+        from app.services.workflow_runtime import get_workflow_runtime
+
+        await get_workflow_runtime().shutdown()
+    except Exception:
+        logger.exception("WorkflowRuntime 关闭失败")
 
 
 def create_app() -> FastAPI:
@@ -248,6 +277,9 @@ def create_app() -> FastAPI:
 
     # CLI 配置脚本
     app.include_router(cli_config_router)
+
+    # Workflow Automation（SOP / Spec 执行）
+    app.include_router(workflow_router)
 
     # 管理端路由
     app.include_router(admin_role_router)

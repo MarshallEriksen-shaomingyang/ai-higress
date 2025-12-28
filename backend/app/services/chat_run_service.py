@@ -67,29 +67,32 @@ def _build_openai_messages(
     - 取历史 messages（按 sequence 升序）
     - 最后追加本次 user message（若还未入库也可直接拼接）
     """
+    conv = db.get(Conversation, conversation_id)
+    summary_text = (getattr(conv, "summary_text", None) or "").strip() if conv is not None else ""
+    summary_until = int(getattr(conv, "summary_until_sequence", 0) or 0) if conv is not None else 0
+
     max_history_messages = int(getattr(settings, "chat_context_max_messages", 0) or 0)
     if max_history_messages > 0:
         # 只取最近 N 条历史消息（额外 +1 是为了包含并跳过本次 new_user_message 后仍能保留 N 条历史）
-        stmt = (
-            select(Message)
-            .where(Message.conversation_id == conversation_id)
-            .order_by(Message.sequence.desc())
-            .limit(max_history_messages + 1)
-        )
+        stmt = select(Message).where(Message.conversation_id == conversation_id)
+        if summary_text and summary_until > 0:
+            stmt = stmt.where(Message.sequence > summary_until)
+        stmt = stmt.order_by(Message.sequence.desc()).limit(max_history_messages + 1)
         history_desc = list(db.execute(stmt).scalars().all())
         history = list(reversed(history_desc))
     else:
-        stmt = (
-            select(Message)
-            .where(Message.conversation_id == conversation_id)
-            .order_by(Message.sequence.asc())
-        )
+        stmt = select(Message).where(Message.conversation_id == conversation_id)
+        if summary_text and summary_until > 0:
+            stmt = stmt.where(Message.sequence > summary_until)
+        stmt = stmt.order_by(Message.sequence.asc())
         history = list(db.execute(stmt).scalars().all())
 
     messages: list[dict[str, Any]] = []
     system_prompt = (assistant.system_prompt or "").strip()
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
+    if summary_text and summary_until > 0:
+        messages.append({"role": "system", "content": f"Conversation summary:\n{summary_text}"})
 
     for msg in history:
         if msg.id == new_user_message.id:

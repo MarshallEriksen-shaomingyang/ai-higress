@@ -462,6 +462,8 @@ export function ConversationPageClient({
         assistantId={assistantId}
         conversationId={conversationId}
         title={conversation.title}
+        summaryText={conversation.summary_text ?? null}
+        summaryUpdatedAt={conversation.summary_updated_at ?? null}
       />
 
       {isArchived && (

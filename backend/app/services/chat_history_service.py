@@ -272,6 +272,8 @@ def update_conversation(
     archived: bool | None = None,
     is_pinned: bool | None = None,
     unread_count: int | None = None,
+    summary_text: str | None = None,
+    summary_text_set: bool = False,
 ) -> Conversation:
     conv = get_conversation_any(db, conversation_id=conversation_id, user_id=user_id)
 
@@ -283,6 +285,22 @@ def update_conversation(
         conv.is_pinned = is_pinned
     if unread_count is not None:
         conv.unread_count = unread_count
+    if summary_text_set:
+        text = (summary_text or "").strip()
+        if not text:
+            conv.summary_text = None
+            conv.summary_until_sequence = 0
+            conv.summary_updated_at = None
+        else:
+            last_seq = (
+                db.execute(
+                    select(func.max(Message.sequence)).where(Message.conversation_id == conversation_id)
+                ).scalar()
+                or 0
+            )
+            conv.summary_text = text
+            conv.summary_until_sequence = int(last_seq or 0)
+            conv.summary_updated_at = datetime.now(UTC)
 
     db.add(conv)
     db.commit()
@@ -317,6 +335,9 @@ def clear_conversation_messages(
     conv.last_message_content = None
     conv.unread_count = 0
     conv.last_activity_at = datetime.now(UTC)
+    conv.summary_text = None
+    conv.summary_until_sequence = 0
+    conv.summary_updated_at = None
 
     db.add(conv)
     db.commit()

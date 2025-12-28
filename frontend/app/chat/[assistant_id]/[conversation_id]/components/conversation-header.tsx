@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
+import { useSWRConfig } from "swr";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -13,6 +15,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -29,6 +40,7 @@ import { useAssistant } from "@/lib/swr/use-assistants";
 import { useLogicalModels } from "@/lib/swr/use-logical-models";
 import { useProjectChatSettings } from "@/lib/swr/use-project-chat-settings";
 import { useSelectableChatModels } from "@/lib/swr/use-selectable-chat-models";
+import { conversationService } from "@/http/conversation";
 
 const PROJECT_INHERIT_SENTINEL = "__project__";
 
@@ -36,12 +48,17 @@ export function ConversationHeader({
   assistantId,
   conversationId,
   title,
+  summaryText,
+  summaryUpdatedAt,
 }: {
   assistantId: string;
   conversationId: string;
   title: string | null | undefined;
+  summaryText: string | null | undefined;
+  summaryUpdatedAt: string | null | undefined;
 }) {
   const { t } = useI18n();
+  const { mutate } = useSWRConfig();
   const isImmersive = useChatLayoutStore((s) => s.isImmersive);
   const setIsImmersive = useChatLayoutStore((s) => s.setIsImmersive);
   const { mode, image, setImageParams } = useConversationComposer(conversationId);
@@ -189,6 +206,34 @@ export function ConversationHeader({
   const isTitlePending = !hasTitle && conversationPending;
   const displayTitle = hasTitle ? title!.trim() : t("chat.conversation.untitled");
 
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
+  const [draftSummary, setDraftSummary] = useState("");
+  const [savingSummary, setSavingSummary] = useState(false);
+
+  useEffect(() => {
+    if (!summaryOpen) return;
+    setIsEditingSummary(false);
+    setDraftSummary((summaryText ?? "").trim());
+  }, [summaryOpen, summaryText]);
+
+  const handleSaveSummary = useCallback(async () => {
+    if (savingSummary) return;
+    setSavingSummary(true);
+    try {
+      await conversationService.updateConversation(conversationId, { summary: draftSummary });
+      const key = `/v1/conversations?assistant_id=${assistantId}&limit=50`;
+      await mutate(key);
+      toast.success(t("chat.conversation.summary_saved"));
+      setIsEditingSummary(false);
+    } catch (err: any) {
+      console.error("save conversation summary failed", err);
+      toast.error(t("chat.conversation.summary_save_failed"));
+    } finally {
+      setSavingSummary(false);
+    }
+  }, [assistantId, conversationId, draftSummary, mutate, savingSummary, t]);
+
   return (
     <div className="flex items-center justify-between gap-2 md:gap-3 border-b border-border/20 bg-background px-3 md:px-4 py-2 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="min-w-0 flex-1">
@@ -207,6 +252,15 @@ export function ConversationHeader({
       </div>
 
       <div className="flex items-center gap-1 md:gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSummaryOpen(true)}
+          className="h-8 rounded-full px-3 text-xs font-medium md:h-9 md:text-sm"
+        >
+          {t("chat.conversation.summary")}
+        </Button>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="flex items-center gap-2 rounded-full border border-border/30 bg-muted/20 px-2.5 py-1 transition-colors hover:bg-muted/35">
@@ -337,6 +391,63 @@ export function ConversationHeader({
           )}
         </div>
       </div>
+
+      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{t("chat.conversation.summary")}</DialogTitle>
+            <DialogDescription>
+              {summaryUpdatedAt
+                ? t("chat.conversation.summary_updated_at", { time: summaryUpdatedAt })
+                : t("chat.conversation.summary_description")}
+            </DialogDescription>
+          </DialogHeader>
+
+          {isEditingSummary ? (
+            <Textarea
+              value={draftSummary}
+              onChange={(e) => setDraftSummary(e.target.value)}
+              placeholder={t("chat.conversation.summary_placeholder")}
+              className="min-h-[220px]"
+            />
+          ) : (
+            <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm whitespace-pre-wrap">
+              {(summaryText ?? "").trim()
+                ? (summaryText ?? "").trim()
+                : t("chat.conversation.summary_empty")}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            {isEditingSummary ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditingSummary(false);
+                    setDraftSummary((summaryText ?? "").trim());
+                  }}
+                  disabled={savingSummary}
+                >
+                  {t("chat.action.cancel")}
+                </Button>
+                <Button onClick={handleSaveSummary} disabled={savingSummary}>
+                  {savingSummary ? t("chat.action.saving") : t("chat.action.save")}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setSummaryOpen(false)}>
+                  {t("chat.action.close")}
+                </Button>
+                <Button onClick={() => setIsEditingSummary(true)}>
+                  {t("chat.conversation.summary_edit")}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

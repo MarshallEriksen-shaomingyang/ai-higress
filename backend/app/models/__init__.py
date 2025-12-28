@@ -36,6 +36,9 @@ from .run_event import RunEvent
 from .system_gateway_config import GatewayConfig
 from .upstream_proxy import UpstreamProxyConfig, UpstreamProxyEndpoint, UpstreamProxySource
 from .user import User
+from .workflow import Workflow
+from .workflow_run import WorkflowRun
+from .workflow_run_event import WorkflowRunEvent
 from .user_app_metrics_history import UserAppRequestMetricsHistory
 from .user_metrics_history import UserRoutingMetricsHistory
 from .user_permission import UserPermission
@@ -94,4 +97,7 @@ __all__ = [
     "UserProbeTask",
     "UserRole",
     "UserRoutingMetricsHistory",
+    "Workflow",
+    "WorkflowRun",
+    "WorkflowRunEvent",
 ]

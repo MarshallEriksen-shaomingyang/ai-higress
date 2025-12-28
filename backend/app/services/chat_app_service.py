@@ -49,6 +49,7 @@ from app.services.chat_history_service import (
     get_assistant,
     get_conversation,
 )
+from app.services.conversation_summary_service import maybe_update_conversation_summary
 from app.services.chat_run_service import build_openai_request_payload, create_run_record, execute_run_non_stream
 from app.services.context_features_service import build_rule_context_features
 from app.services.credit_service import InsufficientCreditsError, ensure_account_usable
@@ -1096,6 +1097,24 @@ async def send_message_and_run_baseline(
             user_sequence=int(user_message.sequence or 0),
             content_text=run.output_text,
         )
+        try:
+            await maybe_update_conversation_summary(
+                db,
+                redis=redis,
+                client=client,
+                api_key=auth_key,
+                effective_provider_ids=effective_provider_ids,
+                conversation_id=UUID(str(conv.id)),
+                assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
+                requested_logical_model=requested_model,
+                new_until_sequence=int(getattr(assistant_msg, "sequence", 0) or 0),
+            )
+        except Exception:  # pragma: no cover - best-effort only
+            logger.debug(
+                "chat_app: conversation summary update failed (conversation_id=%s)",
+                str(conv.id),
+                exc_info=True,
+            )
     t_stage = _log_timing("11_save_assistant_message", t_stage, request_id)
     _append_run_event_best_effort(
         db,
@@ -1438,6 +1457,24 @@ async def stream_message_and_run_baseline(
             user_sequence=int(user_message.sequence or 0),
             content_text=run.output_text,
         )
+        try:
+            await maybe_update_conversation_summary(
+                db,
+                redis=redis,
+                client=client,
+                api_key=auth_key,
+                effective_provider_ids=effective_provider_ids,
+                conversation_id=UUID(str(conv.id)),
+                assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
+                requested_logical_model=requested_model,
+                new_until_sequence=int(user_message.sequence or 0) + 1,
+            )
+        except Exception:  # pragma: no cover - best-effort only
+            logger.debug(
+                "chat_app: conversation summary update failed (conversation_id=%s)",
+                str(conv.id),
+                exc_info=True,
+            )
 
     # Auto-title conversation（异步入队，避免阻塞流式尾部）
     t_title_start = time.perf_counter()
@@ -1664,6 +1701,24 @@ async def regenerate_assistant_message(
             user_sequence=int(user_msg.sequence or 0),
             content_text=run.output_text,
         )
+        try:
+            await maybe_update_conversation_summary(
+                db,
+                redis=redis,
+                client=client,
+                api_key=auth_key,
+                effective_provider_ids=effective_provider_ids,
+                conversation_id=UUID(str(conv.id)),
+                assistant_id=UUID(str(getattr(assistant, "id", None))) if getattr(assistant, "id", None) else None,
+                requested_logical_model=requested_model,
+                new_until_sequence=int(getattr(assistant_msg_new, "sequence", 0) or 0),
+            )
+        except Exception:  # pragma: no cover - best-effort only
+            logger.debug(
+                "chat_app: conversation summary update failed (conversation_id=%s)",
+                str(conv.id),
+                exc_info=True,
+            )
 
     # 首问自动标题（保持行为一致）
     try:
