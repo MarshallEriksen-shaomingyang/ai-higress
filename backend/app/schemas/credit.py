@@ -86,6 +86,45 @@ class CreditGrantResponse(BaseModel):
     )
 
 
+class CreditGrantTokenIssueRequest(BaseModel):
+    user_id: UUID | None = Field(
+        default=None,
+        description="限制仅该用户可兑换；为空表示不限制（通常用于兑换码）",
+    )
+    amount: int = Field(..., gt=0, description="要增加的积分数量（必须为正数）")
+    reason: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+        description="入账来源标识（建议：sign_in / redeem_code / promo 等，最长 32 字符）",
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=255,
+        description="备注说明（最长 255 字符）",
+    )
+    idempotency_key: str | None = Field(
+        default=None,
+        max_length=80,
+        description="可选幂等键：相同 key 只允许兑换一次；为空则自动生成随机 key",
+    )
+    expires_in_seconds: int = Field(
+        86400,
+        ge=60,
+        le=30 * 86400,
+        description="token 有效期（秒），默认 1 天，最长 30 天",
+    )
+
+
+class CreditGrantTokenIssueResponse(BaseModel):
+    token: str = Field(..., description="签发的兑换 token（HS256）")
+    expires_at: datetime = Field(..., description="过期时间（UTC）")
+
+
+class CreditGrantTokenRedeemRequest(BaseModel):
+    token: str = Field(..., min_length=10, description="兑换 token")
+
+
 class CreditAutoTopupConfig(BaseModel):
     """
     管理员配置的自动充值规则。
@@ -212,6 +251,9 @@ __all__ = [
     "CreditConsumptionSummary",
     "CreditGrantRequest",
     "CreditGrantResponse",
+    "CreditGrantTokenIssueRequest",
+    "CreditGrantTokenIssueResponse",
+    "CreditGrantTokenRedeemRequest",
     "CreditProviderUsageItem",
     "CreditProviderUsageResponse",
     "CreditTopupRequest",

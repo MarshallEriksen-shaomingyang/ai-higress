@@ -10,17 +10,24 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ClearHistoryAction } from "@/components/chat/chat-input/clear-history-action";
 import { ImageUploadAction } from "@/components/chat/chat-input/image-attachments";
 import { ModelParametersPopover } from "@/components/chat/chat-input/model-parameters-popover";
 import { McpSelector } from "@/components/chat/chat-input/mcp-selector";
 import { useI18n } from "@/lib/i18n-context";
+import { useChatStore } from "@/lib/stores/chat-store";
 import type { ModelParameters } from "@/components/chat/chat-input/types";
 import { composerModeLabelKeys, composerModes } from "@/lib/chat/composer-modes";
 import type { ComposerMode } from "@/lib/chat/composer-modes";
@@ -67,6 +74,7 @@ export function ChatToolbar({
   onOpenImageSettings,
 }: ChatToolbarProps) {
   const { t } = useI18n();
+  const { chatStreamingEnabled, setChatStreamingEnabled } = useChatStore();
   const modeIcons: Record<ComposerMode, typeof MessageSquare> = {
     chat: MessageSquare,
     image: ImageIcon,
@@ -156,11 +164,33 @@ export function ChatToolbar({
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 md:gap-2">
+        {/* 流式开关 - 仅聊天模式显示 */}
+        {mode === "chat" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1.5 rounded-full border border-border/30 bg-muted/20 px-2 py-0.5 transition-colors hover:bg-muted/35">
+                <span className="text-[10px] md:text-xs text-muted-foreground hidden sm:inline whitespace-nowrap">
+                  {t("chat.message.streaming_label")}
+                </span>
+                <Switch
+                  checked={chatStreamingEnabled}
+                  onCheckedChange={setChatStreamingEnabled}
+                  aria-label={t("chat.message.streaming_label")}
+                  className="scale-75 md:scale-100"
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {t("chat.message.streaming_tooltip")}
+            </TooltipContent>
+          </Tooltip>
+        )}
+
         {isSending ? (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="size-3 animate-spin" />
-            <span>{t("chat.message.sending")}</span>
+            <span className="hidden sm:inline">{t("chat.message.sending")}</span>
           </div>
         ) : null}
 

@@ -6,9 +6,6 @@ from .routing_metrics import RoutingMetrics
 
 class RoutingRequest(BaseModel):
     logical_model: str = Field(..., description="Logical model id")
-    conversation_id: str | None = Field(
-        default=None, description="Conversation id for stickiness"
-    )
     user_id: str | None = Field(default=None, description="User id (unused for now)")
     preferred_region: str | None = Field(
         default=None, description="Preferred region for upstream selection"

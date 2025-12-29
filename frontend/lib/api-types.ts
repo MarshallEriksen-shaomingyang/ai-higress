@@ -19,6 +19,15 @@ export interface UserInfo {
    * 自动充值规则（管理员列表接口返回）；未配置时为 null。
    */
   credit_auto_topup?: CreditAutoTopupConfig | null;
+  /**
+   * 风险画像（管理员列表接口返回）。
+   * - risk_score: 0-100
+   * - risk_level: low / medium / high
+   */
+  risk_score?: number;
+  risk_level?: string;
+  risk_remark?: string | null;
+  risk_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 }

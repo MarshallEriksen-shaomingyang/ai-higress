@@ -16,13 +16,12 @@ except ModuleNotFoundError:  # pragma: no cover - type placeholder when redis is
     Redis = object  # type: ignore[misc,assignment]
 
 from app.redis_client import redis_get_json, redis_set_json
-from app.schemas import LogicalModel, MetricsHistory, RoutingMetrics, Session
+from app.schemas import LogicalModel, MetricsHistory, RoutingMetrics
 
 # Key templates (must match data-model.md).
 PROVIDER_MODELS_KEY_TEMPLATE = "llm:vendor:{provider_id}:models"
 LOGICAL_MODEL_KEY_TEMPLATE = "llm:logical:{logical_model}"
 METRICS_KEY_TEMPLATE = "llm:metrics:{logical_model}:{provider_id}"
-SESSION_KEY_TEMPLATE = "llm:session:{conversation_id}"
 METRICS_HISTORY_KEY_TEMPLATE = (
     "llm:metrics:history:{logical_model}:{provider_id}:{timestamp}"
 )
@@ -184,38 +183,20 @@ async def append_metrics_history(
     await redis_set_json(redis, key, sample.model_dump(), ttl_seconds=ttl_seconds)
 
 
-async def get_session(redis: Redis, conversation_id: str) -> Session | None:
-    key = SESSION_KEY_TEMPLATE.format(conversation_id=conversation_id)
-    data = await redis_get_json(redis, key)
-    if not data:
-        return None
-    return Session.model_validate(data)
-
-
-async def set_session(
-    redis: Redis, session: Session, *, ttl_seconds: int = 7200
-) -> None:
-    key = SESSION_KEY_TEMPLATE.format(conversation_id=session.conversation_id)
-    await redis_set_json(redis, key, session.model_dump(), ttl_seconds=ttl_seconds)
-
-
 __all__ = [
     "LOGICAL_MODEL_KEY_TEMPLATE",
     "METRICS_HISTORY_KEY_TEMPLATE",
     "METRICS_KEY_TEMPLATE",
     "PROVIDER_MODELS_KEY_TEMPLATE",
-    "SESSION_KEY_TEMPLATE",
     "append_metrics_history",
     "delete_logical_model",
     "get_all_provider_metrics",
     "get_logical_model",
     "get_provider_models_json",
     "get_routing_metrics",
-    "get_session",
     "invalidate_logical_models_cache",
     "list_logical_models",
     "set_logical_model",
     "set_provider_models",
     "set_routing_metrics",
-    "set_session",
 ]

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UserCircle, Plus, Shield, Key, Ban, RotateCcw, Zap } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
@@ -77,6 +78,38 @@ export function UsersTable({
         return config.is_active ? "text-emerald-500" : "text-amber-500";
     };
 
+    const getRiskBadge = (user: UserInfo) => {
+        const riskLevel = (user.risk_level || "low").toLowerCase();
+        const riskScore = typeof user.risk_score === "number" ? user.risk_score : 0;
+        const remark = user.risk_remark || null;
+        const labelKey =
+            riskLevel === "high"
+                ? "users.risk.high"
+                : riskLevel === "medium"
+                  ? "users.risk.medium"
+                  : "users.risk.low";
+        const variant =
+            riskLevel === "high"
+                ? "destructive"
+                : riskLevel === "medium"
+                  ? "default"
+                  : "secondary";
+
+        const badge = (
+            <Badge variant={variant}>
+                {t(labelKey)} {riskScore > 0 ? `(${riskScore})` : ""}
+            </Badge>
+        );
+
+        if (!remark) return badge;
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>{badge}</TooltipTrigger>
+                <TooltipContent>{remark}</TooltipContent>
+            </Tooltip>
+        );
+    };
+
     return (
         <Card>
             <CardHeader>
@@ -105,6 +138,7 @@ export function UsersTable({
                             <TableHead>{t("users.table_column_roles")}</TableHead>
                             <TableHead>{t("users.table_column_status")}</TableHead>
                             <TableHead>{t("users.table_column_auto_topup")}</TableHead>
+                            <TableHead>{t("users.table_column_risk")}</TableHead>
                             <TableHead className="text-right">{t("providers.table_column_actions")}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -149,6 +183,7 @@ export function UsersTable({
                                 </TableCell>
                                 <TableCell>{getStatusBadge(user.is_active)}</TableCell>
                                 <TableCell>{getAutoTopupBadge(user)}</TableCell>
+                                <TableCell>{getRiskBadge(user)}</TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end space-x-2">
                                         <Tooltip>
@@ -211,7 +246,7 @@ export function UsersTable({
                         ))}
                         {!loading && users.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                                     {t("users.table_no_users")}
                                 </TableCell>
                             </TableRow>

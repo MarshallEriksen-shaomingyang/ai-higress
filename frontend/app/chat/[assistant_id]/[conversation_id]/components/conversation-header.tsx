@@ -69,8 +69,6 @@ export function ConversationHeader({
     selectedProjectId,
     evalStreamingEnabled,
     setEvalStreamingEnabled,
-    chatStreamingEnabled,
-    setChatStreamingEnabled,
   } = useChatStore();
   const {
     preferences,
@@ -252,43 +250,34 @@ export function ConversationHeader({
       </div>
 
       <div className="flex items-center gap-1 md:gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSummaryOpen(true)}
-          className="h-8 rounded-full px-3 text-xs font-medium md:h-9 md:text-sm"
-        >
-          {t("chat.conversation.summary")}
-        </Button>
-
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-2 rounded-full border border-border/30 bg-muted/20 px-2.5 py-1 transition-colors hover:bg-muted/35">
-              <span className="text-xs text-muted-foreground hidden md:inline">
-                {t("chat.message.streaming_label")}
-              </span>
-              <Switch
-                checked={chatStreamingEnabled}
-                onCheckedChange={setChatStreamingEnabled}
-                aria-label={t("chat.message.streaming_label")}
-              />
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSummaryOpen(true)}
+              className="h-8 rounded-full px-2 md:px-3 text-xs font-medium md:h-9 md:text-sm"
+            >
+              <span className="hidden sm:inline">{t("chat.conversation.summary")}</span>
+              <span className="sm:hidden text-[10px]">摘要</span>
+            </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {t("chat.message.streaming_tooltip")}
+          <TooltipContent side="bottom" className="sm:hidden">
+            {t("chat.conversation.summary")}
           </TooltipContent>
         </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-2 rounded-full border border-border/30 bg-muted/20 px-2.5 py-1 transition-colors hover:bg-muted/35">
-              <span className="text-xs text-muted-foreground hidden md:inline">
+            <div className="flex items-center gap-1 md:gap-2 rounded-full border border-border/30 bg-muted/20 px-1.5 md:px-2.5 py-0.5 md:py-1 transition-colors hover:bg-muted/35">
+              <span className="text-[10px] md:text-xs text-muted-foreground hidden md:inline">
                 {t("chat.eval.streaming_label")}
               </span>
               <Switch
                 checked={evalStreamingEnabled}
                 onCheckedChange={setEvalStreamingEnabled}
                 aria-label={t("chat.eval.streaming_label")}
+                className="scale-75 md:scale-100"
               />
             </div>
           </TooltipTrigger>
@@ -304,12 +293,12 @@ export function ConversationHeader({
               variant="ghost"
               size="icon"
               onClick={() => setIsImmersive(!isImmersive)}
-              className="h-8 w-8 md:h-9 md:w-9"
+              className="h-7 w-7 md:h-9 md:w-9"
             >
               {isImmersive ? (
-                <Minimize2 className="h-4 w-4" />
+                <Minimize2 className="h-3.5 w-3.5 md:h-4 md:w-4" />
               ) : (
-                <Maximize2 className="h-4 w-4" />
+                <Maximize2 className="h-3.5 w-3.5 md:h-4 md:w-4" />
               )}
             </Button>
           </TooltipTrigger>
@@ -321,7 +310,7 @@ export function ConversationHeader({
         </Tooltip>
 
         {/* 模型选择器 - 移动端缩小 */}
-        <div className="w-[140px] md:w-[220px]">
+        <div className="w-[120px] md:w-[220px]">
           {mode === "image" ? (
             <Select
               value={image.model}

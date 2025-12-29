@@ -42,6 +42,7 @@ from app.services.credit_service import (
     ensure_account_usable,
 )
 from app.services.user_app_metrics_service import record_user_app_request_metric
+from app.services.user_risk_service import record_user_ip_signal, refresh_user_risk_status
 from app.services.user_provider_service import get_accessible_provider_ids
 from app.settings import settings
 from app.upstream import detect_request_format
@@ -82,6 +83,10 @@ async def chat_completions(
         current_key.user_id,
         x_session_id,
     )
+
+    # 风险画像（仅存结论到 DB）：记录入口请求的 IP 信号，并按窗口评估风险等级。
+    await record_user_ip_signal(redis, user_id=str(current_key.user_id), request=request)
+    await refresh_user_risk_status(redis, db=db, user_id=current_key.user_id)
 
     # 入口请求口径的 App 使用指标：用来回答“某用户主要用哪些客户端调用网关”。
     record_user_app_request_metric(

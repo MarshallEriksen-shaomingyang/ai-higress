@@ -76,6 +76,7 @@ AI Higress 项目的完整 API 接口文档。
 | API 密钥 | API密钥管理 | GET/POST/PUT/DELETE /users/{user_id}/api-keys |
 | 积分查询 | 积分与额度 | GET /v1/credits/me |
 | 积分消耗统计 | 积分与额度 | GET /v1/credits/me/consumption/* |
+| 积分兑换 | 积分与额度 | POST /v1/credits/me/grant-token |
 | 提供商列表 | 提供商管理 | GET /providers |
 | 路由决策 | 路由管理 | POST /routing/decide |
 
@@ -86,6 +87,7 @@ AI Higress 项目的完整 API 接口文档。
 - 用户信息管理
 - API 密钥管理
 - 积分查询
+- 积分兑换
 - 提供商查询
 
 #### 管理员
@@ -93,6 +95,7 @@ AI Higress 项目的完整 API 接口文档。
 - 用户管理（CRUD）
 - 权限管理
 - 积分充值
+- 积分入账/兑换 token 签发
 - 提供商管理
 - 厂商密钥管理
 

@@ -364,8 +364,8 @@ export function SlateChatInput({
 
   return (
     <div className={cn("relative flex h-full flex-col bg-background", className)}>
-      <div className="flex min-h-0 flex-1 flex-col justify-end px-4 pt-1  pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
-        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col justify-end px-2 md:px-4 pt-1 pb-2 md:pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-2 md:gap-3">
           {mode === "chat" && (
             <ImagePreviewGrid
               images={images}
@@ -378,9 +378,9 @@ export function SlateChatInput({
 
           <div
             className={cn(
-              "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-background shadow-[0_16px_48px_rgba(0,0,0,0.10)]",
+              "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl md:rounded-2xl border bg-background shadow-[0_8px_24px_rgba(0,0,0,0.08)] md:shadow-[0_16px_48px_rgba(0,0,0,0.10)]",
               "supports-[backdrop-filter]:bg-background/80 supports-[backdrop-filter]:backdrop-blur-md",
-              "dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)]",
+              "dark:shadow-[0_8px_24px_rgba(0,0,0,0.25)] dark:md:shadow-[0_16px_48px_rgba(0,0,0,0.35)]",
               "focus-within:ring-2 focus-within:ring-ring/40"
             )}
           >
@@ -426,7 +426,7 @@ export function SlateChatInput({
             />
           </div>
 
-          <div className="text-xs text-muted-foreground text-center">
+          <div className="text-[10px] md:text-xs text-muted-foreground text-center px-2">
             {isSending ? (mode === "image" ? t("chat.image_gen.generating") : t("chat.message.sending")) : sendHint}
           </div>
         </div>

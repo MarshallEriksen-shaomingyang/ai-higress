@@ -17,8 +17,7 @@ from app.jwt_auth import require_jwt_token
 from app.routing.mapper import select_candidate_upstreams
 from app.routing.provider_weight import load_dynamic_weights
 from app.routing.scheduler import choose_upstream
-from app.routing.session_manager import bind_session, get_session
-from app.schemas import LogicalModel, PhysicalModel, RoutingMetrics, SchedulingStrategy, Session
+from app.schemas import LogicalModel, PhysicalModel, RoutingMetrics, SchedulingStrategy
 from app.schemas.routing import CandidateInfo, RoutingDecision, RoutingRequest
 from app.services.provider_health_service import get_cached_health_status
 from app.settings import settings
@@ -130,11 +129,6 @@ async def decide_route(
 
     strategy = _strategy_from_name(body.strategy)
 
-    # Optional session stickiness.
-    session: Session | None = None
-    if body.conversation_id:
-        session = await get_session(redis, body.conversation_id)
-
     metrics_by_provider = await _load_metrics_for_candidates(
         redis, logical.logical_id, candidates
     )
@@ -169,22 +163,11 @@ async def decide_route(
             candidates,
             metrics_by_provider,
             strategy,
-            session=session,
             dynamic_weights=dynamic_weights,
             enable_health_check=settings.enable_provider_health_check,
         )
     except RuntimeError as exc:
         raise service_unavailable(str(exc))
-
-    # Bind session if requested and enabled.
-    if body.conversation_id and strategy.enable_stickiness:
-        await bind_session(
-            redis,
-            conversation_id=body.conversation_id,
-            logical_model=logical.logical_id,
-            provider_id=selected.upstream.provider_id,
-            model_id=selected.upstream.model_id,
-        )
 
     decision_time_ms = (time.perf_counter() - start_ts) * 1000.0
 

@@ -34,6 +34,7 @@ from app.settings import settings  # noqa: E402
 from tests.utils import (  # noqa: E402
     install_inmemory_db,
     jwt_auth_headers,
+    seed_user_and_key,
 )
 
 
@@ -169,6 +170,156 @@ def test_credit_admin_grant_is_idempotent():
         assert len(txs) == 1
         assert txs[0]["amount"] == 50
         assert txs[0]["reason"] == "sign_in"
+
+
+def test_credit_grant_token_issue_and_redeem_is_idempotent():
+    """
+    验证“积分入账 token”签发与兑换：
+    - 管理员签发 token；
+    - 首次兑换 applied=true；
+    - 重复兑换 applied=false；
+    """
+    app = create_app()
+    SessionLocal = install_inmemory_db(app)
+
+    with SessionLocal() as session:
+        admin = _get_single_user(session)
+        admin_id = admin.id
+
+    headers_admin = jwt_auth_headers(str(admin_id))
+
+    with TestClient(app=app, base_url="http://testserver") as client:
+        resp = client.get("/v1/credits/me", headers=headers_admin)
+        assert resp.status_code == 200
+        initial_balance = resp.json()["balance"]
+
+        issue_payload = {
+            "user_id": str(admin_id),
+            "amount": 30,
+            "reason": "redeem_code",
+            "description": "test redeem",
+            "idempotency_key": f"test:redeem:{admin_id}:once",
+            "expires_in_seconds": 3600,
+        }
+        resp = client.post(
+            "/v1/credits/admin/grant-tokens",
+            headers=headers_admin,
+            json=issue_payload,
+        )
+        assert resp.status_code == 200
+        token = resp.json()["token"]
+        assert token
+
+        resp = client.post(
+            "/v1/credits/me/grant-token",
+            headers=headers_admin,
+            json={"token": token},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["applied"] is True
+        assert data["account"]["balance"] == initial_balance + 30
+        assert data["transaction"] is not None
+        assert data["transaction"]["amount"] == 30
+        assert data["transaction"]["reason"] == "redeem_code"
+
+        resp = client.post(
+            "/v1/credits/me/grant-token",
+            headers=headers_admin,
+            json={"token": token},
+        )
+        assert resp.status_code == 200
+        data2 = resp.json()
+        assert data2["applied"] is False
+        assert data2["account"]["balance"] == initial_balance + 30
+
+
+def test_credit_grant_token_can_be_user_bound_and_global_one_time():
+    """
+    验证 token 的两种典型模式：
+    - user-bound：仅允许指定用户兑换；
+    - global one-time：不绑定用户，但通过全局唯一 idempotency_key 限制仅首个兑换者成功。
+    """
+    app = create_app()
+    SessionLocal = install_inmemory_db(app)
+
+    with SessionLocal() as session:
+        admin = _get_single_user(session)
+        admin_id = admin.id
+        user2, _ = seed_user_and_key(
+            session,
+            token_plain="timeline-2",
+            username="user2",
+            email="user2@example.com",
+            is_superuser=False,
+        )
+        user2_id = user2.id
+
+    headers_admin = jwt_auth_headers(str(admin_id))
+    headers_user2 = jwt_auth_headers(str(user2_id))
+
+    with TestClient(app=app, base_url="http://testserver") as client:
+        # 1) user-bound token 仅允许 user2 兑换
+        resp = client.post(
+            "/v1/credits/admin/grant-tokens",
+            headers=headers_admin,
+            json={
+                "user_id": str(user2_id),
+                "amount": 10,
+                "reason": "promo",
+                "description": "user-bound promo",
+                "idempotency_key": f"test:promo:user2:{user2_id}",
+                "expires_in_seconds": 3600,
+            },
+        )
+        assert resp.status_code == 200
+        token_user2 = resp.json()["token"]
+
+        resp = client.post(
+            "/v1/credits/me/grant-token",
+            headers=headers_admin,
+            json={"token": token_user2},
+        )
+        assert resp.status_code == 403
+
+        resp = client.post(
+            "/v1/credits/me/grant-token",
+            headers=headers_user2,
+            json={"token": token_user2},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is True
+
+        # 2) global one-time：第一个兑换者成功，第二个兑换者应冲突
+        resp = client.post(
+            "/v1/credits/admin/grant-tokens",
+            headers=headers_admin,
+            json={
+                "user_id": None,
+                "amount": 5,
+                "reason": "redeem_code",
+                "description": "global one-time",
+                "idempotency_key": "test:global:redeem:once",
+                "expires_in_seconds": 3600,
+            },
+        )
+        assert resp.status_code == 200
+        token_global = resp.json()["token"]
+
+        resp = client.post(
+            "/v1/credits/me/grant-token",
+            headers=headers_user2,
+            json={"token": token_global},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is True
+
+        resp = client.post(
+            "/v1/credits/me/grant-token",
+            headers=headers_admin,
+            json={"token": token_global},
+        )
+        assert resp.status_code == 409
 
 
 def test_ensure_account_usable_respects_enable_credit_check(monkeypatch):

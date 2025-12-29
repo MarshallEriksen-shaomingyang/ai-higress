@@ -85,6 +85,25 @@ class AdminUserResponse(UserResponse):
         description="该用户的自动充值配置；未配置时为 null",
     )
 
+    risk_score: int = Field(
+        default=0,
+        description="风险评分（0-100）；用于管理员列表排序/筛选",
+        ge=0,
+        le=100,
+    )
+    risk_level: str = Field(
+        default="low",
+        description="风险等级：low/medium/high；用于管理员列表标注与筛选",
+    )
+    risk_remark: str | None = Field(
+        default=None,
+        description="风险说明（管理员可见），例如“多 IP 且频率均匀（疑似脚本/共享）”",
+    )
+    risk_updated_at: datetime | None = Field(
+        default=None,
+        description="风险状态最后更新时间（UTC）",
+    )
+
 
 class UserLookupResponse(BaseModel):
     """用于前端搜索/选择用户时的精简信息。"""

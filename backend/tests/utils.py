@@ -144,15 +144,38 @@ class InMemoryRedis:
         self._pubsub_channels: dict[str, set["asyncio.Queue[str]"]] = {}
 
     async def get(self, key: str):
-        return self._data.get(key)
+        if key in self._data:
+            return self._data.get(key)
+        if key in self._counters:
+            return str(self._counters.get(key, 0))
+        return None
 
-    async def set(self, key: str, value: str, ex: int | None = None):
-        self._data[key] = value
+    async def set(self, key: str, value: str, ex: int | None = None, nx: bool = False):
+        _ = ex
+        if nx and key in self._data:
+            return None
+        self._data[key] = str(value)
+        return True
+
+    async def mget(self, keys: list[str] | tuple[str, ...]):
+        out = []
+        for k in keys:
+            key = str(k)
+            if key in self._data:
+                out.append(self._data.get(key))
+                continue
+            if key in self._counters:
+                out.append(str(self._counters.get(key, 0)))
+                continue
+            out.append(None)
+        return out
 
     async def incr(self, key: str) -> int:
         current = int(self._counters.get(key, 0))
         current += 1
         self._counters[key] = current
+        # Redis 的 INCR 会更新字符串值：这里同步到 _data，便于 get/mget 读取。
+        self._data[key] = str(current)
         return current
 
     async def expire(self, key: str, seconds: int) -> bool:
@@ -185,6 +208,29 @@ class InMemoryRedis:
         z[member] = float(z.get(member, 0.0)) + float(amount)
         return float(z[member])
 
+    async def zcard(self, key: str) -> int:
+        return len(self._zsets.get(key, {}))
+
+    async def zrevrange(self, key: str, start: int, stop: int, withscores: bool = False):
+        z = self._zsets.get(key, {})
+        items = sorted(z.items(), key=lambda kv: kv[1], reverse=True)
+        sliced = items[int(start) : int(stop) + 1] if int(stop) >= 0 else items[int(start) :]
+        if withscores:
+            return [(member, float(score)) for member, score in sliced]
+        return [member for member, _ in sliced]
+
+    async def zunionstore(self, dest: str, keys: list[str] | tuple[str, ...], aggregate: str = "SUM") -> int:
+        agg = str(aggregate or "SUM").upper()
+        if agg not in {"SUM"}:
+            agg = "SUM"
+        out: dict[str, float] = {}
+        for key in keys:
+            for member, score in self._zsets.get(str(key), {}).items():
+                if agg == "SUM":
+                    out[member] = float(out.get(member, 0.0)) + float(score)
+        self._zsets[str(dest)] = out
+        return len(out)
+
     async def exists(self, *keys: str) -> int:
         """返回存在的 key 数量，模拟 Redis exists 行为。"""
         return sum(1 for key in keys if key in self._data)
@@ -202,6 +248,12 @@ class InMemoryRedis:
             if key in self._sets:
                 removed += 1
                 self._sets.pop(key, None)
+            if key in self._counters:
+                removed += 1
+                self._counters.pop(key, None)
+            if key in self._zsets:
+                removed += 1
+                self._zsets.pop(key, None)
             if key in self._lists:
                 removed += 1
                 self._lists.pop(key, None)

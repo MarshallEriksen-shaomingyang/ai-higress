@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, String, Text, text
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, relationship
 
 from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -18,6 +20,16 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     hashed_password: Mapped[str] = Column(Text, nullable=False)
     is_active: Mapped[bool] = Column(Boolean, server_default=text("TRUE"), nullable=False)
     is_superuser: Mapped[bool] = Column(Boolean, server_default=text("FALSE"), nullable=False)
+
+    risk_score: Mapped[int] = Column(Integer, nullable=False, server_default=text("0"))
+    risk_level: Mapped[str] = Column(
+        String(20),
+        nullable=False,
+        server_default=text("'low'"),
+        index=True,
+    )
+    risk_remark: Mapped[str | None] = Column(Text, nullable=True)
+    risk_updated_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)
 
     identities: Mapped[list[Identity]] = relationship(
         "Identity",

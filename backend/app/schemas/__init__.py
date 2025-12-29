@@ -43,6 +43,9 @@ from .credit import (
     CreditConsumptionSummary,
     CreditGrantRequest,
     CreditGrantResponse,
+    CreditGrantTokenIssueRequest,
+    CreditGrantTokenIssueResponse,
+    CreditGrantTokenRedeemRequest,
     CreditProviderUsageItem,
     CreditProviderUsageResponse,
     CreditTopupRequest,
@@ -289,7 +292,6 @@ from .registration import (
 from .routing import CandidateInfo, RoutingDecision, RoutingRequest
 from .routing_metrics import MetricsHistory, RoutingMetrics
 from .scheduling import SchedulingStrategy
-from .session import Session
 from .system import (
     KeyValidationRequest,
     KeyValidationResponse,
@@ -435,7 +437,6 @@ __all__ = [
     "SchedulingStrategy",
     "SecretKeyGenerationRequest",
     "SecretKeyResponse",
-    "Session",
     "SystemAdminInitRequest",
     "SystemAdminInitResponse",
     "TokenResponse",

@@ -25,12 +25,6 @@ class SchedulingStrategy(BaseModel):
     min_score: float = Field(
         default=0.1, description="Minimum valid score threshold", ge=0.0
     )
-    enable_stickiness: bool = Field(
-        default=True, description="Whether to enable session stickiness"
-    )
-    stickiness_ttl: int = Field(
-        default=7200, description="Session stickiness TTL in seconds", ge=0
-    )
 
 
 __all__ = ["SchedulingStrategy"]

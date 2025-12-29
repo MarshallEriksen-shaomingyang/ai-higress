@@ -17,7 +17,6 @@ from app.schemas import (
     PhysicalModel,
     RoutingMetrics,
     SchedulingStrategy,
-    Session,
 )
 
 
@@ -170,12 +169,11 @@ def choose_upstream(
     upstreams: Sequence[PhysicalModel],
     metrics_by_provider: dict[str, RoutingMetrics],
     strategy: SchedulingStrategy,
-    session: Session | None = None,
     dynamic_weights: dict[str, float] | None = None,
     enable_health_check: bool = True,
 ) -> tuple[CandidateScore, list[CandidateScore]]:
     """
-    Choose a single upstream using scoring and optional session stickiness.
+    Choose a single upstream using scoring.
     Returns (selected, all_scored_candidates).
     
     Args:
@@ -183,7 +181,6 @@ def choose_upstream(
         upstreams: 物理模型候选列表
         metrics_by_provider: Provider 指标字典
         strategy: 调度策略
-        session: 会话信息（用于粘性路由）
         dynamic_weights: 动态权重（可选）
         enable_health_check: 是否启用健康检查和最低分数过滤
     """
@@ -192,16 +189,6 @@ def choose_upstream(
     )
     if not scored:
         raise RuntimeError("No eligible upstream candidates")
-
-    # Stickiness: if there is an existing session and its provider+model
-    # is still in the candidate list, prefer it regardless of raw score.
-    if strategy.enable_stickiness and session is not None:
-        for cand in scored:
-            if (
-                cand.upstream.provider_id == session.provider_id
-                and cand.upstream.model_id == session.model_id
-            ):
-                return cand, scored
 
     # No sticky session match; fall back to weighted random choice based
     # on scores so that traffic can be balanced across healthy upstreams.

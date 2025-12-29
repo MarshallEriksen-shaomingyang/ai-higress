@@ -4,7 +4,7 @@ Provider 选择器（v2）
 目标：把 chat 路由中的“解析/发现/选路”逻辑收敛到一个可复用模块，避免在 route 层堆积：
 - Resolve：加载静态 LogicalModel（Redis）或动态构建（/models 缓存）
 - Filter：应用用户可访问 provider ∩ API Key 白名单（上层传入 effective_provider_ids）
-- Decide：加载指标/动态权重/粘性会话，调用调度器得到候选顺序（selected first）
+- Decide：加载指标/动态权重，调用调度器得到候选顺序（selected first）
 """
 
 from __future__ import annotations
@@ -31,15 +31,11 @@ from app.logging_config import logger
 from app.models import Provider, ProviderModel
 from app.routing.mapper import select_candidate_upstreams
 from app.routing.scheduler import CandidateScore, choose_upstream
-from app.routing.session_manager import get_session
 from app.schemas import (
     LogicalModel,
     ModelCapability,
     PhysicalModel,
     RoutingMetrics,
-)
-from app.schemas import (
-    Session as RoutingSession,
 )
 from app.services.bandit_routing_weight_service import build_bandit_routing_weights
 from app.services.chat_routing_service import _build_dynamic_logical_model_for_group, _build_ordered_candidates
@@ -406,7 +402,6 @@ class ProviderSelector:
         lookup_model_id: str,
         api_style: str,
         effective_provider_ids: set[str],
-        session_id: str | None = None,
         user_id: UUID | None = None,
         is_superuser: bool = False,
         bandit_project_id: UUID | None = None,
@@ -510,10 +505,6 @@ class ProviderSelector:
 
         base_weights: dict[str, float] = {c.provider_id: c.base_weight for c in candidates}
 
-        session_obj: RoutingSession | None = None
-        if session_id:
-            session_obj = await get_session(self.redis, session_id)
-
         metrics_by_provider = await self.routing_state.load_metrics_for_candidates(
             logical_model.logical_id, candidates
         )
@@ -586,7 +577,6 @@ class ProviderSelector:
             candidates,
             metrics_by_provider,
             logical_model.strategy,
-            session=session_obj,
             dynamic_weights=effective_dynamic_weights,
             enable_health_check=settings.enable_provider_health_check,
         )

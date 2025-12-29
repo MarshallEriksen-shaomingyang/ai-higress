@@ -620,6 +620,7 @@
 
 **说明**:
 - `credit_auto_topup`：该用户的自动充值规则（结构同 `GET /v1/credits/admin/users/{user_id}/auto-topup` 的成功响应）；未配置时为 `null`。
+- `risk_score` / `risk_level` / `risk_remark`：用户风险画像（仅“结论”落库，用于管理员列表标注/筛选）；原始请求日志不落库。
 
 **响应**:
 ```json
@@ -652,6 +653,10 @@
       "created_at": "datetime",
       "updated_at": "datetime"
     },
+    "risk_score": 80,
+    "risk_level": "high",
+    "risk_remark": "多 IP 且频率均匀（疑似脚本/共享）",
+    "risk_updated_at": "datetime | null",
     "created_at": "datetime",
     "updated_at": "datetime"
   }
@@ -1588,6 +1593,57 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
 
 字段说明：
 - `applied`：`true` 表示本次实际入账；若 `idempotency_key` 重复则为 `false`，同时仍返回已存在的 `transaction`。
+
+### 3.2 管理员签发积分兑换 token
+
+**接口**: `POST /v1/credits/admin/grant-tokens`  
+**认证**: JWT 令牌（仅限超级管理员）
+
+**描述**: 签发一个“积分入账 token”，用于面向普通用户的受控兑换（例如：签到奖励、兑换码、活动赠送等）。
+
+**请求体**:
+```json
+{
+  "user_id": "uuid or null",
+  "amount": 30,
+  "reason": "redeem_code",
+  "description": "活动兑换",
+  "idempotency_key": "redeem:CODE_123",
+  "expires_in_seconds": 86400
+}
+```
+
+字段说明：
+- `user_id`：可选；指定后该 token **仅允许该用户兑换**；为空表示不绑定用户（通常用于兑换码场景）；
+- `idempotency_key`：可选；用于限制“仅能兑换一次”。为空则系统自动生成随机 key；
+- `expires_in_seconds`：token 有效期（秒），默认 1 天，最长 30 天。
+
+**成功响应示例**:
+```json
+{
+  "token": "....",
+  "expires_at": "2025-01-02T12:34:56Z"
+}
+```
+
+### 3.3 用户兑换积分 token
+
+**接口**: `POST /v1/credits/me/grant-token`  
+**认证**: JWT 令牌
+
+**请求体**:
+```json
+{
+  "token": "...."
+}
+```
+
+**成功响应**: 返回结构同 `POST /v1/credits/admin/users/{user_id}/grant`。
+
+**错误码说明**:
+- `403`：token 绑定了其他用户（`user_id` 不匹配）；
+- `409`：token 已被其他用户兑换（全局唯一 `idempotency_key` 冲突）；
+- `400`：token 无效或已过期。
 
 ### 4. 管理员配置每日自动充值
 

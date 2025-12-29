@@ -77,6 +77,10 @@ def _build_admin_user_response(
         role_codes=role_codes,
         permission_flags=permission_flags,
         credit_auto_topup=credit_auto_topup,
+        risk_score=int(getattr(user, "risk_score", 0) or 0),
+        risk_level=str(getattr(user, "risk_level", "low") or "low"),
+        risk_remark=getattr(user, "risk_remark", None),
+        risk_updated_at=getattr(user, "risk_updated_at", None),
         created_at=user.created_at,
         updated_at=user.updated_at,
     )

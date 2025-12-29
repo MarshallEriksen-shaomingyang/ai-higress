@@ -20,7 +20,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.deps import get_db
-from app.errors import bad_request, forbidden
+from app.errors import bad_request, forbidden, http_error
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.models import CreditAccount, CreditTransaction, Provider
 from app.schemas import (
@@ -32,6 +32,9 @@ from app.schemas import (
     CreditConsumptionSummary,
     CreditGrantRequest,
     CreditGrantResponse,
+    CreditGrantTokenIssueRequest,
+    CreditGrantTokenIssueResponse,
+    CreditGrantTokenRedeemRequest,
     CreditProviderUsageItem,
     CreditProviderUsageResponse,
     CreditTopupRequest,
@@ -46,6 +49,10 @@ from app.services.credit_service import (
     get_auto_topup_rule_for_user,
     get_or_create_account_for_user,
     upsert_auto_topup_rule,
+)
+from app.services.credit_grant_token_service import (
+    create_credit_grant_token,
+    decode_credit_grant_token,
 )
 
 router = APIRouter(
@@ -494,6 +501,83 @@ def admin_grant_user_credits(
         )
     except ValueError as exc:
         raise bad_request(str(exc))
+
+    return CreditGrantResponse(
+        applied=applied,
+        account=CreditAccountResponse.model_validate(account),
+        transaction=CreditTransactionResponse.model_validate(tx) if tx else None,
+    )
+
+@router.post(
+    "/admin/grant-tokens",
+    response_model=CreditGrantTokenIssueResponse,
+    status_code=status.HTTP_200_OK,
+)
+def admin_issue_credit_grant_token(
+    payload: CreditGrantTokenIssueRequest,
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> CreditGrantTokenIssueResponse:
+    """
+    管理员签发“积分入账 token”，用于面向普通用户的受控兑换/活动入账。
+
+    仅当 current_user.is_superuser 为 True 时允许调用。
+    """
+    if not current_user.is_superuser:
+        raise forbidden("只有超级管理员可以签发积分兑换 token")
+
+    try:
+        token, _issued_at, expires_at = create_credit_grant_token(
+            target_user_id=payload.user_id,
+            amount=payload.amount,
+            reason=payload.reason,
+            description=payload.description,
+            idempotency_key=payload.idempotency_key,
+            expires_in_seconds=payload.expires_in_seconds,
+        )
+    except ValueError as exc:
+        raise bad_request(str(exc))
+
+    return CreditGrantTokenIssueResponse(token=token, expires_at=expires_at)
+
+
+@router.post(
+    "/me/grant-token",
+    response_model=CreditGrantResponse,
+    status_code=status.HTTP_200_OK,
+)
+def redeem_my_credit_grant_token(
+    payload: CreditGrantTokenRedeemRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> CreditGrantResponse:
+    """
+    兑换“积分入账 token”，将 token 中的积分入账到当前用户。
+
+    - token 由管理员或活动系统签发（HS256，基于 SECRET_KEY）；
+    - 兑换幂等：同一个 token（本质是同一个 idempotency_key）只会成功入账一次。
+    """
+    try:
+        token_data = decode_credit_grant_token(payload.token)
+    except ValueError as exc:
+        raise bad_request(str(exc))
+    except RuntimeError as exc:
+        raise http_error(500, error="internal_error", message=str(exc))
+
+    user_id = UUID(current_user.id)
+    if token_data.target_user_id is not None and token_data.target_user_id != user_id:
+        raise forbidden("该兑换 token 不属于当前用户")
+
+    try:
+        account, tx, applied = apply_credit_delta(
+            db,
+            user_id=user_id,
+            amount=token_data.amount,
+            reason=token_data.reason,
+            description=token_data.description,
+            idempotency_key=token_data.idempotency_key,
+        )
+    except ValueError as exc:
+        raise http_error(409, error="conflict", message=str(exc))
 
     return CreditGrantResponse(
         applied=applied,
