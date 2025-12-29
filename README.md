@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://ai.ethereals.space">
-    <img src="docs/images/logo.svg" alt="Logo" width="600" height="600">
+    <img src="docs/images/logo.svg" alt="Logo" width="500" height="200">
   </a>
   <h3 align="center">AI-HIGRESS-GATEWAY</h3>
 
