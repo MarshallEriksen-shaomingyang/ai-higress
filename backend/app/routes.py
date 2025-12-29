@@ -13,7 +13,6 @@ from .api.provider_preset_routes import router as provider_preset_router
 from .api.model_catalog_routes import router as model_catalog_router
 from .api.provider_routes import router as provider_router
 from .api.routing_routes import router as routing_router
-from .api.session_routes import router as session_router
 from .api.system_routes import router as system_router
 from .api.v1.admin_eval_routes import router as admin_eval_router
 from .api.v1.admin_notification_routes import router as admin_notification_router
@@ -245,7 +244,6 @@ def create_app() -> FastAPI:
     app.include_router(model_catalog_router)
     app.include_router(logical_model_router)
     app.include_router(routing_router)
-    app.include_router(session_router)
 
     # Chat 相关网关路由（/v1/chat/completions、/v1/responses、/v1/messages）
     app.include_router(chat_router)

@@ -8,7 +8,6 @@
 - candidate_retry: 候选 Provider 重试逻辑
 - utils: 工具函数（payload 标准化、响应转换）
 - provider_selector: Provider 选择器（Phase 3）
-- session_manager: Session 管理器（Phase 3）
 - request_handler: 请求处理协调器（Phase 3）
 """
 
@@ -20,7 +19,6 @@ from .middleware import (
 )
 from .provider_selector import ProviderSelector
 from .request_handler import RequestHandler
-from .session_manager import SessionManager
 from .transports import (
     ClaudeCliTransport,
     HttpTransport,
@@ -56,6 +54,5 @@ __all__ = [
     "convert_claude_response",
     # Phase 3: Business Logic Layer
     "ProviderSelector",
-    "SessionManager",
     "RequestHandler",
 ]

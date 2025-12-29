@@ -29,7 +29,6 @@ from app.api.v1.chat.protocol_adapter import (
 from app.api.v1.chat.provider_endpoint_resolver import resolve_http_upstream_target
 from app.api.v1.chat.upstream_error_classifier import classify_capability_mismatch
 from app.auth import AuthenticatedAPIKey
-from app.context_store import save_context
 from app.provider import config as provider_config
 from app.provider.config import ProviderConfig
 from app.provider.key_pool import (
@@ -97,7 +96,6 @@ async def execute_http_transport(
     api_style: str,
     upstream_api_style: str = "openai",
     api_key: AuthenticatedAPIKey,
-    session_id: str | None,
     messages_path_override: str | None = None,
     fallback_path_override: str | None = None,
 ) -> TransportResult:
@@ -197,7 +195,6 @@ async def execute_http_transport(
         )
 
     record_key_success(key_selection, redis=redis)
-    await save_context(redis, session_id, payload, text)
     try:
         content = r.json()
     except ValueError:
@@ -229,7 +226,6 @@ async def execute_sdk_transport(
     logical_model_id: str,
     api_style: str,
     api_key: AuthenticatedAPIKey,
-    session_id: str | None,
 ) -> TransportResult:
     provider_cfg = provider_config.get_provider_config(provider_id)
     if provider_cfg is None:
@@ -283,7 +279,6 @@ async def execute_sdk_transport(
         return TransportResult(success=False, error_text=str(exc), retryable=True)
 
     record_key_success(key_selection, redis=redis)
-    await save_context(redis, session_id, payload, stringify_payload(sdk_payload))
 
     converted: Any = sdk_payload
     if (
@@ -325,7 +320,6 @@ async def execute_claude_cli_transport(
     logical_model_id: str,
     api_style: str,
     api_key: AuthenticatedAPIKey,
-    session_id: str | None,
 ) -> TransportResult:
     provider_cfg = provider_config.get_provider_config(provider_id)
     if provider_cfg is None:
@@ -352,7 +346,7 @@ async def execute_claude_cli_transport(
         claude_payload = transform_to_claude_cli_format(
             openai_payload,
             api_key=key_selection.key,
-            session_id=session_id,
+            session_id=None,
         )
     except Exception as exc:
         return TransportResult(
@@ -392,7 +386,6 @@ async def execute_claude_cli_transport(
         )
 
     record_key_success(key_selection, redis=redis)
-    await save_context(redis, session_id, payload, text)
     try:
         content: Any = r.json()
     except ValueError:

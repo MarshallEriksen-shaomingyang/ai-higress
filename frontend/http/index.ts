@@ -21,8 +21,7 @@ export {
   routingService,
   type RoutingDecisionRequest,
   type RoutingDecisionResponse,
-  type CandidateInfo,
-  type SessionInfo
+  type CandidateInfo
 } from './routing';
 export {
   systemService,

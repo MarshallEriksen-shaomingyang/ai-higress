@@ -33,7 +33,6 @@ from app.api.v1.chat.candidate_retry import try_candidates_non_stream, try_candi
 from app.api.v1.chat.middleware import apply_response_moderation
 from app.api.v1.chat.provider_selector import ProviderSelectionResult, ProviderSelector
 from app.api.v1.chat.routing_state import RoutingStateService
-from app.api.v1.chat.session_manager import SessionManager
 from app.api.v1.chat.upstream_error_classifier import extract_error_message
 from app.auth import AuthenticatedAPIKey
 from app.logging_config import logger
@@ -87,7 +86,6 @@ class RequestHandler:
         self.provider_selector = ProviderSelector(
             client=client, redis=redis, db=db, routing_state=self.routing_state
         )
-        self.session_manager = SessionManager(redis=redis)
 
     async def handle(
         self,
@@ -101,7 +99,6 @@ class RequestHandler:
         log_request: bool = False,
         request_method: str | None = None,
         request_path: str | None = None,
-        session_id: str | None = None,
         idempotency_key: str | None = None,
         assistant_id: UUID | None = None,
         messages_path_override: str | None = None,
@@ -113,11 +110,10 @@ class RequestHandler:
         attempts: list[dict[str, Any]] = []
         outcome: dict[str, Any] = {}
         logger.info(
-            "chat_v2: handle non-stream user=%s logical_model=%s api_style=%s session_id=%s",
+            "chat_v2: handle non-stream user=%s logical_model=%s api_style=%s",
             self.api_key.user_id,
             lookup_model_id,
             api_style,
-            session_id,
         )
 
         user_uuid = _safe_uuid(self.api_key.user_id)
@@ -128,7 +124,6 @@ class RequestHandler:
             lookup_model_id=lookup_model_id,
             api_style=api_style,
             effective_provider_ids=effective_provider_ids,
-            session_id=session_id,
             user_id=user_uuid,
             is_superuser=bool(self.api_key.is_superuser),
             bandit_project_id=api_key_uuid,
@@ -154,13 +149,6 @@ class RequestHandler:
             self.routing_state.record_success(
                 lookup_model_id, provider_id, base_weights.get(provider_id, 1.0)
             )
-            if session_id:
-                await self.session_manager.bind_session(
-                    session_id=session_id,
-                    logical_model_id=lookup_model_id,
-                    provider_id=provider_id,
-                    model_id=model_id,
-                )
 
         def on_failure(provider_id: str, *, retryable: bool) -> None:
             self.routing_state.record_failure(
@@ -180,7 +168,6 @@ class RequestHandler:
                 logical_model_id=lookup_model_id,
                 api_style=api_style,
                 api_key=self.api_key,
-                session_id=session_id,
                 on_success=on_success,
                 on_failure=on_failure,
                 messages_path_override=messages_path_override,
@@ -229,7 +216,7 @@ class RequestHandler:
         try:
             moderated = apply_response_moderation(
                 response_payload if response_payload is not None else {"raw": raw_text},
-                session_id=session_id,
+                session_id=None,
                 api_key=self.api_key,
                 logical_model=lookup_model_id,
                 provider_id=selected_provider_id,
@@ -323,7 +310,6 @@ class RequestHandler:
         log_request: bool = False,
         request_method: str | None = None,
         request_path: str | None = None,
-        session_id: str | None = None,
         idempotency_key: str | None = None,
         assistant_id: UUID | None = None,
         messages_path_override: str | None = None,
@@ -334,11 +320,10 @@ class RequestHandler:
         attempts: list[dict[str, Any]] = []
         outcome: dict[str, Any] = {}
         logger.info(
-            "chat_v2: handle stream user=%s logical_model=%s api_style=%s session_id=%s",
+            "chat_v2: handle stream user=%s logical_model=%s api_style=%s",
             self.api_key.user_id,
             lookup_model_id,
             api_style,
-            session_id,
         )
 
         user_uuid = _safe_uuid(self.api_key.user_id)
@@ -350,7 +335,6 @@ class RequestHandler:
                 lookup_model_id=lookup_model_id,
                 api_style=api_style,
                 effective_provider_ids=effective_provider_ids,
-                session_id=session_id,
                 user_id=user_uuid,
                 is_superuser=bool(self.api_key.is_superuser),
                 bandit_project_id=api_key_uuid,
@@ -397,13 +381,6 @@ class RequestHandler:
                     provider_id_sink(provider_id, model_id)
                 except TypeError:
                     provider_id_sink(provider_id)
-            if session_id:
-                await self.session_manager.bind_session(
-                    session_id=session_id,
-                    logical_model_id=lookup_model_id,
-                    provider_id=provider_id,
-                    model_id=model_id,
-                )
 
             if token_estimated:
                 return
@@ -480,7 +457,6 @@ class RequestHandler:
                 logical_model_id=lookup_model_id,
                 api_style=api_style,
                 api_key=self.api_key,
-                session_id=session_id,
                 on_first_chunk=on_first_chunk,
                 on_stream_complete=on_stream_complete,
                 on_failure=on_failure,

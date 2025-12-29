@@ -510,7 +510,6 @@ async def stream_upstream_with_metrics(
     headers: dict[str, str],
     json_body: dict[str, object],
     redis,
-    session_id: str | None,
     sse_style: str | None = None,
     db: Session,
     provider_id: str,
@@ -565,7 +564,6 @@ async def stream_upstream_with_metrics(
                             headers=headers,
                             json_body=json_body,
                             redis=redis,
-                            session_id=session_id,
                             sse_style=sse_style,
                         ):
                             if not first_chunk_seen:
@@ -629,7 +627,6 @@ async def stream_upstream_with_metrics(
                 headers=headers,
                 json_body=json_body,
                 redis=redis,
-                session_id=session_id,
                 sse_style=sse_style,
             ):
                 if not first_chunk_seen:
@@ -676,7 +673,6 @@ async def stream_upstream_with_metrics(
                 headers=headers,
                 json_body=json_body,
                 redis=redis,
-                session_id=session_id,
                 sse_style=sse_style,
             ):
                 if not first_chunk_seen:

@@ -4,7 +4,6 @@ from typing import Any
 
 import httpx
 
-from .context_store import save_context
 from .logging_config import logger
 
 
@@ -57,7 +56,6 @@ async def stream_upstream(
     headers: dict[str, str],
     json_body: dict[str, Any],
     redis,
-    session_id: str | None,
     sse_style: str | None = None,
 ) -> AsyncIterator[bytes]:
     """
@@ -70,14 +68,13 @@ async def stream_upstream(
     - When a transport error happens *after* at least one chunk has been
       yielded, we emit a final SSE-style error frame instead of raising,
       because the HTTP response has already started.
-    - Conversation context is saved once the upstream stream finishes or
-      we have emitted a terminal error frame.
+    - Conversation context is not persisted by the gateway; clients/upstreams
+      are expected to carry their own context.
     """
     logger.info(
-        "stream_upstream: opening %s %s (session_id=%r)",
+        "stream_upstream: opening %s %s",
         method,
         url,
-        session_id,
     )
     buffer = bytearray()
     output_style = (sse_style or "openai").strip().lower()
@@ -194,17 +191,9 @@ async def stream_upstream(
             text=str(exc),
         ) from exc
     finally:
-        # Save context after stream finishes (or fails)
-        if buffer:
-            logger.info(
-                "stream_upstream: finished streaming from %s, "
-                "buffer_bytes=%d; saving context",
-                url,
-                len(buffer),
-            )
-            await save_context(
-                redis, session_id, json_body, buffer.decode("utf-8", errors="ignore")
-            )
+        # Keep the previous buffering behaviour for error framing, but do not
+        # persist any conversation context.
+        pass
 
 
 __all__ = ["UpstreamStreamError", "detect_request_format", "stream_upstream"]

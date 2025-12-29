@@ -24,7 +24,7 @@
 ### 🌟 Highlights
 - 🔀 Multi-provider routing with weighted scheduling, health checks, and failover.
 - 🧭 OpenAI-compatible surface (`/v1/chat/completions`, `/v1/responses`, `/models`) with request adapters.
-- 🧠 Session stickiness via `X-Session-Id`, Redis-backed context and model caches.
+- 🧠 Stateless chat proxy: clients/upstreams manage conversation context.
 - 💳 Credits & billing hooks: per-user/provider request accounting, quotas, and history.
 - 📊 Metrics and dashboards: provider ranking, success rate trends, request history, user-scoped overview.
 - 🛡️ AuthN/Z + API key issuance, roles/permissions, security middleware, rate-limit, input validation.
@@ -45,12 +45,12 @@
 </p>
 
 ### 🧩 Feature Matrix
-- Gateway & API: OpenAI-compatible chat/responses/models; SSE & non-streaming; context store.
+- Gateway & API: OpenAI-compatible chat/responses/models; SSE & non-streaming; request adapters.
 - Providers: public & private provider registration, provider presets, logical models, weighted routing, submission & approval flow.
 - Routing & control: routing rules, failover/backoff, health metrics, cache invalidation.
 - Identity & access: JWT login, API keys, role/permission management, user profile & avatar.
 - Credits & billing: credit balance and transaction history, per-user/provider metrics.
-- Observability: user/provider metrics, success-rate trends, request history, audit-friendly session snippets.
+- Observability: user/provider metrics, success-rate trends, request history, audit logs.
 - Admin & ops: system config, notifications, provider review, gateway status checks.
 
 ### 🚀 Quickstart (Backend)
@@ -180,7 +180,7 @@ MIT
 ### 🌟 核心亮点
 - 🔀 多提供商路由与权重调度，健康探测 + 故障切换。
 - 🧭 OpenAI 兼容接口（`/v1/chat/completions`, `/v1/responses`, `/models`），内置请求适配器。
-- 🧠 `X-Session-Id` 会话粘滞，Redis 承载上下文与模型缓存。
+- 🧠 无状态代理：对话上下文由客户端/上游维护。
 - 💳 积分与计费：用户/Provider 维度的请求计量、额度与交易历史。
 - 📊 指标与看板：Provider 排行、成功率趋势、请求历史、用户维度概览。
 - 🛡️ 一站式安全：鉴权、API Key 发行、角色/权限、中间件安全校验、限流。
@@ -195,12 +195,12 @@ MIT
 </p>
 
 ### 🧩 功能矩阵
-- 网关与 API：OpenAI 兼容（Chat/Responses/Models）、SSE/非流、上下文存储。
+- 网关与 API：OpenAI 兼容（Chat/Responses/Models）、SSE/非流、请求/响应适配。
 - Provider：公共/私有 Provider 注册，预设模板，逻辑模型映射，权重路由，提交与审核流程。
 - 路由与控制：路由规则、故障切换/回退、健康探测、缓存失效。
 - 身份与访问：JWT 登录、API Key、角色/权限、用户资料与头像。
 - 积分与计费：余额/消耗/交易历史，用户 & Provider 维度指标。
-- 可观测性：用户/Provider 指标、成功率趋势、请求历史、会话审计片段。
+- 可观测性：用户/Provider 指标、成功率趋势、请求历史、审计日志。
 - 运维与管理：系统配置、通知、Provider 审核、网关健康检查。
 
 ### 🚀 快速开始（Docker 镜像，推荐新手）

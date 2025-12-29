@@ -60,7 +60,6 @@ async def execute_http_stream(
     api_style: str,
     upstream_api_style: str = "openai",
     api_key: AuthenticatedAPIKey,
-    session_id: str | None,
     messages_path_override: str | None = None,
     fallback_path_override: str | None = None,
 ) -> AsyncIterator[bytes]:
@@ -111,7 +110,6 @@ async def execute_http_stream(
             headers=headers,
             json_body=upstream_payload,
             redis=redis,
-            session_id=session_id,
             sse_style=sse_style,
             db=db,
             provider_id=provider_id,
@@ -162,7 +160,6 @@ async def execute_sdk_stream(
     logical_model_id: str,
     api_style: str,
     api_key: AuthenticatedAPIKey,
-    session_id: str | None,
 ) -> AsyncIterator[bytes]:
     provider_cfg = provider_config.get_provider_config(provider_id)
     if provider_cfg is None:
@@ -199,8 +196,6 @@ async def execute_sdk_stream(
                 model_id=model_id,
                 payload=upstream_payload,
                 base_url=normalize_base_url(provider_cfg.base_url),
-                redis=redis,
-                session_id=session_id,
                 db=db,
                 provider_id=provider_id,
                 logical_model=logical_model_id,
@@ -224,8 +219,6 @@ async def execute_sdk_stream(
             model_id=model_id,
             payload=upstream_payload,
             base_url=normalize_base_url(provider_cfg.base_url),
-            redis=redis,
-            session_id=session_id,
             db=db,
             provider_id=provider_id,
             logical_model=logical_model_id,
@@ -274,7 +267,6 @@ async def execute_claude_cli_stream(
     logical_model_id: str,
     api_style: str,
     api_key: AuthenticatedAPIKey,
-    session_id: str | None,
 ) -> AsyncIterator[bytes]:
     provider_cfg = provider_config.get_provider_config(provider_id)
     if provider_cfg is None:
@@ -296,7 +288,7 @@ async def execute_claude_cli_stream(
         claude_payload = transform_to_claude_cli_format(
             openai_payload,
             api_key=key_selection.key,
-            session_id=session_id,
+            session_id=None,
         )
     except Exception as exc:
         raise Exception(f"Failed to build Claude CLI request: {exc}")
@@ -312,7 +304,6 @@ async def execute_claude_cli_stream(
             headers=claude_cli_headers,
             json_body=claude_payload,
             redis=redis,
-            session_id=session_id,
             sse_style="claude",
             db=db,
             provider_id=provider_id,

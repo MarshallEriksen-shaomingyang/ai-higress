@@ -2,12 +2,9 @@
 公共网关相关的基础路由：
 - /health
 - /models 与 /v1/models
-- /context/{session_id}
 
 从 app.routes 中抽离出来，避免 routes.py 过于臃肿。
 """
-
-from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -20,7 +17,6 @@ from sqlalchemy.orm import Session
 
 from app.auth import AuthenticatedAPIKey, require_api_key
 from app.deps import get_db, get_redis
-from app.jwt_auth import require_jwt_token
 from app.services.chat_routing_service import HealthResponse, ModelsResponse, _get_or_fetch_models
 
 router = APIRouter(tags=["gateway"])
@@ -60,23 +56,6 @@ async def list_models_v1(
     """
 
     return await list_models(redis=redis, db=db, current_key=current_key)
-
-
-@router.get(
-    "/context/{session_id}",
-    dependencies=[Depends(require_jwt_token)],
-)
-async def get_context(
-    session_id: str,
-    redis: Redis = Depends(get_redis),
-) -> dict[str, Any]:
-    """
-    调试用端点：查看指定会话的对话历史。
-    """
-
-    key = f"session:{session_id}:history"
-    items = await redis.lrange(key, 0, -1)
-    return {"session_id": session_id, "history": items}
 
 
 __all__ = ["router"]

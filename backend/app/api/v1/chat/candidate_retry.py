@@ -24,8 +24,6 @@ except ModuleNotFoundError:  # pragma: no cover
     Redis = object  # type: ignore
 
 from sqlalchemy.orm import Session as DbSession
-
-import app.context_store as context_store
 from app.api.v1.chat.routing_state import RoutingStateService
 from app.api.v1.chat.transport_handlers import (
     execute_claude_cli_transport,
@@ -84,7 +82,6 @@ async def try_candidates_non_stream(
     payload: dict[str, Any],
     logical_model_id: str,
     api_key: AuthenticatedAPIKey,
-    session_id: str | None,
     on_success: Callable[[str, str], Awaitable[None]],
     api_style: str | None = None,
     on_failure: Callable[..., None] | None = None,
@@ -200,7 +197,6 @@ async def try_candidates_non_stream(
                 logical_model_id=logical_model_id,
                 api_style=resolved_style,
                 api_key=api_key,
-                session_id=session_id,
             )
         elif transport == "sdk":
             result = await execute_sdk_transport(
@@ -212,7 +208,6 @@ async def try_candidates_non_stream(
                 logical_model_id=logical_model_id,
                 api_style=resolved_style,
                 api_key=api_key,
-                session_id=session_id,
             )
         else:
             result = await execute_http_transport(
@@ -227,7 +222,6 @@ async def try_candidates_non_stream(
                 api_style=resolved_style,
                 upstream_api_style=upstream_api_style,
                 api_key=api_key,
-                session_id=session_id,
                 messages_path_override=messages_path_override,
                 fallback_path_override=fallback_path_override,
             )
@@ -355,7 +349,6 @@ async def try_candidates_stream(
     payload: dict[str, Any],
     logical_model_id: str,
     api_key: AuthenticatedAPIKey,
-    session_id: str | None,
     on_first_chunk: Callable[[str, str], Awaitable[None]],
     api_style: str | None = None,
     on_stream_complete: Callable[[str], None] | None = None,
@@ -480,7 +473,6 @@ async def try_candidates_stream(
                 logical_model_id=logical_model_id,
                 api_style=resolved_style,
                 api_key=api_key,
-                session_id=session_id,
             )
         elif transport == "sdk":
             iterator = execute_sdk_stream(
@@ -492,7 +484,6 @@ async def try_candidates_stream(
                 logical_model_id=logical_model_id,
                 api_style=resolved_style,
                 api_key=api_key,
-                session_id=session_id,
             )
         else:
             iterator = execute_http_stream(
@@ -507,7 +498,6 @@ async def try_candidates_stream(
                 api_style=resolved_style,
                 upstream_api_style=upstream_api_style,
                 api_key=api_key,
-                session_id=session_id,
                 messages_path_override=messages_path_override,
                 fallback_path_override=fallback_path_override,
             )
@@ -614,7 +604,6 @@ async def try_candidates_stream(
                 }
             }
             error_chunk = f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
-            await context_store.save_context(redis, session_id, payload, error_text)
             yield error_chunk
             return
 
@@ -643,7 +632,6 @@ async def try_candidates_stream(
         "error": {"type": "all_providers_failed", "message": detail_text, "request_id": request_id}
     }
     error_chunk = f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n".encode()
-    await context_store.save_context(redis, session_id, payload, detail_text)
     yield error_chunk
 
 

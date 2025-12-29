@@ -13,7 +13,7 @@ import uuid
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session as DbSession
 
@@ -70,18 +70,16 @@ async def chat_completions(
     client: httpx.AsyncClient = Depends(get_http_client),
     redis: Redis = Depends(get_redis),
     db: DbSession = Depends(get_db),
-    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
     raw_body: dict[str, Any] = Body(...),
     current_key: AuthenticatedAPIKey = Depends(require_api_key),
 ):
     request_id = uuid.uuid4().hex
     logger.info(
-        "chat: incoming request_id=%s model=%r stream=%r user=%s session=%s",
+        "chat: incoming request_id=%s model=%r stream=%r user=%s",
         request_id,
         raw_body.get("model"),
         raw_body.get("stream"),
         current_key.user_id,
-        x_session_id,
     )
 
     # 风险画像（仅存结论到 DB）：记录入口请求的 IP 信号，并按窗口评估风险等级。
@@ -140,7 +138,7 @@ async def chat_completions(
 
     enforce_request_moderation(
         payload,
-        session_id=x_session_id,
+        session_id=None,
         api_key=current_key,
         logical_model=lookup_model_id,
     )
@@ -193,7 +191,6 @@ async def chat_completions(
                 log_request=True,
                 request_method=request.method,
                 request_path=request.url.path,
-                session_id=x_session_id,
                 idempotency_key=billing_final_key,
                 messages_path_override=messages_path_override,
                 fallback_path_override=fallback_path_override,
@@ -207,7 +204,6 @@ async def chat_completions(
             lookup_model_id=lookup_model_id,
             api_style=api_style,
             effective_provider_ids=effective_provider_ids,
-            session_id=x_session_id,
             user_id=uuid.UUID(str(current_key.user_id)),
             is_superuser=bool(current_key.is_superuser),
         )
@@ -229,7 +225,6 @@ async def chat_completions(
                 log_request=True,
                 request_method=request.method,
                 request_path=request.url.path,
-                session_id=x_session_id,
                 idempotency_key=billing_precharge_key,
                 messages_path_override=messages_path_override,
                 fallback_path_override=fallback_path_override,
@@ -240,7 +235,7 @@ async def chat_completions(
         return StreamingResponse(
             wrap_stream_with_moderation(
                 stream_generator(),
-                session_id=x_session_id,
+                session_id=None,
                 api_key=current_key,
                 logical_model=lookup_model_id,
                 provider_id=None,
@@ -271,7 +266,6 @@ async def responses_endpoint(
     client: httpx.AsyncClient = Depends(get_http_client),
     redis: Redis = Depends(get_redis),
     db: DbSession = Depends(get_db),
-    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
     raw_body: dict[str, Any] = Body(...),
     current_key: AuthenticatedAPIKey = Depends(require_api_key),
 ):
@@ -287,7 +281,6 @@ async def responses_endpoint(
         client=client,
         redis=redis,
         db=db,
-        x_session_id=x_session_id,
         raw_body=passthrough_payload,
         current_key=current_key,
     )
@@ -299,7 +292,6 @@ async def claude_messages_endpoint(
     client: httpx.AsyncClient = Depends(get_http_client),
     redis: Redis = Depends(get_redis),
     db: DbSession = Depends(get_db),
-    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
     raw_body: dict[str, Any] = Body(...),
     current_key: AuthenticatedAPIKey = Depends(require_api_key),
 ):
@@ -328,7 +320,6 @@ async def claude_messages_endpoint(
         client=client,
         redis=redis,
         db=db,
-        x_session_id=x_session_id,
         raw_body=forward_body,
         current_key=current_key,
     )

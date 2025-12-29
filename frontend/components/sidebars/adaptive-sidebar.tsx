@@ -70,6 +70,11 @@ const navItems: NavItem[] = [
     icon: Cpu,
   },
   {
+    titleKey: "nav.routing",
+    href: "/dashboard/routing",
+    icon: Network,
+  },
+  {
     titleKey: "nav.api_keys",
     href: "/dashboard/api-keys",
     icon: Key,
@@ -92,11 +97,6 @@ const navItems: NavItem[] = [
 ];
 
 const adminItems: NavItem[] = [
-  {
-    titleKey: "nav.routing",
-    href: "/dashboard/routing",
-    icon: Network,
-  },
   {
     titleKey: "nav.provider_presets",
     href: "/dashboard/provider-presets",

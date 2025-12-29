@@ -3278,9 +3278,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
         "beta": 0.3,
         "gamma": 0.2,
         "delta": 0.2,
-        "min_score": 0.1,
-        "enable_stickiness": true,
-        "stickiness_ttl": 7200
+        "min_score": 0.1
       },
       "upstreams": [
         {
@@ -3330,9 +3328,7 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
     "beta": 0.3,
     "gamma": 0.2,
     "delta": 0.2,
-    "min_score": 0.1,
-    "enable_stickiness": true,
-    "stickiness_ttl": 7200
+    "min_score": 0.1
   },
   "upstreams": [
     {
@@ -3405,7 +3401,6 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
 ```json
 {
   "logical_model": "string",
-  "conversation_id": "string (可选, 用于粘性会话)",
   "user_id": "string (可选, 暂未使用)",
   "preferred_region": "string (可选, 首选上游选择的区域)",
   "strategy": "latency_first/cost_first/reliability_first/balanced (可选)",
@@ -3466,48 +3461,6 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
 - 404: 逻辑模型不存在
 - 503: 没有可用的上游
 - 503: 逻辑模型已禁用
-
----
-
-## 会话管理
-
-### 1. 获取会话信息
-
-**接口**: `GET /routing/sessions/{conversation_id}`
-
-**描述**: 获取会话信息。
-
-**认证**: JWT 令牌
-
-**响应**:
-```json
-{
-  "conversation_id": "string",
-  "logical_model": "string",
-  "provider_id": "string",
-  "model_id": "string",
-  "created_at": 1234567890.0,
-  "last_used_at": 1234567890.0
-}
-```
-
-**错误响应**:
-- 404: 会话不存在
-
----
-
-### 2. 删除会话
-
-**接口**: `DELETE /routing/sessions/{conversation_id}`
-
-**描述**: 删除会话（取消粘性）。
-
-**认证**: JWT 令牌
-
-**成功响应**: 204 No Content
-
-**错误响应**:
-- 404: 会话不存在
 
 ---
 

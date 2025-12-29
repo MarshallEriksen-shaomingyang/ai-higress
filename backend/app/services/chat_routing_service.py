@@ -57,7 +57,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import AuthenticatedAPIKey
-from app.context_store import save_context
 from app.logging_config import logger
 from app.model_cache import get_models_from_cache, set_models_cache
 from app.models import Provider, ProviderModel
@@ -704,7 +703,6 @@ async def _send_claude_fallback_non_stream(
     payload: dict[str, Any],
     fallback_url: str | None,
     redis,
-    x_session_id: str | None,
     bind_session,
     db: Session,
     user_id: UUID | None,
@@ -755,7 +753,6 @@ async def _send_claude_fallback_non_stream(
         )
 
     await bind_session(provider_id, model_id)
-    await save_context(redis, x_session_id, payload, text)
 
     try:
         payload_json = response.json()
@@ -785,7 +782,6 @@ async def _send_responses_fallback_non_stream(
     payload: dict[str, Any],
     target_url: str,
     redis,
-    x_session_id: str | None,
     bind_session,
     db: Session,
     user_id: UUID | None,
@@ -837,7 +833,6 @@ async def _send_responses_fallback_non_stream(
         )
 
     await bind_session(provider_id, model_id)
-    await save_context(redis, x_session_id, payload, text)
 
     try:
         payload_json = response.json()
@@ -865,7 +860,6 @@ async def _claude_streaming_fallback_iterator(
     fallback_url: str | None,
     payload: dict[str, Any],
     redis,
-    session_id: str | None,
     bind_session_cb,
     db: Session,
     user_id: UUID | None,
@@ -894,7 +888,6 @@ async def _claude_streaming_fallback_iterator(
             headers=headers,
             json_body=fallback_payload,
             redis=redis,
-            session_id=session_id,
             sse_style="openai",
             db=db,
             provider_id=provider_id,
@@ -928,7 +921,6 @@ async def _responses_streaming_fallback_iterator(
     target_url: str,
     payload: dict[str, Any],
     redis,
-    session_id: str | None,
     bind_session_cb,
     db: Session,
     user_id: UUID | None,
@@ -965,7 +957,6 @@ async def _responses_streaming_fallback_iterator(
             headers=headers,
             json_body=fallback_payload,
             redis=redis,
-            session_id=session_id,
             sse_style="openai",
             db=db,
             provider_id=provider_id,

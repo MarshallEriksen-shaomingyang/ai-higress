@@ -1,6 +1,6 @@
 
 from app.routing.scheduler import CandidateScore, choose_upstream, score_upstreams
-from app.schemas import LogicalModel, ModelCapability, PhysicalModel, RoutingMetrics, SchedulingStrategy, Session
+from app.schemas import LogicalModel, ModelCapability, PhysicalModel, RoutingMetrics, SchedulingStrategy
 
 
 def _logical_and_upstreams():
@@ -72,34 +72,6 @@ def test_score_upstreams_prefers_lower_latency():
     )
     assert scored
     assert scored[0].upstream.provider_id == "fast"
-
-
-def test_choose_upstream_prefers_session_when_sticky():
-    logical, upstreams = _logical_and_upstreams()
-    strategy = SchedulingStrategy(name="balanced", description="test", enable_stickiness=True)
-    metrics_by_provider: dict[str, RoutingMetrics] = {}
-
-    # No metrics; choose_upstream falls back to base_weight (tie is fine).
-    session = Session(
-        conversation_id="conv1",
-        logical_model="gpt-4",
-        provider_id="slow",
-        model_id="gpt-4",
-        created_at=1.0,
-        last_accessed=1.0,
-        message_count=0,
-    )
-
-    selected, scored = choose_upstream(
-        logical,
-        upstreams,
-        metrics_by_provider,
-        strategy,
-        session=session,
-    )
-
-    assert selected.upstream.provider_id == "slow"
-
 
 def test_score_upstreams_respects_dynamic_weights():
     logical, upstreams = _logical_and_upstreams()

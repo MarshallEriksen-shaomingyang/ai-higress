@@ -144,8 +144,6 @@ from .user_probe import (
     UserProbeTaskResponse,
     UserProbeTaskUpdateRequest,
 )
-from .session import Session
-
 __all__ = [
     # Note: This module historically exports a large set of schemas.
     # Keep additions explicit to avoid surprises for downstream imports.
@@ -438,7 +436,6 @@ __all__ = [
     "SchedulingStrategy",
     "SecretKeyGenerationRequest",
     "SecretKeyResponse",
-    "Session",
     "SystemAdminInitRequest",
     "SystemAdminInitResponse",
     "TokenResponse",
