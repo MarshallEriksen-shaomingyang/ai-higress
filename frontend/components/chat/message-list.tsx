@@ -26,7 +26,7 @@ import { AssistantImageGenerationMessageItem } from "@/components/chat/assistant
 import { useI18n } from "@/lib/i18n-context";
 import { useErrorDisplay } from "@/lib/errors/error-display";
 import { cn } from "@/lib/utils";
-import { useMessages } from "@/lib/swr/use-messages";
+import { useMessages, useSendMessageToConversation } from "@/lib/swr/use-messages";
 import { useDeleteConversation } from "@/lib/swr/use-conversations";
 import { useCachePreloader } from "@/lib/swr/cache";
 import { messageService } from "@/http/message";
@@ -104,6 +104,7 @@ export const MessageList = memo(function MessageList({
   }, [bridgeAgents]);
 
   const deleteConversation = useDeleteConversation();
+  const sendMessageToConversation = useSendMessageToConversation(assistantId);
 
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [regenerateMessageDialogOpen, setRegenerateMessageDialogOpen] =
@@ -555,7 +556,7 @@ export const MessageList = memo(function MessageList({
       });
 
       try {
-        await messageService.sendMessage(tempConversation.conversation_id, {
+        await sendMessageToConversation(tempConversation.conversation_id, {
           ...buildComparisonPayload({
             content: prompt,
             overrideLogicalModel: compareSelectedModel,

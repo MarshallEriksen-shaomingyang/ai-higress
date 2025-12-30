@@ -47,7 +47,6 @@ export function MessageInput({
   const bridgeAgentIds =
     useChatStore((s) => s.conversationBridgeAgentIds[conversationId]) ??
     EMPTY_STRING_ARRAY;
-  const chatStreamingEnabled = useChatStore((s) => s.chatStreamingEnabled);
 
   // 表单管理
   const {
@@ -92,7 +91,7 @@ export function MessageInput({
       const response = await sendMessage({
         content: data.content.trim(),
         bridge_agent_ids: bridgeAgentIds.length ? bridgeAgentIds : undefined,
-      }, { streaming: chatStreamingEnabled });
+      });
 
       // 清空输入框
       reset();

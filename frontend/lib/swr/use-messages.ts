@@ -17,10 +17,6 @@ import type {
   RunSummary,
 } from '@/lib/api-types';
 
-type SendMessageOptions = {
-  streaming?: boolean;
-};
-
 /**
  * 获取消息列表
  * 使用 frequent 缓存策略（实时对话场景）
@@ -94,9 +90,9 @@ export function useSendMessage(
     overrideLogicalModel
   );
 
-  return async (request: SendMessageRequest, options?: SendMessageOptions) => {
+  return async (request: SendMessageRequest) => {
     if (!conversationId) throw new Error('Conversation ID is required');
-    return await sendMessageToConversation(conversationId, request, options);
+    return await sendMessageToConversation(conversationId, request);
   };
 }
 
@@ -125,14 +121,10 @@ export function useSendMessageToConversation(
 
   return async (
     conversationId: string,
-    request: SendMessageRequest,
-    options?: SendMessageOptions
+    request: SendMessageRequest
   ) => {
-    const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const createdAt = new Date().toISOString();
     // 使用字符串 key 确保与 MessageList/useMessages 默认第一页一致（limit=50）
     const messagesKey = `/v1/conversations/${conversationId}/messages?limit=50`;
-    const wantsStreaming = !!options?.streaming;
     const markPending = (pending: boolean) => setPending(conversationId, pending);
     const shouldShowPendingLoader = true;
 
@@ -203,372 +195,329 @@ export function useSendMessageToConversation(
         payload.override_logical_model = overrideLogicalModel;
       }
 
-      if (wantsStreaming) {
-        const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const tempUserMessageId = `temp-${nonce}`;
-        const tempAssistantMessageId = `temp-assistant-${nonce}`;
-        const createdAt = new Date().toISOString();
+      const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const tempUserMessageId = `temp-${nonce}`;
+      const tempAssistantMessageId = `temp-assistant-${nonce}`;
+      const createdAt = new Date().toISOString();
 
-        let userMessageId: string = tempUserMessageId;
-        let assistantMessageId: string = tempAssistantMessageId;
-        let assistantText = '';
-        let assistantBuffer = '';
-        let flushTimer: ReturnType<typeof setTimeout> | number | null = null;
-        let baselineRun: RunSummary | null = null;
-        const clearPending = () => {
-          if (shouldShowPendingLoader) {
-            markPending(false);
-          }
-        };
+      let userMessageId: string = tempUserMessageId;
+      let assistantMessageId: string = tempAssistantMessageId;
+      let assistantText = '';
+      let assistantBuffer = '';
+      let flushTimer: ReturnType<typeof setTimeout> | number | null = null;
+      let baselineRun: RunSummary | null = null;
+      const clearPending = () => {
+        if (shouldShowPendingLoader) {
+          markPending(false);
+        }
+      };
 
-        const updateAssistantContent = (nextText: string) => {
-          void globalMutate(
-            messagesKey,
-            (current?: MessagesResponse) => {
-              if (!current) return current;
-              const nextItems = current.items.map((it) => {
-                if (it.message.message_id !== assistantMessageId) return it;
-                return {
-                  ...it,
-                  message: { ...it.message, content: nextText },
-                };
-              });
-              return { ...current, items: nextItems };
-            },
-            { revalidate: false }
-          );
-        };
-
-        const computeFlushDelay = () => {
-          const backlog = assistantBuffer.length;
-          const total = assistantText.length + backlog;
-          // 短回复/短 backlog 更快刷新，长回复略慢以减轻抖动
-          if (backlog > 200 || total > 800) return 75;
-          if (backlog > 120 || total > 400) return 60;
-          if (backlog > 60 || total > 200) return 45;
-          return 35;
-        };
-
-        const flushBuffer = () => {
-          if (!assistantBuffer) {
-            flushTimer = null;
-            return;
-          }
-          assistantText += assistantBuffer;
-          assistantBuffer = '';
-          updateAssistantContent(assistantText);
-          flushTimer = null;
-        };
-
-        const scheduleFlush = () => {
-          if (flushTimer) return;
-          // 优先使用 rAF，对齐帧节奏；回退到定时器
-          if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-            flushTimer = window.requestAnimationFrame(() => flushBuffer());
-            return;
-          }
-          flushTimer = setTimeout(flushBuffer, computeFlushDelay());
-        };
-
-        await globalMutate(
+      const updateAssistantContent = (nextText: string) => {
+        void globalMutate(
           messagesKey,
-          async (currentData?: MessagesResponse) => {
-            const assistantPlaceholder = {
-              message: {
-                message_id: tempAssistantMessageId,
-                conversation_id: conversationId,
-                role: 'assistant' as const,
-                content: '',
-                created_at: createdAt,
-              },
-              run: undefined,
-              runs: undefined,
-            };
-            const userPlaceholder = {
-              message: {
-                message_id: tempUserMessageId,
-                conversation_id: conversationId,
-                role: 'user' as const,
-                content: request.content,
-                created_at: createdAt,
-              },
-              run: undefined,
-              runs: undefined,
-            };
-            if (!currentData) {
-              return { items: [assistantPlaceholder, userPlaceholder] } satisfies MessagesResponse;
-            }
-            return { ...currentData, items: [assistantPlaceholder, userPlaceholder, ...currentData.items] };
+          (current?: MessagesResponse) => {
+            if (!current) return current;
+            const nextItems = current.items.map((it) => {
+              if (it.message.message_id !== assistantMessageId) return it;
+              return {
+                ...it,
+                message: { ...it.message, content: nextText },
+              };
+            });
+            return { ...current, items: nextItems };
           },
           { revalidate: false }
         );
+      };
 
-        const toRecord = (value: unknown): Record<string, unknown> | null => {
-          if (!value || typeof value !== 'object') return null;
-          return value as Record<string, unknown>;
-        };
+      const computeFlushDelay = () => {
+        const backlog = assistantBuffer.length;
+        const total = assistantText.length + backlog;
+        // 短回复/短 backlog 更快刷新，长回复略慢以减轻抖动
+        if (backlog > 200 || total > 800) return 75;
+        if (backlog > 120 || total > 400) return 60;
+        if (backlog > 60 || total > 200) return 45;
+        return 35;
+      };
 
-        const getString = (record: Record<string, unknown>, key: string) => {
-          const v = record[key];
-          return typeof v === 'string' ? v : '';
-        };
-
-        const parseRunSummary = (value: unknown): RunSummary | null => {
-          const record = toRecord(value);
-          if (!record) return null;
-          const runId = getString(record, 'run_id');
-          const requestedLogicalModel = getString(record, 'requested_logical_model');
-          const status = getString(record, 'status');
-          if (!runId || !requestedLogicalModel || !status) return null;
-          const isRunStatus = (
-            value: string
-          ): value is RunSummary['status'] =>
-            value === 'queued' ||
-            value === 'running' ||
-            value === 'succeeded' ||
-            value === 'failed' ||
-            value === 'canceled';
-          if (!isRunStatus(status)) return null;
-
-          const outputPreview =
-            typeof record['output_preview'] === 'string'
-              ? (record['output_preview'] as string)
-              : undefined;
-          const latencyMs =
-            typeof record['latency_ms'] === 'number'
-              ? (record['latency_ms'] as number)
-              : undefined;
-          const errorCode =
-            typeof record['error_code'] === 'string'
-              ? (record['error_code'] as string)
-              : undefined;
-          const toolInvocations = Array.isArray(record['tool_invocations'])
-            ? (record['tool_invocations'] as RunSummary['tool_invocations'])
-            : undefined;
-          return {
-            run_id: runId,
-            requested_logical_model: requestedLogicalModel,
-            status,
-            output_preview: outputPreview,
-            latency: latencyMs,
-            error_code: errorCode,
-            tool_invocations: toolInvocations,
-          };
-        };
-
-        const normalizeSseEvent = (
-          outer: Record<string, unknown>,
-          sseEvent: string
-        ): {
-          type: string;
-          record: Record<string, unknown>;
-          outer: Record<string, unknown>;
-        } | null => {
-          const rawOuterType = getString(outer, 'type');
-          const outerType = rawOuterType && rawOuterType !== 'message' ? rawOuterType : '';
-          const fallbackEvent = typeof sseEvent === 'string' && sseEvent !== 'message' ? sseEvent : '';
-
-          if (outerType === 'run.event') {
-            const eventType = getString(outer, 'event_type') || fallbackEvent;
-            const payload = toRecord(outer['payload']);
-            const runId = getString(outer, 'run_id');
-            if (payload) {
-              const payloadType = getString(payload, 'type') || eventType;
-              const payloadRunId = getString(payload, 'run_id');
-              const mergedPayload =
-                runId && !payloadRunId ? { ...payload, run_id: runId } : payload;
-              return {
-                type: payloadType,
-                record: mergedPayload,
-                outer,
-              };
-            }
-            return {
-              type: eventType,
-              record: outer,
-              outer,
-            };
-          }
-
-          const type = outerType || fallbackEvent;
-          if (!type) return null;
-          return { type, record: outer, outer };
-        };
-
-        const streamUrl = `/v1/conversations/${conversationId}/messages`;
-
-        const controller = new AbortController();
-        const abortOnTerminal = () => {
-          if (!controller.signal.aborted) controller.abort();
-        };
-
-        try {
-          await streamSSERequest(
-            streamUrl,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Accept: 'text/event-stream',
-              },
-              body: JSON.stringify({ ...payload, streaming: true }),
-            },
-            (msg) => {
-              if (!msg.data) return;
-              if (msg.data === '[DONE]') {
-                abortOnTerminal();
-                return;
-              }
-              let parsed: unknown;
-              try {
-                parsed = JSON.parse(msg.data);
-              } catch {
-                return;
-              }
-              const outer = toRecord(parsed);
-              if (!outer) return;
-              const normalized = normalizeSseEvent(outer, msg.event);
-              if (!normalized) return;
-              const { type, record: rec, outer: outerRec } = normalized;
-              if (!type) return;
-
-              if (type === 'message.created') {
-                const newUserId = getString(rec, 'user_message_id') || getString(outerRec, 'user_message_id');
-                const newAssistantId =
-                  getString(rec, 'assistant_message_id') || getString(outerRec, 'assistant_message_id');
-                if (newUserId) userMessageId = newUserId;
-                if (newAssistantId) assistantMessageId = newAssistantId;
-
-                baselineRun = parseRunSummary(rec['baseline_run'] ?? outerRec['baseline_run']);
-
-                void globalMutate(
-                  messagesKey,
-                  (current?: MessagesResponse) => {
-                    if (!current) return current;
-                    const nextItems = current.items.map((it) => {
-                      if (it.message.message_id === tempUserMessageId) {
-                        return {
-                          ...it,
-                          message: { ...it.message, message_id: userMessageId },
-                          run: baselineRun ?? it.run,
-                          runs: baselineRun ? [baselineRun] : it.runs,
-                        };
-                      }
-                      if (it.message.message_id === tempAssistantMessageId) {
-                        return {
-                          ...it,
-                          message: { ...it.message, message_id: assistantMessageId },
-                        };
-                      }
-                      return it;
-                    });
-                    return { ...current, items: nextItems };
-                  },
-                  { revalidate: false }
-                );
-                return;
-              }
-
-              // 兼容：若后端未来在 chat SSE 里直接透传 tool.* 事件，这里同步写入工具事件 store
-              if (type === 'tool.status' || type === 'tool.result') {
-                const runId = getString(rec, 'run_id') || getString(outerRec, 'run_id');
-                if (!runId) return;
-                useRunToolEventsStore.getState().apply_tool_event(runId, 0, rec as any);
-                return;
-              }
-
-              if (type === 'message.delta') {
-                const delta = getString(rec, 'delta') || getString(outerRec, 'delta');
-                if (!delta) return;
-                assistantBuffer += delta;
-                clearPending();
-                scheduleFlush();
-                return;
-              }
-
-              if (type === 'message.completed' || type === 'message.failed') {
-                flushBuffer();
-                clearPending();
-                const finalRun = parseRunSummary(rec['baseline_run'] ?? outerRec['baseline_run']);
-                if (finalRun) baselineRun = finalRun;
-
-                const outputText = getString(rec, 'output_text') || getString(outerRec, 'output_text');
-                if (outputText) assistantText = outputText;
-
-                void globalMutate(
-                  messagesKey,
-                  (current?: MessagesResponse) => {
-                    if (!current) return current;
-                    const nextItems = current.items.map((it) => {
-                      if (it.message.message_id === assistantMessageId) {
-                        return {
-                          ...it,
-                          message: { ...it.message, content: assistantText },
-                        };
-                      }
-                      if (it.message.message_id === userMessageId) {
-                        return { ...it, run: baselineRun ?? it.run, runs: baselineRun ? [baselineRun] : it.runs };
-                      }
-                      return it;
-                    });
-                    return { ...current, items: nextItems };
-                  },
-                  { revalidate: false }
-                );
-                abortOnTerminal();
-              }
-            },
-            controller.signal
-          );
-        } catch (err) {
-          if (!(err instanceof DOMException && err.name === 'AbortError')) {
-            throw err;
-          }
+      const flushBuffer = () => {
+        if (!assistantBuffer) {
+          flushTimer = null;
+          return;
         }
+        assistantText += assistantBuffer;
+        assistantBuffer = '';
+        updateAssistantContent(assistantText);
+        flushTimer = null;
+      };
 
-        await globalMutate(messagesKey);
-        if (assistantId) {
-          const queryParams = new URLSearchParams();
-          queryParams.set('assistant_id', assistantId);
-          queryParams.set('limit', '50');
-          await globalMutate(`/v1/conversations?${queryParams.toString()}`);
+      const scheduleFlush = () => {
+        if (flushTimer) return;
+        // 优先使用 rAF，对齐帧节奏；回退到定时器
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          flushTimer = window.requestAnimationFrame(() => flushBuffer());
+          return;
         }
-
-        if (!baselineRun) {
-          throw new Error('No baseline run received from stream');
-        }
-
-        return { message_id: userMessageId, baseline_run: baselineRun };
-      }
-
-      const optimisticMessage = {
-        message: {
-          message_id: `temp-${nonce}`,
-          conversation_id: conversationId,
-          role: 'user' as const,
-          content: request.content,
-          created_at: createdAt,
-        },
-        run: undefined,
-        runs: undefined,
+        flushTimer = setTimeout(flushBuffer, computeFlushDelay());
       };
 
       await globalMutate(
         messagesKey,
         async (currentData?: MessagesResponse) => {
-          const baseItems = currentData?.items ?? [];
-          return {
-            ...currentData,
-            items: [optimisticMessage, ...baseItems],
+          const assistantPlaceholder = {
+            message: {
+              message_id: tempAssistantMessageId,
+              conversation_id: conversationId,
+              role: 'assistant' as const,
+              content: '',
+              created_at: createdAt,
+            },
+            run: undefined,
+            runs: undefined,
           };
+          const userPlaceholder = {
+            message: {
+              message_id: tempUserMessageId,
+              conversation_id: conversationId,
+              role: 'user' as const,
+              content: request.content,
+              created_at: createdAt,
+            },
+            run: undefined,
+            runs: undefined,
+          };
+          if (!currentData) {
+            return { items: [assistantPlaceholder, userPlaceholder] } satisfies MessagesResponse;
+          }
+          return { ...currentData, items: [assistantPlaceholder, userPlaceholder, ...currentData.items] };
         },
         { revalidate: false }
       );
 
-      const response = await messageService.sendMessage(conversationId, payload);
+      const toRecord = (value: unknown): Record<string, unknown> | null => {
+        if (!value || typeof value !== 'object') return null;
+        return value as Record<string, unknown>;
+      };
+
+      const getString = (record: Record<string, unknown>, key: string) => {
+        const v = record[key];
+        return typeof v === 'string' ? v : '';
+      };
+
+      const parseRunSummary = (value: unknown): RunSummary | null => {
+        const record = toRecord(value);
+        if (!record) return null;
+        const runId = getString(record, 'run_id');
+        const requestedLogicalModel = getString(record, 'requested_logical_model');
+        const status = getString(record, 'status');
+        if (!runId || !requestedLogicalModel || !status) return null;
+        const isRunStatus = (
+          value: string
+        ): value is RunSummary['status'] =>
+          value === 'queued' ||
+          value === 'running' ||
+          value === 'succeeded' ||
+          value === 'failed' ||
+          value === 'canceled';
+        if (!isRunStatus(status)) return null;
+
+        const outputPreview =
+          typeof record['output_preview'] === 'string'
+            ? (record['output_preview'] as string)
+            : undefined;
+        const latencyMs =
+          typeof record['latency_ms'] === 'number'
+            ? (record['latency_ms'] as number)
+            : undefined;
+        const errorCode =
+          typeof record['error_code'] === 'string'
+            ? (record['error_code'] as string)
+            : undefined;
+        const toolInvocations = Array.isArray(record['tool_invocations'])
+          ? (record['tool_invocations'] as RunSummary['tool_invocations'])
+          : undefined;
+        return {
+          run_id: runId,
+          requested_logical_model: requestedLogicalModel,
+          status,
+          output_preview: outputPreview,
+          latency: latencyMs,
+          error_code: errorCode,
+          tool_invocations: toolInvocations,
+        };
+      };
+
+      const normalizeSseEvent = (
+        outer: Record<string, unknown>,
+        sseEvent: string
+      ): {
+        type: string;
+        record: Record<string, unknown>;
+        outer: Record<string, unknown>;
+      } | null => {
+        const rawOuterType = getString(outer, 'type');
+        const outerType = rawOuterType && rawOuterType !== 'message' ? rawOuterType : '';
+        const fallbackEvent = typeof sseEvent === 'string' && sseEvent !== 'message' ? sseEvent : '';
+
+        if (outerType === 'run.event') {
+          const eventType = getString(outer, 'event_type') || fallbackEvent;
+          const payload = toRecord(outer['payload']);
+          const runId = getString(outer, 'run_id');
+          if (payload) {
+            const payloadType = getString(payload, 'type') || eventType;
+            const payloadRunId = getString(payload, 'run_id');
+            const mergedPayload =
+              runId && !payloadRunId ? { ...payload, run_id: runId } : payload;
+            return {
+              type: payloadType,
+              record: mergedPayload,
+              outer,
+            };
+          }
+          return {
+            type: eventType,
+            record: outer,
+            outer,
+          };
+        }
+
+        const type = outerType || fallbackEvent;
+        if (!type) return null;
+        return { type, record: outer, outer };
+      };
+
+      const streamUrl = `/v1/conversations/${conversationId}/messages`;
+
+      const controller = new AbortController();
+      const abortOnTerminal = () => {
+        if (!controller.signal.aborted) controller.abort();
+      };
+
+      try {
+        await streamSSERequest(
+          streamUrl,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'text/event-stream',
+            },
+            body: JSON.stringify({ ...payload, streaming: true }),
+          },
+          (msg) => {
+            if (!msg.data) return;
+            if (msg.data === '[DONE]') {
+              abortOnTerminal();
+              return;
+            }
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(msg.data);
+            } catch {
+              return;
+            }
+            const outer = toRecord(parsed);
+            if (!outer) return;
+            const normalized = normalizeSseEvent(outer, msg.event);
+            if (!normalized) return;
+            const { type, record: rec, outer: outerRec } = normalized;
+            if (!type) return;
+
+            if (type === 'message.created') {
+              const newUserId = getString(rec, 'user_message_id') || getString(outerRec, 'user_message_id');
+              const newAssistantId =
+                getString(rec, 'assistant_message_id') || getString(outerRec, 'assistant_message_id');
+              if (newUserId) userMessageId = newUserId;
+              if (newAssistantId) assistantMessageId = newAssistantId;
+
+              baselineRun = parseRunSummary(rec['baseline_run'] ?? outerRec['baseline_run']);
+
+              void globalMutate(
+                messagesKey,
+                (current?: MessagesResponse) => {
+                  if (!current) return current;
+                  const nextItems = current.items.map((it) => {
+                    if (it.message.message_id === tempUserMessageId) {
+                      return {
+                        ...it,
+                        message: { ...it.message, message_id: userMessageId },
+                        run: baselineRun ?? it.run,
+                        runs: baselineRun ? [baselineRun] : it.runs,
+                      };
+                    }
+                    if (it.message.message_id === tempAssistantMessageId) {
+                      return {
+                        ...it,
+                        message: { ...it.message, message_id: assistantMessageId },
+                      };
+                    }
+                    return it;
+                  });
+                  return { ...current, items: nextItems };
+                },
+                { revalidate: false }
+              );
+              return;
+            }
+
+            // 兼容：若后端未来在 chat SSE 里直接透传 tool.* 事件，这里同步写入工具事件 store
+            if (type === 'tool.status' || type === 'tool.result') {
+              const runId = getString(rec, 'run_id') || getString(outerRec, 'run_id');
+              if (!runId) return;
+              useRunToolEventsStore.getState().apply_tool_event(runId, 0, rec as any);
+              return;
+            }
+
+            if (type === 'message.delta') {
+              const delta = getString(rec, 'delta') || getString(outerRec, 'delta');
+              if (!delta) return;
+              assistantBuffer += delta;
+              clearPending();
+              scheduleFlush();
+              return;
+            }
+
+            if (type === 'message.completed' || type === 'message.failed') {
+              flushBuffer();
+              clearPending();
+              const finalRun = parseRunSummary(rec['baseline_run'] ?? outerRec['baseline_run']);
+              if (finalRun) baselineRun = finalRun;
+
+              const outputText = getString(rec, 'output_text') || getString(outerRec, 'output_text');
+              if (outputText) assistantText = outputText;
+
+              void globalMutate(
+                messagesKey,
+                (current?: MessagesResponse) => {
+                  if (!current) return current;
+                  const nextItems = current.items.map((it) => {
+                    if (it.message.message_id === assistantMessageId) {
+                      return {
+                        ...it,
+                        message: { ...it.message, content: assistantText },
+                      };
+                    }
+                    if (it.message.message_id === userMessageId) {
+                      return { ...it, run: baselineRun ?? it.run, runs: baselineRun ? [baselineRun] : it.runs };
+                    }
+                    return it;
+                  });
+                  return { ...current, items: nextItems };
+                },
+                { revalidate: false }
+              );
+              abortOnTerminal();
+            }
+          },
+          controller.signal
+        );
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          throw err;
+        }
+      }
 
       await globalMutate(messagesKey);
-
       if (assistantId) {
         const queryParams = new URLSearchParams();
         queryParams.set('assistant_id', assistantId);
@@ -576,7 +525,11 @@ export function useSendMessageToConversation(
         await globalMutate(`/v1/conversations?${queryParams.toString()}`);
       }
 
-      return response;
+      if (!baselineRun) {
+        throw new Error('No baseline run received from stream');
+      }
+
+      return { message_id: userMessageId, baseline_run: baselineRun };
     } catch (error) {
       const standardError = ErrorHandler.normalize(error);
       const errorText = standardError.message || 'Send failed';

@@ -125,7 +125,6 @@ export function buildChatPayload(opts: {
   overrideLogicalModel?: string | null;
   bridgeState?: BridgeState | null;
   availableBridgeAgentIds?: Set<string> | null;
-  streaming?: boolean;
 }): SendMessageRequest {
   const bridgeFields = buildBridgeFields(opts.bridgeState || {});
   const sanitizedBridge = sanitizeBridgeFields(bridgeFields, opts.availableBridgeAgentIds);
@@ -136,9 +135,6 @@ export function buildChatPayload(opts: {
     override_logical_model: opts.overrideLogicalModel ?? undefined,
     ...sanitizedBridge,
   };
-  if (opts.streaming !== undefined) {
-    payload.streaming = opts.streaming;
-  }
   return payload;
 }
 
@@ -171,6 +167,5 @@ export function buildComparisonPayload(opts: {
     overrideLogicalModel: opts.overrideLogicalModel,
     bridgeState: opts.bridgeState,
     availableBridgeAgentIds: opts.availableBridgeAgentIds,
-    streaming: false,
   });
 }

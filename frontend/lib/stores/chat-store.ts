@@ -20,9 +20,6 @@ interface ChatState {
   // 评测创建是否使用流式（SSE）
   evalStreamingEnabled: boolean;
 
-  // 聊天发送是否使用流式（SSE）
-  chatStreamingEnabled: boolean;
-
   // 会话级模型覆盖：conversationId -> logical model（null 表示跟随助手默认）
   conversationModelOverrides: Record<string, string>;
 
@@ -41,7 +38,7 @@ interface ChatState {
   // 会话级最近一次发送使用的 model_preset：conversationId -> preset
   conversationModelPresets: Record<string, Record<string, number>>;
 
-  // 非流式等待回复中的会话：conversationId -> pending
+  // 会话等待回复中的状态：conversationId -> pending
   conversationPending: Record<string, boolean>;
 
   // 操作方法
@@ -50,7 +47,6 @@ interface ChatState {
   setSelectedConversation: (conversationId: string | null) => void;
   setActiveEval: (evalId: string | null) => void;
   setEvalStreamingEnabled: (enabled: boolean) => void;
-  setChatStreamingEnabled: (enabled: boolean) => void;
   setConversationModelOverride: (conversationId: string, logicalModel: string | null) => void;
   clearConversationModelOverrides: () => void;
   setConversationBridgeAgentIds: (conversationId: string, agentIds: string[] | null) => void;
@@ -74,7 +70,6 @@ const initialState = {
   selectedConversationId: null,
   activeEvalId: null,
   evalStreamingEnabled: false,
-  chatStreamingEnabled: false,
   conversationModelOverrides: {} as Record<string, string>,
   conversationBridgeAgentIds: {} as Record<string, string[]>,
   conversationBridgeActiveReqIds: {} as Record<string, string>,
@@ -113,9 +108,6 @@ export const useChatStore = create<ChatState>()(
 
       setEvalStreamingEnabled: (enabled) =>
         set({ evalStreamingEnabled: enabled }),
-
-      setChatStreamingEnabled: (enabled) =>
-        set({ chatStreamingEnabled: enabled }),
 
       setConversationModelOverride: (conversationId, logicalModel) =>
         set((state) => {
@@ -228,18 +220,18 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'chat-store',
-      version: 11,
+      version: 12,
       migrate: (persistedState: unknown) => {
         // v1 -> v2: add conversationModelOverrides
         // v2 -> v3: add conversationBridgeAgentIds
         // v3 -> v4: add conversationBridgeActiveReqIds
         // v4 -> v5: conversationBridgeAgentIds from string -> string[]
         // v5 -> v6: add evalStreamingEnabled
-        // v6 -> v7: add chatStreamingEnabled
-        // v7 -> v8: add conversationPending
-        // v8 -> v9: add conversationBridgeToolSelections
-        // v9 -> v10: add defaultBridgeToolSelections
-        // v10 -> v11: add conversationModelPresets
+        // v6 -> v7: add conversationPending
+        // v7 -> v8: add conversationBridgeToolSelections
+        // v8 -> v9: add defaultBridgeToolSelections
+        // v9 -> v10: add conversationModelPresets
+        // v11 -> v12: remove chatStreamingEnabled (always streaming in UI)
         if (persistedState && typeof persistedState === 'object') {
           const state = persistedState as Record<string, unknown>;
           const rawAgentIds = state.conversationBridgeAgentIds ?? {};
@@ -291,7 +283,6 @@ export const useChatStore = create<ChatState>()(
           return {
             ...state,
             evalStreamingEnabled: (state.evalStreamingEnabled as boolean | undefined) ?? false,
-            chatStreamingEnabled: (state.chatStreamingEnabled as boolean | undefined) ?? false,
             conversationModelOverrides: (state.conversationModelOverrides as Record<string, string> | undefined) ?? {},
             conversationBridgeAgentIds: nextAgentIds,
             conversationBridgeActiveReqIds: (state.conversationBridgeActiveReqIds as Record<string, string> | undefined) ?? {},

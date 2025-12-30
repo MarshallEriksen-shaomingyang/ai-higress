@@ -4,7 +4,6 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 
 import { buildChatPayload } from "@/lib/chat/payload-builder";
-import { composerModeCapabilities } from "@/lib/chat/composer-modes";
 import type { ComposerSubmitPayload, ChatComposerSubmitPayload, ImageComposerSubmitPayload } from "@/lib/chat/composer-submit";
 import { useI18n } from "@/lib/i18n-context";
 import { useChatStore } from "@/lib/stores/chat-store";
@@ -29,7 +28,6 @@ export function useConversationComposerSubmit({
     useChatStore((s) => s.defaultBridgeToolSelections) ?? {};
   const bridgeAgentIds =
     useChatStore((s) => s.conversationBridgeAgentIds[conversationId]) ?? [];
-  const chatStreamingEnabled = useChatStore((s) => s.chatStreamingEnabled);
   const setConversationModelPreset = useChatStore((s) => s.setConversationModelPreset);
   const { agents: bridgeAgents } = useBridgeAgents();
 
@@ -58,19 +56,14 @@ export function useConversationComposerSubmit({
           defaultBridgeToolSelections,
         },
         availableBridgeAgentIds,
-        streaming: composerModeCapabilities.chat.supportsStreaming && chatStreamingEnabled,
       });
 
-      await sendMessage(request, {
-        streaming:
-          composerModeCapabilities.chat.supportsStreaming && chatStreamingEnabled,
-      });
+      await sendMessage(request);
     },
     [
       bridgeAgentIds,
       bridgeToolSelections,
       availableBridgeAgentIds,
-      chatStreamingEnabled,
       conversationId,
       defaultBridgeToolSelections,
       overrideLogicalModel,

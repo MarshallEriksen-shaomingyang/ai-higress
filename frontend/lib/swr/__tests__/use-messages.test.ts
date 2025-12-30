@@ -11,7 +11,7 @@ import {
 } from '../use-messages';
 import { messageService } from '@/http/message';
 import { streamSSERequest } from '@/lib/bridge/sse';
-import type { MessagesResponse, RunDetail, SendMessageResponse } from '@/lib/api-types';
+import type { MessagesResponse, RunDetail } from '@/lib/api-types';
 
 const mockUseBridgeAgents = vi.fn(() => ({
   agents: [],
@@ -165,54 +165,70 @@ describe('useSendMessage', () => {
   });
 
   it('should send message and return response', async () => {
-    const mockResponse: SendMessageResponse = {
-      message_id: 'msg-2',
-      baseline_run: {
-        run_id: 'run-2',
-        requested_logical_model: 'gpt-4',
-        status: 'succeeded',
-        output_preview: 'Hi there!',
-        latency: 1200,
-      },
-    };
+    vi.mocked(streamSSERequest).mockImplementation(async (_url, _init, onMessage) => {
+      onMessage({
+        event: 'message.created',
+        data: JSON.stringify({
+          type: 'message.created',
+          user_message_id: 'msg-user-1',
+          assistant_message_id: 'msg-assistant-1',
+          baseline_run: { run_id: 'run-1', requested_logical_model: 'gpt-4', status: 'running' },
+        }),
+      });
+      onMessage({
+        event: 'message.completed',
+        data: JSON.stringify({
+          type: 'message.completed',
+          output_text: 'Hi there!',
+          baseline_run: {
+            run_id: 'run-1',
+            requested_logical_model: 'gpt-4',
+            status: 'succeeded',
+            output_preview: 'Hi there!',
+            latency_ms: 1200,
+          },
+        }),
+      });
+      onMessage({ event: 'done', data: '[DONE]' });
+    });
 
-    vi.mocked(messageService.sendMessage).mockResolvedValue(mockResponse);
-
-    const { result } = renderHook(() => useSendMessage('conv-1'), { wrapper });
+    const { result } = renderHook(() => useSendMessage('conv-1'), { wrapper: swrWrapper });
 
     const response = await result.current({ content: 'Hello' });
 
-    expect(response).toEqual(mockResponse);
-    expect(messageService.sendMessage).toHaveBeenCalledWith('conv-1', {
-      content: 'Hello',
-    });
+    expect(response.message_id).toBe('msg-user-1');
+    expect(response.baseline_run.status).toBe('succeeded');
+    expect(streamSSERequest).toHaveBeenCalled();
   });
 
   it('should pass override_logical_model when provided', async () => {
-    const mockResponse: SendMessageResponse = {
-      message_id: 'msg-2',
-      baseline_run: {
-        run_id: 'run-2',
-        requested_logical_model: 'gpt-4',
-        status: 'succeeded',
-        output_preview: 'Hi there!',
-        latency: 1200,
-      },
-    };
+    vi.mocked(streamSSERequest).mockImplementation(async (_url, init, onMessage) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      expect(body.override_logical_model).toBe('test-model');
 
-    vi.mocked(messageService.sendMessage).mockResolvedValue(mockResponse);
+      onMessage({
+        event: 'message.completed',
+        data: JSON.stringify({
+          type: 'message.completed',
+          output_text: 'ok',
+          baseline_run: {
+            run_id: 'run-1',
+            requested_logical_model: 'gpt-4',
+            status: 'succeeded',
+            output_preview: 'ok',
+          },
+        }),
+      });
+      onMessage({ event: 'done', data: '[DONE]' });
+    });
 
     const { result } = renderHook(
       () => useSendMessage('conv-1', undefined, 'test-model'),
-      { wrapper }
+      { wrapper: swrWrapper }
     );
 
     await result.current({ content: 'Hello' });
-
-    expect(messageService.sendMessage).toHaveBeenCalledWith('conv-1', {
-      content: 'Hello',
-      override_logical_model: 'test-model',
-    });
+    expect(streamSSERequest).toHaveBeenCalled();
   });
 
   it('should throw error when conversationId is null', async () => {
@@ -225,7 +241,7 @@ describe('useSendMessage', () => {
 
   it('should handle send errors', async () => {
     const error = new Error('Failed to send message');
-    vi.mocked(messageService.sendMessage).mockRejectedValue(error);
+    vi.mocked(streamSSERequest).mockRejectedValue(error);
 
     const { result } = renderHook(() => useSendMessage('conv-1'), { wrapper });
 
@@ -292,7 +308,7 @@ describe('useSendMessage', () => {
 
     const { result } = renderHook(() => useSendMessage('conv-1'), { wrapper: swrWrapper });
 
-    const response = await result.current({ content: 'Hello' }, { streaming: true });
+    const response = await result.current({ content: 'Hello' });
 
     expect(response.baseline_run.status).toBe('succeeded');
     expect(streamSSERequest).toHaveBeenCalled();
@@ -306,110 +322,122 @@ describe('useSendMessageToConversation', () => {
   });
 
   it('should send message with provided conversationId', async () => {
-    const mockResponse: SendMessageResponse = {
-      message_id: 'msg-2',
-      baseline_run: {
-        run_id: 'run-2',
-        requested_logical_model: 'gpt-4',
-        status: 'succeeded',
-        output_preview: 'Hi there!',
-        latency: 1200,
-      },
-    };
+    vi.mocked(streamSSERequest).mockImplementation(async (_url, init, onMessage) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      expect(body.content).toBe('Hello');
+      expect(body.streaming).toBe(true);
 
-    vi.mocked(messageService.sendMessage).mockResolvedValue(mockResponse);
+      onMessage({
+        event: 'message.completed',
+        data: JSON.stringify({
+          type: 'message.completed',
+          output_text: 'Hi there!',
+          baseline_run: {
+            run_id: 'run-2',
+            requested_logical_model: 'gpt-4',
+            status: 'succeeded',
+            output_preview: 'Hi there!',
+          },
+        }),
+      });
+      onMessage({ event: 'done', data: '[DONE]' });
+    });
 
-    const { result } = renderHook(() => useSendMessageToConversation(), { wrapper });
+    const { result } = renderHook(() => useSendMessageToConversation(), { wrapper: swrWrapper });
 
     const response = await result.current('conv-1', { content: 'Hello' });
 
-    expect(response).toEqual(mockResponse);
-    expect(messageService.sendMessage).toHaveBeenCalledWith('conv-1', {
-      content: 'Hello',
-    });
+    expect(response.baseline_run.status).toBe('succeeded');
+    expect(streamSSERequest).toHaveBeenCalled();
   });
 
   it('should pass override_logical_model when provided', async () => {
-    const mockResponse: SendMessageResponse = {
-      message_id: 'msg-2',
-      baseline_run: {
-        run_id: 'run-2',
-        requested_logical_model: 'gpt-4',
-        status: 'succeeded',
-        output_preview: 'Hi there!',
-        latency: 1200,
-      },
-    };
+    vi.mocked(streamSSERequest).mockImplementation(async (_url, init, onMessage) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      expect(body.override_logical_model).toBe('test-model');
 
-    vi.mocked(messageService.sendMessage).mockResolvedValue(mockResponse);
+      onMessage({
+        event: 'message.completed',
+        data: JSON.stringify({
+          type: 'message.completed',
+          output_text: 'ok',
+          baseline_run: {
+            run_id: 'run-2',
+            requested_logical_model: 'gpt-4',
+            status: 'succeeded',
+            output_preview: 'ok',
+          },
+        }),
+      });
+      onMessage({ event: 'done', data: '[DONE]' });
+    });
 
     const { result } = renderHook(
       () => useSendMessageToConversation(undefined, 'test-model'),
-      { wrapper }
+      { wrapper: swrWrapper }
     );
 
     await result.current('conv-1', { content: 'Hello' });
-
-    expect(messageService.sendMessage).toHaveBeenCalledWith('conv-1', {
-      content: 'Hello',
-      override_logical_model: 'test-model',
-    });
+    expect(streamSSERequest).toHaveBeenCalled();
   });
 
   it('should drop bridge payload when no bridge agents are available', async () => {
-    const mockResponse: SendMessageResponse = {
-      message_id: 'msg-3',
-      baseline_run: {
-        run_id: 'run-3',
-        requested_logical_model: 'gpt-4',
-        status: 'succeeded',
-        output_preview: 'Hi there!',
-        latency: 900,
-      },
-    };
-
     mockUseBridgeAgents.mockReturnValue({
       agents: [],
       error: null,
       loading: false,
       refresh: vi.fn(),
     });
-    vi.mocked(messageService.sendMessage).mockResolvedValue(mockResponse);
+    vi.mocked(streamSSERequest).mockImplementation(async (_url, init, onMessage) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      expect(body.bridge_agent_ids).toBeUndefined();
+      expect(body.bridge_tool_selections).toBeUndefined();
 
-    const { result } = renderHook(() => useSendMessageToConversation(), { wrapper });
+      onMessage({
+        event: 'message.completed',
+        data: JSON.stringify({
+          type: 'message.completed',
+          output_text: 'ok',
+          baseline_run: { run_id: 'run-3', requested_logical_model: 'gpt-4', status: 'succeeded' },
+        }),
+      });
+      onMessage({ event: 'done', data: '[DONE]' });
+    });
+
+    const { result } = renderHook(() => useSendMessageToConversation(), { wrapper: swrWrapper });
 
     await result.current('conv-1', {
       content: 'Hello',
       bridge_agent_ids: ['agent-1'],
       bridge_tool_selections: [{ agent_id: 'agent-1', tool_names: ['search'] }],
     });
-
-    expect(messageService.sendMessage).toHaveBeenCalledWith('conv-1', {
-      content: 'Hello',
-    });
+    expect(streamSSERequest).toHaveBeenCalled();
   });
 
   it('should keep bridge payload when bridge agents are available', async () => {
-    const mockResponse: SendMessageResponse = {
-      message_id: 'msg-4',
-      baseline_run: {
-        run_id: 'run-4',
-        requested_logical_model: 'gpt-4',
-        status: 'succeeded',
-        output_preview: 'Hi there!',
-        latency: 800,
-      },
-    };
-
     mockUseBridgeAgents.mockReturnValue({
       agents: [{ agent_id: 'agent-1' }],
       error: null,
       loading: false,
       refresh: vi.fn(),
     });
-    vi.mocked(messageService.sendMessage).mockResolvedValue(mockResponse);
+    vi.mocked(streamSSERequest).mockImplementation(async (_url, init, onMessage) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      expect(body.bridge_agent_ids).toEqual(['agent-1']);
+      expect(body.bridge_tool_selections).toEqual([{ agent_id: 'agent-1', tool_names: ['search'] }]);
 
-    const { result } = renderHook(() => useSendMessageToConversation(), { wrapper });
+      onMessage({
+        event: 'message.completed',
+        data: JSON.stringify({
+          type: 'message.completed',
+          output_text: 'ok',
+          baseline_run: { run_id: 'run-4', requested_logical_model: 'gpt-4', status: 'succeeded' },
+        }),
+      });
+      onMessage({ event: 'done', data: '[DONE]' });
+    });
+
+    const { result } = renderHook(() => useSendMessageToConversation(), { wrapper: swrWrapper });
 
     const payload = {
       content: 'Hello',
@@ -418,8 +446,7 @@ describe('useSendMessageToConversation', () => {
     };
 
     await result.current('conv-1', payload);
-
-    expect(messageService.sendMessage).toHaveBeenCalledWith('conv-1', payload);
+    expect(streamSSERequest).toHaveBeenCalled();
   });
 });
 
