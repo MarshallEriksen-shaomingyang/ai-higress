@@ -16,7 +16,7 @@ from app.http_client import CurlCffiClient
 from app.jwt_auth import AuthenticatedUser
 from app.logging_config import logger
 from app.models import APIKey, AssistantPreset, Conversation, Message, Run, User
-from app.redis_client import get_redis_client
+from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.repositories.chat_repository import persist_run, refresh_run
 from app.repositories.run_event_repository import append_run_event
 from app.services.bridge_gateway_client import BridgeGatewayClient
@@ -186,58 +186,58 @@ async def execute_chat_run(
     SessionFactory = SessionLocal
 
     redis = get_redis_client()
-
-    with SessionFactory() as db:
-        run = db.get(Run, run_uuid)
-        if run is None:
-            return "skipped:no_run"
-
-        if str(run.status or "") in {"succeeded", "failed", "canceled"}:
-            return "skipped:already_finished"
-
-        user = db.execute(select(User).where(User.id == run.user_id)).scalars().first()
-        if user is None:
-            return "failed:no_user"
-        current_user = _to_authenticated_user(user)
-
-        message = db.get(Message, UUID(str(run.message_id)))
-        if message is None:
-            return "failed:no_message"
-
-        conv = db.get(Conversation, UUID(str(message.conversation_id)))
-        if conv is None:
-            return "failed:no_conversation"
-
-        assistant = db.get(AssistantPreset, UUID(str(conv.assistant_id)))
-        if assistant is None:
-            return "failed:no_assistant"
-
-        ctx = resolve_project_context(db, project_id=UUID(str(conv.api_key_id)), current_user=current_user)
-        cfg = get_or_default_project_eval_config(db, project_id=ctx.project_id)
-        effective_provider_ids = get_effective_provider_ids_for_user(
-            db,
-            user_id=UUID(str(current_user.id)),
-            api_key=ctx.api_key,
-            provider_scopes=list(getattr(cfg, "provider_scopes", None) or DEFAULT_PROVIDER_SCOPES),
-        )
-        auth_key = _to_authenticated_api_key(db, api_key=ctx.api_key)
-
-        payload = dict(run.request_payload or {}) if isinstance(run.request_payload, dict) else {}
-        requested_model = str(getattr(run, "requested_logical_model", "") or "").strip()
-
-        bridge_agent_ids = list(effective_bridge_agent_ids or [])
-
-    async with CurlCffiClient(
-        timeout=settings.upstream_timeout,
-        impersonate="chrome120",
-        trust_env=True,
-    ) as client:
+    try:
         with SessionFactory() as db:
             run = db.get(Run, run_uuid)
             if run is None:
                 return "skipped:no_run"
 
+            if str(run.status or "") in {"succeeded", "failed", "canceled"}:
+                return "skipped:already_finished"
+
+            user = db.execute(select(User).where(User.id == run.user_id)).scalars().first()
+            if user is None:
+                return "failed:no_user"
+            current_user = _to_authenticated_user(user)
+
             message = db.get(Message, UUID(str(run.message_id)))
+            if message is None:
+                return "failed:no_message"
+
+            conv = db.get(Conversation, UUID(str(message.conversation_id)))
+            if conv is None:
+                return "failed:no_conversation"
+
+            assistant = db.get(AssistantPreset, UUID(str(conv.assistant_id)))
+            if assistant is None:
+                return "failed:no_assistant"
+
+            ctx = resolve_project_context(db, project_id=UUID(str(conv.api_key_id)), current_user=current_user)
+            cfg = get_or_default_project_eval_config(db, project_id=ctx.project_id)
+            effective_provider_ids = get_effective_provider_ids_for_user(
+                db,
+                user_id=UUID(str(current_user.id)),
+                api_key=ctx.api_key,
+                provider_scopes=list(getattr(cfg, "provider_scopes", None) or DEFAULT_PROVIDER_SCOPES),
+            )
+            auth_key = _to_authenticated_api_key(db, api_key=ctx.api_key)
+
+            payload = dict(run.request_payload or {}) if isinstance(run.request_payload, dict) else {}
+            requested_model = str(getattr(run, "requested_logical_model", "") or "").strip()
+
+            bridge_agent_ids = list(effective_bridge_agent_ids or [])
+
+        async with CurlCffiClient(
+            timeout=settings.upstream_timeout,
+            impersonate="chrome120",
+            trust_env=True,
+        ) as client:
+            with SessionFactory() as db:
+                run = db.get(Run, run_uuid)
+                if run is None:
+                    return "skipped:no_run"
+
+                message = db.get(Message, UUID(str(run.message_id)))
             if message is None:
                 return "failed:no_message"
             conv = db.get(Conversation, UUID(str(message.conversation_id)))
@@ -695,6 +695,8 @@ async def execute_chat_run(
                 },
             )
             return "done"
+    finally:
+        await close_redis_client_for_current_loop()
 
 
 @shared_task(name="tasks.execute_chat_run")

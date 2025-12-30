@@ -23,7 +23,7 @@ from app.http_client import CurlCffiClient
 from app.logging_config import logger
 from app.models import UpstreamProxyConfig, UpstreamProxyEndpoint, UpstreamProxySource
 from app.repositories.upstream_proxy_repository import get_or_create_proxy_config, upsert_endpoints
-from app.redis_client import get_redis_client
+from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.services.upstream_proxy.redis import (
     clear_runtime_pool,
     in_cooldown,
@@ -187,74 +187,77 @@ async def _rebuild_runtime_available_set(
 
 async def _check_health_and_sync(session: Session) -> int:
     redis = get_redis_client()
-    cfg = get_or_create_proxy_config(session)
-    await _sync_config_to_redis(redis, cfg)
+    try:
+        cfg = get_or_create_proxy_config(session)
+        await _sync_config_to_redis(redis, cfg)
 
-    # If disabled, just clear runtime pool and exit.
-    if not cfg.enabled:
-        await _rebuild_runtime_available_set(redis=redis, session=session, enabled=False)
-        return 0
+        # If disabled, just clear runtime pool and exit.
+        if not cfg.enabled:
+            await _rebuild_runtime_available_set(redis=redis, session=session, enabled=False)
+            return 0
 
-    now = utcnow()
-    min_interval = int(cfg.healthcheck_interval_seconds)
-    default_method = (cfg.healthcheck_method or "GET").upper()
-    default_check_url = cfg.healthcheck_url
-    default_timeout_ms = int(cfg.healthcheck_timeout_ms)
+        now = utcnow()
+        min_interval = int(cfg.healthcheck_interval_seconds)
+        default_method = (cfg.healthcheck_method or "GET").upper()
+        default_check_url = cfg.healthcheck_url
+        default_timeout_ms = int(cfg.healthcheck_timeout_ms)
 
-    stmt: Select[tuple[UpstreamProxyEndpoint]] = (
-        select(UpstreamProxyEndpoint)
-        .options(selectinload(UpstreamProxyEndpoint.source))
-        .join(UpstreamProxySource, UpstreamProxyEndpoint.source_id == UpstreamProxySource.id)
-        .where(
-            UpstreamProxyEndpoint.enabled.is_(True),
-            UpstreamProxySource.enabled.is_(True),
-        )
-    )
-    endpoints = list(session.execute(stmt).scalars().all())
-    to_check: list[UpstreamProxyEndpoint] = []
-    for ep in endpoints:
-        if ep.last_check_at is None:
-            to_check.append(ep)
-            continue
-        elapsed = (now - ep.last_check_at).total_seconds()
-        if elapsed >= min_interval:
-            to_check.append(ep)
-
-    # Limit concurrency to avoid creating too many TCP sockets at once.
-    concurrency = getattr(settings, "upstream_proxy_healthcheck_concurrency", 20)
-    sem = asyncio.Semaphore(int(concurrency))
-
-    async def _run_one(ep: UpstreamProxyEndpoint) -> None:
-        async with sem:
-            if await in_cooldown(redis, str(ep.id)):
-                return
-            # Source-level overrides (optional).
-            source = getattr(ep, "source", None)
-            check_url = getattr(source, "healthcheck_url", None) or default_check_url
-            method = (getattr(source, "healthcheck_method", None) or default_method).upper()
-            timeout_ms = int(getattr(source, "healthcheck_timeout_ms", None) or default_timeout_ms)
-            ok, latency_ms, err = await _check_endpoint(
-                redis=redis,
-                endpoint=ep,
-                check_url=check_url,
-                method=method,
-                timeout_ms=timeout_ms,
+        stmt: Select[tuple[UpstreamProxyEndpoint]] = (
+            select(UpstreamProxyEndpoint)
+            .options(selectinload(UpstreamProxyEndpoint.source))
+            .join(UpstreamProxySource, UpstreamProxyEndpoint.source_id == UpstreamProxySource.id)
+            .where(
+                UpstreamProxyEndpoint.enabled.is_(True),
+                UpstreamProxySource.enabled.is_(True),
             )
-            ep.last_check_at = utcnow()
-            ep.last_ok = ok
-            ep.last_latency_ms = latency_ms
-            if ok:
-                ep.consecutive_failures = 0
-                ep.last_error = None
-            else:
-                ep.consecutive_failures = int(ep.consecutive_failures or 0) + 1
-                ep.last_error = err
+        )
+        endpoints = list(session.execute(stmt).scalars().all())
+        to_check: list[UpstreamProxyEndpoint] = []
+        for ep in endpoints:
+            if ep.last_check_at is None:
+                to_check.append(ep)
+                continue
+            elapsed = (now - ep.last_check_at).total_seconds()
+            if elapsed >= min_interval:
+                to_check.append(ep)
 
-    await asyncio.gather(*[_run_one(ep) for ep in to_check])
-    session.commit()
+        # Limit concurrency to avoid creating too many TCP sockets at once.
+        concurrency = getattr(settings, "upstream_proxy_healthcheck_concurrency", 20)
+        sem = asyncio.Semaphore(int(concurrency))
 
-    await _rebuild_runtime_available_set(redis=redis, session=session, enabled=True)
-    return len(to_check)
+        async def _run_one(ep: UpstreamProxyEndpoint) -> None:
+            async with sem:
+                if await in_cooldown(redis, str(ep.id)):
+                    return
+                # Source-level overrides (optional).
+                source = getattr(ep, "source", None)
+                check_url = getattr(source, "healthcheck_url", None) or default_check_url
+                method = (getattr(source, "healthcheck_method", None) or default_method).upper()
+                timeout_ms = int(getattr(source, "healthcheck_timeout_ms", None) or default_timeout_ms)
+                ok, latency_ms, err = await _check_endpoint(
+                    redis=redis,
+                    endpoint=ep,
+                    check_url=check_url,
+                    method=method,
+                    timeout_ms=timeout_ms,
+                )
+                ep.last_check_at = utcnow()
+                ep.last_ok = ok
+                ep.last_latency_ms = latency_ms
+                if ok:
+                    ep.consecutive_failures = 0
+                    ep.last_error = None
+                else:
+                    ep.consecutive_failures = int(ep.consecutive_failures or 0) + 1
+                    ep.last_error = err
+
+        await asyncio.gather(*[_run_one(ep) for ep in to_check])
+        session.commit()
+
+        await _rebuild_runtime_available_set(redis=redis, session=session, enabled=True)
+        return len(to_check)
+    finally:
+        await close_redis_client_for_current_loop()
 
 
 @shared_task(name="tasks.upstream_proxy.refresh_sources")
@@ -264,8 +267,11 @@ def refresh_upstream_proxy_sources() -> int:
         async def _run() -> int:
             cfg = get_or_create_proxy_config(session)
             redis = get_redis_client()
-            await _sync_config_to_redis(redis, cfg)
-            return await _refresh_remote_sources(session)
+            try:
+                await _sync_config_to_redis(redis, cfg)
+                return await _refresh_remote_sources(session)
+            finally:
+                await close_redis_client_for_current_loop()
 
         return asyncio.run(_run())
     finally:

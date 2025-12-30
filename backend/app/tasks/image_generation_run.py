@@ -15,7 +15,7 @@ from app.auth import AuthenticatedAPIKey
 from app.db.session import SessionLocal
 from app.logging_config import logger
 from app.models import APIKey, Conversation, Message, Run, User
-from app.redis_client import get_redis_client
+from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.repositories.chat_repository import persist_run
 from app.repositories.run_event_repository import append_run_event
 from app.schemas.image import ImageGenerationRequest
@@ -116,214 +116,216 @@ async def execute_image_generation_run(
     SessionFactory = SessionLocal
 
     redis = get_redis_client()
+    try:
+        with SessionFactory() as db:
+            run = db.get(Run, run_uuid)
+            if run is None:
+                return "skipped:no_run"
 
-    with SessionFactory() as db:
-        run = db.get(Run, run_uuid)
-        if run is None:
-            return "skipped:no_run"
+            if str(run.status or "") in {"succeeded", "failed", "canceled"}:
+                return "skipped:already_finished"
 
-        if str(run.status or "") in {"succeeded", "failed", "canceled"}:
-            return "skipped:already_finished"
+            message = db.get(Message, UUID(str(run.message_id)))
+            if message is None:
+                return "failed:no_message"
 
-        message = db.get(Message, UUID(str(run.message_id)))
-        if message is None:
-            return "failed:no_message"
+            conv = db.get(Conversation, UUID(str(message.conversation_id)))
+            if conv is None:
+                return "failed:no_conversation"
 
-        conv = db.get(Conversation, UUID(str(message.conversation_id)))
-        if conv is None:
-            return "failed:no_conversation"
+            api_key = db.get(APIKey, UUID(str(run.api_key_id)))
+            if api_key is None:
+                return "failed:no_api_key"
 
-        api_key = db.get(APIKey, UUID(str(run.api_key_id)))
-        if api_key is None:
-            return "failed:no_api_key"
+            auth_key = _to_authenticated_api_key(db, api_key=api_key)
 
-        auth_key = _to_authenticated_api_key(db, api_key=api_key)
+            prompt = ""
+            request_payload: dict[str, Any] = {}
+            if isinstance(run.request_payload, dict):
+                request_payload = dict(run.request_payload)
+                prompt = str(request_payload.get("prompt") or "")
 
-        prompt = ""
-        request_payload: dict[str, Any] = {}
-        if isinstance(run.request_payload, dict):
-            request_payload = dict(run.request_payload)
-            prompt = str(request_payload.get("prompt") or "")
+            # 请求内/历史落库统一强制 url 返回（否则 b64 会写进 DB，影响性能与存储）。
+            request_payload["response_format"] = "url"
+            request_payload.pop("kind", None)
+            request_payload.pop("prompt", None)
 
-        # 请求内/历史落库统一强制 url 返回（否则 b64 会写进 DB，影响性能与存储）。
-        request_payload["response_format"] = "url"
-        request_payload.pop("kind", None)
-        request_payload.pop("prompt", None)
-
-        started_at = datetime.now(UTC)
-        run.status = "running"
-        run.started_at = started_at
-        db.add(run)
-        db.commit()
-
-        if streaming:
-            _append_run_event_and_publish_best_effort(
-                db,
-                redis=redis,
-                run_id=UUID(str(run.id)),
-                event_type="message.delta",
-                payload={
-                    "type": "message.delta",
-                    "conversation_id": str(conv.id),
-                    "assistant_message_id": assistant_message_id,
-                    "delta": "正在生成图片…",
-                    "kind": "image_generation",
-                },
-            )
-
-        request = ImageGenerationRequest.model_validate({**request_payload, "prompt": prompt})
-
-        t0 = time.perf_counter()
-        try:
-            async with httpx.AsyncClient(timeout=60) as http_client:
-                resp = await ImageAppService(
-                    client=http_client,
-                    redis=redis,
-                    db=db,
-                    api_key=auth_key,
-                ).generate_image(request)
-        except Exception as exc:
-            finished_at = datetime.now(UTC)
-            run.status = "failed"
-            run.finished_at = finished_at
-            run.latency_ms = int((time.perf_counter() - t0) * 1000)
-            run.error_code = "IMAGE_GENERATION_FAILED"
-            run.error_message = str(exc)[:512]
+            started_at = datetime.now(UTC)
+            run.status = "running"
+            run.started_at = started_at
             db.add(run)
             db.commit()
 
+            if streaming:
+                _append_run_event_and_publish_best_effort(
+                    db,
+                    redis=redis,
+                    run_id=UUID(str(run.id)),
+                    event_type="message.delta",
+                    payload={
+                        "type": "message.delta",
+                        "conversation_id": str(conv.id),
+                        "assistant_message_id": assistant_message_id,
+                        "delta": "正在生成图片…",
+                        "kind": "image_generation",
+                    },
+                )
+
+            request = ImageGenerationRequest.model_validate({**request_payload, "prompt": prompt})
+
+            t0 = time.perf_counter()
+            try:
+                async with httpx.AsyncClient(timeout=60) as http_client:
+                    resp = await ImageAppService(
+                        client=http_client,
+                        redis=redis,
+                        db=db,
+                        api_key=auth_key,
+                    ).generate_image(request)
+            except Exception as exc:
+                finished_at = datetime.now(UTC)
+                run.status = "failed"
+                run.finished_at = finished_at
+                run.latency_ms = int((time.perf_counter() - t0) * 1000)
+                run.error_code = "IMAGE_GENERATION_FAILED"
+                run.error_message = str(exc)[:512]
+                db.add(run)
+                db.commit()
+
+                content = {
+                    "type": "image_generation",
+                    "status": "failed",
+                    "prompt": prompt,
+                    "params": request_payload,
+                    "images": [],
+                    "error": str(exc),
+                }
+                try:
+                    finalize_assistant_image_generation_after_user_sequence(
+                        db,
+                        conversation_id=UUID(str(conv.id)),
+                        user_sequence=int(message.sequence or 0),
+                        content=content,
+                        preview_text=f"[图片生成失败] {prompt[:60]}",
+                    )
+                except Exception:
+                    logger.exception("finalize image_generation message failed (run_id=%s)", run_id)
+
+                _append_run_event_and_publish_best_effort(
+                    db,
+                    redis=redis,
+                    run_id=UUID(str(run.id)),
+                    event_type="message.failed",
+                    payload={
+                        "type": "message.failed",
+                        "conversation_id": str(conv.id),
+                        "assistant_message_id": assistant_message_id,
+                        "baseline_run": _run_to_summary(run),
+                        "error": str(exc),
+                        "kind": "image_generation",
+                    },
+                )
+                return "failed"
+
+            finished_at = datetime.now(UTC)
+            run.status = "succeeded"
+            run.finished_at = finished_at
+            run.latency_ms = int((time.perf_counter() - t0) * 1000)
+            run.output_preview = f"[图片] {prompt[:60]}".strip()
+            run.response_payload = resp.model_dump(mode="json")
+            db.add(run)
+            db.commit()
+
+            images: list[dict[str, Any]] = []
+            for item in resp.data or []:
+                url = getattr(item, "url", None)
+                revised = getattr(item, "revised_prompt", None)
+                b64_json = getattr(item, "b64_json", None)
+                if isinstance(url, str) and url:
+                    images.append(
+                        {
+                            "url": url,
+                            "object_key": _extract_object_key_from_media_url(url),
+                            "revised_prompt": revised,
+                        }
+                    )
+                elif isinstance(b64_json, str) and b64_json:
+                    images.append({"b64_json": b64_json, "revised_prompt": revised})
+
+            stored_images: list[dict[str, Any]] = []
+            for it in images:
+                if isinstance(it.get("object_key"), str) and str(it["object_key"]).strip():
+                    stored_images.append(
+                        {
+                            "object_key": str(it["object_key"]).strip(),
+                            "revised_prompt": it.get("revised_prompt"),
+                        }
+                    )
+                    continue
+                if isinstance(it.get("url"), str) and str(it["url"]).strip():
+                    stored_images.append(
+                        {
+                            "url": str(it["url"]).strip(),
+                            "revised_prompt": it.get("revised_prompt"),
+                        }
+                    )
+                    continue
+                if isinstance(it.get("b64_json"), str) and str(it["b64_json"]).strip():
+                    # 兜底：极端情况下 OSS 写入失败且未生成 data URL，这里保留 b64_json（会增大 DB 体积）。
+                    stored_images.append(
+                        {
+                            "b64_json": str(it["b64_json"]).strip(),
+                            "revised_prompt": it.get("revised_prompt"),
+                        }
+                    )
+
             content = {
                 "type": "image_generation",
-                "status": "failed",
+                "status": "succeeded",
                 "prompt": prompt,
                 "params": request_payload,
-                "images": [],
-                "error": str(exc),
+                "images": stored_images,
+                "created": int(getattr(resp, "created", None) or time.time()),
             }
-            try:
-                finalize_assistant_image_generation_after_user_sequence(
-                    db,
-                    conversation_id=UUID(str(conv.id)),
-                    user_sequence=int(message.sequence or 0),
-                    content=content,
-                    preview_text=f"[图片生成失败] {prompt[:60]}",
-                )
-            except Exception:
-                logger.exception("finalize image_generation message failed (run_id=%s)", run_id)
+
+            finalize_assistant_image_generation_after_user_sequence(
+                db,
+                conversation_id=UUID(str(conv.id)),
+                user_sequence=int(message.sequence or 0),
+                content=content,
+                preview_text=f"[图片] {prompt[:60]}",
+            )
 
             _append_run_event_and_publish_best_effort(
                 db,
                 redis=redis,
                 run_id=UUID(str(run.id)),
-                event_type="message.failed",
+                event_type="message.completed",
                 payload={
-                    "type": "message.failed",
+                    "type": "message.completed",
                     "conversation_id": str(conv.id),
                     "assistant_message_id": assistant_message_id,
                     "baseline_run": _run_to_summary(run),
-                    "error": str(exc),
                     "kind": "image_generation",
+                    "image_generation": {
+                        "type": "image_generation",
+                        "status": "succeeded",
+                        "prompt": prompt,
+                        "params": request_payload,
+                        "images": images,
+                        "created": int(getattr(resp, "created", None) or time.time()),
+                    },
                 },
             )
-            return "failed"
 
-        finished_at = datetime.now(UTC)
-        run.status = "succeeded"
-        run.finished_at = finished_at
-        run.latency_ms = int((time.perf_counter() - t0) * 1000)
-        run.output_preview = f"[图片] {prompt[:60]}".strip()
-        run.response_payload = resp.model_dump(mode="json")
-        db.add(run)
-        db.commit()
+            try:
+                persist_run(db, run)
+            except Exception:
+                pass
 
-        images: list[dict[str, Any]] = []
-        for item in resp.data or []:
-            url = getattr(item, "url", None)
-            revised = getattr(item, "revised_prompt", None)
-            b64_json = getattr(item, "b64_json", None)
-            if isinstance(url, str) and url:
-                images.append(
-                    {
-                        "url": url,
-                        "object_key": _extract_object_key_from_media_url(url),
-                        "revised_prompt": revised,
-                    }
-                )
-            elif isinstance(b64_json, str) and b64_json:
-                images.append({"b64_json": b64_json, "revised_prompt": revised})
-
-        stored_images: list[dict[str, Any]] = []
-        for it in images:
-            if isinstance(it.get("object_key"), str) and str(it["object_key"]).strip():
-                stored_images.append(
-                    {
-                        "object_key": str(it["object_key"]).strip(),
-                        "revised_prompt": it.get("revised_prompt"),
-                    }
-                )
-                continue
-            if isinstance(it.get("url"), str) and str(it["url"]).strip():
-                stored_images.append(
-                    {
-                        "url": str(it["url"]).strip(),
-                        "revised_prompt": it.get("revised_prompt"),
-                    }
-                )
-                continue
-            if isinstance(it.get("b64_json"), str) and str(it["b64_json"]).strip():
-                # 兜底：极端情况下 OSS 写入失败且未生成 data URL，这里保留 b64_json（会增大 DB 体积）。
-                stored_images.append(
-                    {
-                        "b64_json": str(it["b64_json"]).strip(),
-                        "revised_prompt": it.get("revised_prompt"),
-                    }
-                )
-
-        content = {
-            "type": "image_generation",
-            "status": "succeeded",
-            "prompt": prompt,
-            "params": request_payload,
-            "images": stored_images,
-            "created": int(getattr(resp, "created", None) or time.time()),
-        }
-
-        finalize_assistant_image_generation_after_user_sequence(
-            db,
-            conversation_id=UUID(str(conv.id)),
-            user_sequence=int(message.sequence or 0),
-            content=content,
-            preview_text=f"[图片] {prompt[:60]}",
-        )
-
-        _append_run_event_and_publish_best_effort(
-            db,
-            redis=redis,
-            run_id=UUID(str(run.id)),
-            event_type="message.completed",
-            payload={
-                "type": "message.completed",
-                "conversation_id": str(conv.id),
-                "assistant_message_id": assistant_message_id,
-                "baseline_run": _run_to_summary(run),
-                "kind": "image_generation",
-                "image_generation": {
-                    "type": "image_generation",
-                    "status": "succeeded",
-                    "prompt": prompt,
-                    "params": request_payload,
-                    "images": images,
-                    "created": int(getattr(resp, "created", None) or time.time()),
-                },
-            },
-        )
-
-        try:
-            persist_run(db, run)
-        except Exception:
-            pass
-
-        return "done"
+            return "done"
+    finally:
+        await close_redis_client_for_current_loop()
 
 
 @shared_task(name="tasks.execute_image_generation_run")

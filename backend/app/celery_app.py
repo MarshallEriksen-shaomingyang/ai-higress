@@ -69,6 +69,12 @@ def init_worker_logging(**kwargs):
     这确保任务执行时的 logger.info/debug/error 等调用能正确输出到控制台和日志文件。
     """
     setup_logging()
+    try:
+        from app.db import engine
+
+        engine.dispose()
+    except Exception:
+        pass
 
 
 @beat_init.connect

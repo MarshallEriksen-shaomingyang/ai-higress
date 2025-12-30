@@ -12,7 +12,7 @@ from celery import shared_task
 
 from app.celery_app import celery_app
 from app.db import SessionLocal
-from app.redis_client import get_redis_client
+from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.services.user_probe_service import run_due_user_probe_tasks
 from app.settings import settings
 
@@ -29,11 +29,14 @@ def run_due_user_probes() -> int:
     try:
         async def _run() -> int:
             redis = get_redis_client()
-            return await run_due_user_probe_tasks(
-                session=session,
-                redis=redis,
-                max_tasks=settings.user_probe_max_due_tasks_per_tick,
-            )
+            try:
+                return await run_due_user_probe_tasks(
+                    session=session,
+                    redis=redis,
+                    max_tasks=settings.user_probe_max_due_tasks_per_tick,
+                )
+            finally:
+                await close_redis_client_for_current_loop()
 
         return asyncio.run(_run())
     finally:

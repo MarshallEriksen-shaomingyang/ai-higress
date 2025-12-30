@@ -13,7 +13,7 @@ from app.http_client import CurlCffiClient
 from app.jwt_auth import AuthenticatedUser
 from app.logging_config import logger
 from app.models import APIKey, AssistantPreset, Conversation, Message, User
-from app.redis_client import get_redis_client
+from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.services.chat_app_service import _maybe_auto_title_conversation
 from app.services.project_eval_config_service import (
     DEFAULT_PROVIDER_SCOPES,
@@ -112,28 +112,31 @@ async def generate_conversation_title(
         )
 
         redis = _get_title_redis()
-        async with _title_http_client() as client:
-            def _safe_user_text(value: Any) -> str:
-                if isinstance(value, str):
-                    return value
-                if isinstance(value, dict):
-                    text = value.get("text")
-                    if isinstance(text, str):
-                        return text
-                return ""
+        try:
+            async with _title_http_client() as client:
+                def _safe_user_text(value: Any) -> str:
+                    if isinstance(value, str):
+                        return value
+                    if isinstance(value, dict):
+                        text = value.get("text")
+                        if isinstance(text, str):
+                            return text
+                    return ""
 
-            await _maybe_auto_title_conversation(
-                db,
-                redis=redis,
-                client=client,
-                current_user=auth_user,
-                conv=conv,
-                assistant=assistant,
-                effective_provider_ids=effective_provider_ids,
-                user_text=_safe_user_text(message.content),
-                user_sequence=int(message.sequence or 0),
-                requested_model_for_title_fallback=requested_model_for_title_fallback or "",
-            )
+                await _maybe_auto_title_conversation(
+                    db,
+                    redis=redis,
+                    client=client,
+                    current_user=auth_user,
+                    conv=conv,
+                    assistant=assistant,
+                    effective_provider_ids=effective_provider_ids,
+                    user_text=_safe_user_text(message.content),
+                    user_sequence=int(message.sequence or 0),
+                    requested_model_for_title_fallback=requested_model_for_title_fallback or "",
+                )
+        finally:
+            await close_redis_client_for_current_loop()
         return "done"
 
 

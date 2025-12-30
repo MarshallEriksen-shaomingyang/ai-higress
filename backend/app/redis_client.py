@@ -10,6 +10,7 @@ provider components do not duplicate this logic.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from typing import Any
 from weakref import WeakKeyDictionary
@@ -55,6 +56,49 @@ def get_redis_client() -> Redis:
     return client
 
 
+async def _maybe_await(result: Any) -> None:
+    if inspect.isawaitable(result):
+        await result
+
+
+async def close_redis_client(client: Any) -> None:
+    """
+    Best-effort close for redis-py asyncio client instances.
+
+    This is primarily used by short-lived event loops (e.g. Celery tasks using
+    asyncio.run), to avoid leaking TCP sockets / file descriptors.
+    """
+
+    close_fn = getattr(client, "aclose", None)
+    if callable(close_fn):
+        await _maybe_await(close_fn())
+    else:
+        close_fn = getattr(client, "close", None)
+        if callable(close_fn):
+            await _maybe_await(close_fn())
+
+    # As a final safety net, try disconnecting the underlying connection pool.
+    pool = getattr(client, "connection_pool", None)
+    disconnect_fn = getattr(pool, "disconnect", None)
+    if callable(disconnect_fn):
+        try:
+            await _maybe_await(disconnect_fn(inuse_connections=True))
+        except TypeError:
+            await _maybe_await(disconnect_fn())
+
+
+async def close_redis_client_for_current_loop() -> None:
+    """
+    Close and forget the cached Redis client for the current running loop.
+    """
+
+    loop = _ensure_event_loop()
+    client = _redis_clients_by_loop.pop(loop, None)
+    if client is None:
+        return
+    await close_redis_client(client)
+
+
 async def redis_get_json(redis: Redis, key: str) -> Any | None:
     """
     Convenience wrapper that loads a JSON value from Redis.
@@ -90,4 +134,11 @@ async def redis_delete(redis: Redis, key: str) -> None:
     await redis.delete(key)
 
 
-__all__ = ["get_redis_client", "redis_delete", "redis_get_json", "redis_set_json"]
+__all__ = [
+    "close_redis_client",
+    "close_redis_client_for_current_loop",
+    "get_redis_client",
+    "redis_delete",
+    "redis_get_json",
+    "redis_set_json",
+]

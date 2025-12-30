@@ -16,7 +16,7 @@ from celery import shared_task
 
 from app.celery_app import celery_app
 from app.logging_config import logger
-from app.redis_client import get_redis_client
+from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.services.token_redis_service import USER_SESSIONS_KEY, TokenRedisService
 from app.settings import settings
 
@@ -29,33 +29,36 @@ async def _cleanup_all_sessions() -> int:
         实际移除的会话总数
     """
     redis = get_redis_client()
-    service = TokenRedisService(redis)
+    try:
+        service = TokenRedisService(redis)
 
-    # 使用 Redis 的 scan_iter 逐步扫描，以避免阻塞
-    pattern = USER_SESSIONS_KEY.format(user_id="*")
-    total_removed = 0
+        # 使用 Redis 的 scan_iter 逐步扫描，以避免阻塞
+        pattern = USER_SESSIONS_KEY.format(user_id="*")
+        total_removed = 0
 
-    async for key in redis.scan_iter(match=pattern):
-        # 预期 key 形如 auth:user:{user_id}:sessions
-        try:
-            # 不强依赖精确的分段数量，最低保证 user_id 在倒数第二段
-            parts = str(key).split(":")
-            if len(parts) < 4:
+        async for key in redis.scan_iter(match=pattern):
+            # 预期 key 形如 auth:user:{user_id}:sessions
+            try:
+                # 不强依赖精确的分段数量，最低保证 user_id 在倒数第二段
+                parts = str(key).split(":")
+                if len(parts) < 4:
+                    continue
+                user_id = parts[2]
+            except Exception:
                 continue
-            user_id = parts[2]
-        except Exception:
-            continue
 
-        removed = await service.cleanup_user_sessions(user_id)
-        if removed:
-            total_removed += removed
-            logger.info(
-                "Cleaned %s invalid sessions for user %s",
-                removed,
-                user_id,
-            )
+            removed = await service.cleanup_user_sessions(user_id)
+            if removed:
+                total_removed += removed
+                logger.info(
+                    "Cleaned %s invalid sessions for user %s",
+                    removed,
+                    user_id,
+                )
 
-    return total_removed
+        return total_removed
+    finally:
+        await close_redis_client_for_current_loop()
 
 
 @shared_task(name="tasks.sessions.cleanup_all")

@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from celery import shared_task
 
 from app.logging_config import logger
-from app.redis_client import get_redis_client
+from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.services.logical_model_sync import sync_logical_models
 
 
@@ -46,13 +46,16 @@ def sync_logical_models_task(provider_ids: Sequence[str] | None = None) -> int:
 
     async def _run() -> int:
         redis = get_redis_client()
-        logical_models = await sync_logical_models(redis, provider_ids=provider_ids)
-        logger.info(
-            "Celery sync_logical_models_task finished: %d logical models synced (providers=%s)",
-            len(logical_models),
-            list(provider_ids) if provider_ids is not None else "ALL",
-        )
-        return len(logical_models)
+        try:
+            logical_models = await sync_logical_models(redis, provider_ids=provider_ids)
+            logger.info(
+                "Celery sync_logical_models_task finished: %d logical models synced (providers=%s)",
+                len(logical_models),
+                list(provider_ids) if provider_ids is not None else "ALL",
+            )
+            return len(logical_models)
+        finally:
+            await close_redis_client_for_current_loop()
 
     # 在 Celery 同步任务中执行异步逻辑。
     return asyncio.run(_run())

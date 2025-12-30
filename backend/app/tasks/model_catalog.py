@@ -10,7 +10,7 @@ from celery import shared_task
 
 from app.celery_app import celery_app
 from app.logging_config import logger
-from app.redis_client import get_redis_client
+from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.services.model_catalog_service import refresh_models_dev_catalog
 from app.settings import settings
 
@@ -23,7 +23,10 @@ def refresh_models_dev_catalog_task() -> dict:
 
     async def _run():
         redis = get_redis_client()
-        return await refresh_models_dev_catalog(redis, force=False)
+        try:
+            return await refresh_models_dev_catalog(redis, force=False)
+        finally:
+            await close_redis_client_for_current_loop()
 
     result = asyncio.run(_run())
     logger.info(

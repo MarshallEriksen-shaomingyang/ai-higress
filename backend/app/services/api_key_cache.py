@@ -7,7 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.logging_config import logger
 from app.models import APIKey
-from app.redis_client import get_redis_client, redis_delete, redis_get_json, redis_set_json
+from app.redis_client import (
+    close_redis_client_for_current_loop,
+    get_redis_client,
+    redis_delete,
+    redis_get_json,
+    redis_set_json,
+)
 
 CACHE_KEY_TEMPLATE = "auth:api-key:{key_hash}"
 CACHE_TTL_SECONDS = 600
@@ -95,8 +101,11 @@ def cache_api_key_sync(api_key: APIKey) -> None:
 
     async def _cache() -> None:
         redis = get_redis_client()
-        entry = build_cache_entry(api_key)
-        await cache_api_key(redis, api_key.key_hash, entry)
+        try:
+            entry = build_cache_entry(api_key)
+            await cache_api_key(redis, api_key.key_hash, entry)
+        finally:
+            await close_redis_client_for_current_loop()
 
     try:
         asyncio.run(_cache())
@@ -111,7 +120,10 @@ def invalidate_api_key_cache_sync(key_hash: str) -> None:
 
     async def _invalidate() -> None:
         redis = get_redis_client()
-        await invalidate_cached_api_key(redis, key_hash)
+        try:
+            await invalidate_cached_api_key(redis, key_hash)
+        finally:
+            await close_redis_client_for_current_loop()
 
     try:
         asyncio.run(_invalidate())
