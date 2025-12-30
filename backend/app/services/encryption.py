@@ -51,7 +51,7 @@ def decrypt_secret(token: bytes | str) -> str:
     try:
         plaintext = _get_fernet().decrypt(token_bytes)
     except InvalidToken as exc:  # pragma: no cover - defensive guard
-        logger.error("Failed to decrypt secret: %s", exc)
+        logger.error(f"Failed to decrypt secret: {exc}")
         raise ValueError("Invalid encrypted payload") from exc
     return plaintext.decode("utf-8")
 

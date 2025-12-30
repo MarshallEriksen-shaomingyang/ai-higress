@@ -487,7 +487,7 @@ async def execute_run_stream(
             lookup_model_id=requested_logical_model,
             api_style=api_style,
             effective_provider_ids=effective_provider_ids,
-            session_id=str(conversation.id),
+            request_id=str(conversation.id),
             assistant_id=UUID(str(assistant.id)),
             provider_id_sink=_sink,
             idempotency_key=f"eval_run:{run_id_str}",
