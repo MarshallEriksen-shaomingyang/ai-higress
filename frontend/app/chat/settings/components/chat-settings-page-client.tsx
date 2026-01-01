@@ -24,11 +24,17 @@ import { useSelectableTtsModels } from "@/lib/swr/use-selectable-tts-models";
 import { ChatSettingsPreferences } from "./chat-settings-preferences";
 
 const DISABLE_VALUE = "__disable__";
+const TTS_FORMAT_VALUES = ["mp3", "opus", "aac", "wav", "ogg", "flac", "aiff", "pcm"] as const;
+type TtsFormatValue = (typeof TTS_FORMAT_VALUES)[number];
+
+function isTtsFormatValue(value: string): value is TtsFormatValue {
+  return (TTS_FORMAT_VALUES as readonly string[]).includes(value);
+}
 
 export function ChatSettingsPageClient() {
   const { t } = useI18n();
   const { selectedProjectId } = useChatStore();
-  const { preferences, setPreferredTtsModel } = useUserPreferencesStore();
+  const { preferences, setPreferredTtsModel, setPreferredTtsFormat } = useUserPreferencesStore();
 
   const { settings, mutate: mutateProjectSettings } = useProjectChatSettings(selectedProjectId);
   const updateProjectSettings = useUpdateProjectChatSettings();
@@ -57,6 +63,8 @@ export function ChatSettingsPageClient() {
 
   const projectTtsModelValue =
     (selectedProjectId && preferences.preferredTtsModelByProject[selectedProjectId]) || null;
+  const projectTtsFormatValue =
+    (selectedProjectId && preferences.preferredTtsFormatByProject[selectedProjectId]) || null;
   const { filterOptions: filterTtsOptions } = useSelectableTtsModels(selectedProjectId, {
     extraModels: [projectTtsModelValue],
   });
@@ -72,6 +80,20 @@ export function ChatSettingsPageClient() {
       setPreferredTtsModel(selectedProjectId, null);
     } else {
       setPreferredTtsModel(selectedProjectId, next);
+    }
+    toast.success(t("chat.settings.saved"));
+  };
+
+  const updateProjectTtsFormat = (value: string) => {
+    if (!selectedProjectId) return;
+    const next = (value || "").trim();
+    if (!next || next === DISABLE_VALUE) {
+      setPreferredTtsFormat(selectedProjectId, null);
+    } else if (isTtsFormatValue(next)) {
+      setPreferredTtsFormat(selectedProjectId, next);
+    } else {
+      console.warn("Unexpected TTS response_format:", next);
+      setPreferredTtsFormat(selectedProjectId, null);
     }
     toast.success(t("chat.settings.saved"));
   };
@@ -199,6 +221,34 @@ export function ChatSettingsPageClient() {
                   </Select>
                   <div className="text-xs text-muted-foreground">
                     {t("chat.settings.project.tts_model_help")}
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium">{t("chat.settings.project.tts_format")}</div>
+                  <Select
+                    value={projectTtsFormatValue ?? DISABLE_VALUE}
+                    onValueChange={(value) => updateProjectTtsFormat(value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("chat.settings.project.tts_format_placeholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={DISABLE_VALUE}>
+                        {t("chat.settings.project.tts_format_default")}
+                      </SelectItem>
+                      <SelectItem value="mp3">{t("chat.settings.project.tts_format_mp3")}</SelectItem>
+                      <SelectItem value="opus">{t("chat.settings.project.tts_format_opus")}</SelectItem>
+                      <SelectItem value="aac">{t("chat.settings.project.tts_format_aac")}</SelectItem>
+                      <SelectItem value="wav">{t("chat.settings.project.tts_format_wav")}</SelectItem>
+                      <SelectItem value="ogg">{t("chat.settings.project.tts_format_ogg")}</SelectItem>
+                      <SelectItem value="flac">{t("chat.settings.project.tts_format_flac")}</SelectItem>
+                      <SelectItem value="aiff">{t("chat.settings.project.tts_format_aiff")}</SelectItem>
+                      <SelectItem value="pcm">{t("chat.settings.project.tts_format_pcm")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-muted-foreground">
+                    {t("chat.settings.project.tts_format_help")}
                   </div>
                 </div>
 

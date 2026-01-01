@@ -419,7 +419,7 @@ class TTSAppService:
             cache_overflow = False
 
             last_status: int | None = None
-            last_error: str | None = None
+            last_error_detail: Any | None = None
 
             for scored in selection.ordered_candidates:
                 cand = scored.upstream
@@ -433,7 +433,7 @@ class TTSAppService:
                 cfg = provider_config.get_provider_config(provider_id, session=self.db)
                 if cfg is None:
                     last_status = status.HTTP_503_SERVICE_UNAVAILABLE
-                    last_error = f"Provider '{provider_id}' is not configured"
+                    last_error_detail = {"message": f"Provider '{provider_id}' is not configured"}
                     await self.routing_state.increment_provider_failure(provider_id)
                     continue
 
@@ -441,7 +441,7 @@ class TTSAppService:
                     key_selection = await acquire_provider_key(cfg, self.redis)
                 except NoAvailableProviderKey as exc:
                     last_status = status.HTTP_503_SERVICE_UNAVAILABLE
-                    last_error = str(exc)
+                    last_error_detail = {"message": str(exc)}
                     await self.routing_state.increment_provider_failure(provider_id)
                     continue
 
@@ -505,10 +505,13 @@ class TTSAppService:
 
                 except HTTPException as exc:
                     last_status = int(exc.status_code)
-                    last_error = str(exc.detail)
+                    if isinstance(exc.detail, dict):
+                        last_error_detail = exc.detail
+                    else:
+                        last_error_detail = {"message": str(exc.detail)}
                     record_key_failure(
                         key_selection,
-                        retryable=True,
+                        retryable=not (400 <= int(exc.status_code) < 500),
                         status_code=last_status,
                         redis=self.redis,
                     )
@@ -535,7 +538,7 @@ class TTSAppService:
                     continue
                 except Exception as exc:
                     last_status = status.HTTP_503_SERVICE_UNAVAILABLE
-                    last_error = str(exc)
+                    last_error_detail = {"message": str(exc)}
                     record_key_failure(
                         key_selection, retryable=True, status_code=None, redis=self.redis
                     )
@@ -563,10 +566,40 @@ class TTSAppService:
 
             raise HTTPException(
                 status_code=int(last_status or status.HTTP_503_SERVICE_UNAVAILABLE),
-                detail={"message": last_error or "所有提供商均不可用"},
+                detail=(
+                    last_error_detail
+                    if isinstance(last_error_detail, dict) and last_error_detail
+                    else {"message": "所有提供商均不可用"}
+                ),
             )
         finally:
             await self._release_lock(key=lock_key)
+
+    async def generate_speech_bytes(self, request: SpeechRequest) -> bytes:
+        """
+        生成完整音频并一次性返回 bytes。
+
+        说明：StreamingResponse 会在真正拉到上游数据前就发送 200 + Content-Type。
+        若上游随后失败，客户端可能收到 200 但无音频数据（浏览器播放会报 NotSupportedError）。
+        这里通过“先生成再返回”的方式，确保失败能正确以 4xx/5xx 响应返回。
+        """
+        buf = bytearray()
+        async for chunk in self.stream_speech(request):
+            if not chunk:
+                continue
+            if len(buf) + len(chunk) > _MAX_CACHE_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail={"message": "TTS 音频输出过大"},
+                )
+            buf.extend(chunk)
+
+        if not buf:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"message": "TTS 未返回音频数据"},
+            )
+        return bytes(buf)
 
     def _resolve_effective_provider_ids(self) -> set[str]:
         accessible_provider_ids = get_accessible_provider_ids(self.db, self.api_key.user_id)
@@ -630,7 +663,11 @@ class TTSAppService:
                 )
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail={"message": f"upstream HTTP {resp.status_code}", "provider": provider_id},
+                    detail={
+                        "message": f"upstream HTTP {resp.status_code}",
+                        "provider": provider_id,
+                        "upstream_body": text[:800],
+                    },
                 )
             async for chunk in resp.aiter_bytes(chunk_size=_CACHE_CHUNK_SIZE):
                 if chunk:

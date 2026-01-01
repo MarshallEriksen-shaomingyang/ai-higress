@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import select
 from fastapi.encoders import jsonable_encoder
@@ -1064,7 +1064,7 @@ async def stream_run_events_endpoint(
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(require_jwt_token),
-) -> StreamingResponse:
+) -> Response:
     """
     RunEvent 事件流订阅（SSE replay）：
     - 先从 DB 真相回放缺失事件（after_seq 之后）
@@ -1277,8 +1277,9 @@ async def message_speech_endpoint(
     )
 
     service = TTSAppService(client=client, redis=redis, db=db, api_key=auth_key)
-    return StreamingResponse(
-        service.stream_speech(req),
+    audio_bytes = await service.generate_speech_bytes(req)
+    return Response(
+        content=audio_bytes,
         media_type=_content_type_for_format(req.response_format),
     )
 

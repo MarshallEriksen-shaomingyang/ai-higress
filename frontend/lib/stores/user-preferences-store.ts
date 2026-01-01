@@ -15,6 +15,11 @@ export interface UserPreferences {
   preferredImageModelByProject: Record<string, string>;
   /** 用户偏好的语音模型（TTS，按项目存储） */
   preferredTtsModelByProject: Record<string, string>;
+  /** 用户偏好的语音返回格式（TTS，按项目存储） */
+  preferredTtsFormatByProject: Record<
+    string,
+    "mp3" | "opus" | "aac" | "wav" | "pcm" | "ogg" | "flac" | "aiff"
+  >;
 }
 
 /**
@@ -26,6 +31,10 @@ interface UserPreferencesState {
   setPreferredChatModel: (projectId: string | null | undefined, model: string | null) => void;
   setPreferredImageModel: (projectId: string | null | undefined, model: string | null) => void;
   setPreferredTtsModel: (projectId: string | null | undefined, model: string | null) => void;
+  setPreferredTtsFormat: (
+    projectId: string | null | undefined,
+    format: UserPreferences["preferredTtsFormatByProject"][string] | null
+  ) => void;
   resetPreferences: () => void;
 }
 
@@ -37,6 +46,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   preferredChatModelByProject: {},
   preferredImageModelByProject: {},
   preferredTtsModelByProject: {},
+  preferredTtsFormatByProject: {},
 };
 
 /**
@@ -97,6 +107,21 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
             preferences: { ...state.preferences, preferredTtsModelByProject: next },
           };
         }),
+
+      setPreferredTtsFormat: (projectId, format) =>
+        set((state) => {
+          const key = (projectId || "").trim();
+          if (!key) return state;
+          const next = { ...state.preferences.preferredTtsFormatByProject };
+          if (!format) {
+            delete next[key];
+          } else {
+            next[key] = format;
+          }
+          return {
+            preferences: { ...state.preferences, preferredTtsFormatByProject: next },
+          };
+        }),
       
       resetPreferences: () =>
         set({ preferences: DEFAULT_PREFERENCES }),
@@ -104,7 +129,7 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
     {
       name: "user-preferences", // localStorage key
       storage: createJSONStorage(() => localStorage),
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown, version: number) => {
         if (!persistedState || typeof persistedState !== "object") {
           return { preferences: DEFAULT_PREFERENCES };
@@ -121,10 +146,11 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
           preferredChatModelByProject: prefs.preferredChatModelByProject ?? {},
           preferredImageModelByProject: prefs.preferredImageModelByProject ?? {},
           preferredTtsModelByProject: prefs.preferredTtsModelByProject ?? {},
+          preferredTtsFormatByProject: (prefs as any).preferredTtsFormatByProject ?? {},
         };
 
         // 如果版本号未变化，也直接返回合并后的结构
-        if (version >= 3) {
+        if (version >= 4) {
           return { preferences: next };
         }
         return { preferences: next };

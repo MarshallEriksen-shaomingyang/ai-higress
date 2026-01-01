@@ -16,6 +16,14 @@ declare global {
   }
 }
 
+function isNotSupportedMediaError(err: unknown): boolean {
+  const anyErr = err as { name?: unknown; message?: unknown };
+  const name = typeof anyErr?.name === "string" ? anyErr.name : "";
+  if (name === "NotSupportedError") return true;
+  const message = typeof anyErr?.message === "string" ? anyErr.message : String(err ?? "");
+  return message.toLowerCase().includes("no supported source");
+}
+
 export interface MessageTtsControlProps {
   messageId: string;
   projectId?: string | null;
@@ -33,26 +41,43 @@ export function MessageTtsControl({
   const { getAudio, loading } = useMessageSpeechAudio(messageId);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const preferredTtsModel = useUserPreferencesStore(
-    (s) => (projectId && s.preferences.preferredTtsModelByProject[projectId]) || null
-  );
+  const preferredTtsModel = useUserPreferencesStore((s) => {
+    const key = (projectId || "").trim();
+    if (!key) return null;
+    return s.preferences.preferredTtsModelByProject?.[key] ?? null;
+  });
+  const preferredTtsFormat = useUserPreferencesStore((s) => {
+    const key = (projectId || "").trim();
+    if (!key) return null;
+    return s.preferences.preferredTtsFormatByProject?.[key] ?? null;
+  });
   const effectiveModel = preferredTtsModel || fallbackModel;
+  const effectiveFormat = preferredTtsFormat || "mp3";
 
   const payload = useMemo<MessageSpeechRequest>(
     () => ({
       model: effectiveModel || undefined,
       voice: "alloy",
-      response_format: "wav",
+      response_format: effectiveFormat,
       speed: 1.0,
     }),
-    [effectiveModel]
+    [effectiveFormat, effectiveModel]
   );
 
-  const stop = useCallback(() => {
+  const resetAudio = useCallback(() => {
     const a = audioRef.current;
-    if (!a) return;
-    a.pause();
-    a.currentTime = 0;
+    if (window.__apiproxy_tts_audio__ === a) {
+      window.__apiproxy_tts_audio__ = null;
+    }
+    if (a) {
+      try {
+        a.pause();
+        a.currentTime = 0;
+      } catch {
+        // 忽略清理过程中的媒体状态异常
+      }
+    }
+    audioRef.current = null;
     setIsPlaying(false);
   }, []);
 
@@ -65,15 +90,22 @@ export function MessageTtsControl({
 
     try {
       if (audioRef.current) {
-        // 确保同一时间只有一个音频播放
-        if (window.__apiproxy_tts_audio__ && window.__apiproxy_tts_audio__ !== audioRef.current) {
-          window.__apiproxy_tts_audio__.pause();
-        }
-        window.__apiproxy_tts_audio__ = audioRef.current;
+        try {
+          // 确保同一时间只有一个音频播放
+          if (window.__apiproxy_tts_audio__ && window.__apiproxy_tts_audio__ !== audioRef.current) {
+            window.__apiproxy_tts_audio__.pause();
+          }
+          window.__apiproxy_tts_audio__ = audioRef.current;
 
-        await audioRef.current.play();
-        setIsPlaying(true);
-        return;
+          await audioRef.current.play();
+          setIsPlaying(true);
+          return;
+        } catch (err) {
+          // Object URL 可能已被缓存层淘汰并 revoke，或浏览器无法识别旧音源；
+          // 这类情况下需要清理本地引用并重新拉取音频，否则会“点击播放不发请求直接报错”。
+          if (!isNotSupportedMediaError(err)) throw err;
+          resetAudio();
+        }
       }
 
       const result = await getAudio(payload);
@@ -100,11 +132,10 @@ export function MessageTtsControl({
       await next.play();
       setIsPlaying(true);
     } catch (err) {
-      console.error("TTS play failed:", err);
       toast.error(t("chat.tts.failed"));
-      stop();
+      resetAudio();
     }
-  }, [disabled, effectiveModel, getAudio, payload, stop, t]);
+  }, [disabled, effectiveModel, getAudio, payload, resetAudio, t]);
 
   const toggle = useCallback(() => {
     if (disabled) return;

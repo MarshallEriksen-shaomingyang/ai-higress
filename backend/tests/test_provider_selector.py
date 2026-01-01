@@ -35,9 +35,12 @@ def provider_selector(mock_client, mock_redis, mock_db):
     routing_state.get_cached_health_status = AsyncMock(return_value=None)
     routing_state.load_metrics_for_candidates = AsyncMock(return_value={})
     routing_state.load_dynamic_weights = AsyncMock(return_value={})
-    return ProviderSelector(
+    provider_selector = ProviderSelector(
         client=mock_client, redis=mock_redis, db=mock_db, routing_state=routing_state
     )
+    # Avoid hitting mocked DB internals in unit tests.
+    provider_selector._load_disabled_pairs = MagicMock(return_value=set())
+    return provider_selector
 
 
 @pytest.fixture
@@ -76,8 +79,6 @@ async def test_select_orders_candidates_selected_first(provider_selector, sample
     with patch.object(provider_selector, "_resolve_logical_model") as mock_resolve, patch(
         "app.api.v1.chat.provider_selector.select_candidate_upstreams"
     ) as mock_select_upstreams, patch(
-        "app.api.v1.chat.provider_selector.get_session"
-    ) as mock_get_session, patch(
         "app.api.v1.chat.provider_selector.choose_upstream"
     ) as mock_choose, patch(
         "app.api.v1.chat.provider_selector.settings"
@@ -85,7 +86,6 @@ async def test_select_orders_candidates_selected_first(provider_selector, sample
         mock_settings.enable_provider_health_check = False
         mock_resolve.return_value = sample_logical_model
         mock_select_upstreams.return_value = list(sample_logical_model.upstreams)
-        mock_get_session.return_value = None
 
         selected = CandidateScore(upstream=sample_logical_model.upstreams[1], score=0.9, metrics=None)
         scored = [
@@ -99,7 +99,6 @@ async def test_select_orders_candidates_selected_first(provider_selector, sample
             lookup_model_id="gpt-4",
             api_style="openai",
             effective_provider_ids={"openai", "azure"},
-            session_id=None,
             user_id=None,
             is_superuser=False,
         )
@@ -133,7 +132,6 @@ async def test_select_filters_by_effective_provider_ids(provider_selector, sampl
             lookup_model_id="gpt-4",
             api_style="openai",
             effective_provider_ids={"openai"},
-            session_id=None,
             user_id=None,
             is_superuser=False,
         )
@@ -184,7 +182,6 @@ async def test_select_uses_state_metrics_and_weights(provider_selector, sample_l
             lookup_model_id="gpt-4",
             api_style="openai",
             effective_provider_ids={"openai", "azure"},
-            session_id=None,
             user_id=None,
             is_superuser=False,
         )

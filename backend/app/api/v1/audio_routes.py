@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.auth import AuthenticatedAPIKey, require_api_key
@@ -35,9 +35,9 @@ async def create_speech(
 ):
     try:
         service = TTSAppService(client=client, redis=redis, db=db, api_key=current_key)
-        generator = service.stream_speech(request)
-        return StreamingResponse(
-            generator,
+        audio_bytes = await service.generate_speech_bytes(request)
+        return Response(
+            content=audio_bytes,
             media_type=_content_type_for_format(request.response_format),
         )
     except HTTPException:
@@ -50,4 +50,3 @@ async def create_speech(
 
 
 __all__ = ["router"]
-

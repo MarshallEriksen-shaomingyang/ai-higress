@@ -2,7 +2,6 @@
 
 import { Sparkles, MessageSquare, Image as ImageIcon, Zap } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n-context";
 import { cn } from "@/lib/utils";
 
@@ -71,24 +70,6 @@ export function ChatWelcomeContent({ className }: { className?: string } = {}) {
         })}
       </div>
 
-      <div className="text-center">
-        <p className="text-sm text-muted-foreground mb-4">
-          {t("chat.welcome.try_asking")}
-        </p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-full"
-            onClick={() => {
-              // 示例问题点击行为：后续如需“点一下填入输入框/直接发送”，可在这里加回调
-            }}
-          >
-            {t("chat.welcome.example_1")}
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

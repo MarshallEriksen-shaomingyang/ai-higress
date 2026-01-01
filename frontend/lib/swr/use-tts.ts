@@ -16,6 +16,14 @@ const AUDIO_CACHE_TTL_MS = 30 * 60 * 1000;
 
 const audioCache = new Map<string, CachedAudio>();
 
+function getCurrentPlayingObjectUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const anyWin = window as any;
+  const audio = anyWin.__apiproxy_tts_audio__ as HTMLAudioElement | null | undefined;
+  const src = audio?.src;
+  return typeof src === "string" && src ? src : null;
+}
+
 function buildAudioCacheKey(messageId: string, payload: MessageSpeechRequest): string {
   const model = String(payload.model ?? "").trim();
   const voice = payload.voice ?? "alloy";
@@ -25,7 +33,9 @@ function buildAudioCacheKey(messageId: string, payload: MessageSpeechRequest): s
 }
 
 function pruneAudioCache(now: number) {
+  const playingUrl = getCurrentPlayingObjectUrl();
   for (const [key, item] of audioCache.entries()) {
+    if (playingUrl && item.objectUrl === playingUrl) continue;
     if (now - item.createdAt > AUDIO_CACHE_TTL_MS) {
       URL.revokeObjectURL(item.objectUrl);
       audioCache.delete(key);
@@ -37,6 +47,7 @@ function pruneAudioCache(now: number) {
   const entries = Array.from(audioCache.entries()).sort((a, b) => a[1].createdAt - b[1].createdAt);
   for (const [key, item] of entries) {
     if (audioCache.size <= AUDIO_CACHE_MAX_ITEMS) break;
+    if (playingUrl && item.objectUrl === playingUrl) continue;
     URL.revokeObjectURL(item.objectUrl);
     audioCache.delete(key);
   }

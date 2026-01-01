@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useI18n } from "@/lib/i18n-context";
 import type { Message, RunSummary } from "@/lib/api-types";
 import type { ComparisonVariant } from "@/lib/stores/chat-comparison-store";
+import { useUserPreferencesStore } from "@/lib/stores/user-preferences-store";
 import { cn } from "@/lib/utils";
 import { MessageContent } from "./message-content";
 import { MessageBubble } from "./message-bubble";
@@ -80,6 +81,13 @@ export function MessageItem({
   const { t, language } = useI18n();
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
+  const configuredTtsModel = useUserPreferencesStore((s) => {
+    const key = (projectId || "").trim();
+    if (!key) return null;
+    return s.preferences.preferredTtsModelByProject?.[key] ?? null;
+  });
+  const shouldShowTtsControl =
+    isAssistant && !!(configuredTtsModel && String(configuredTtsModel).trim());
   
   // 获取第一个 run（通常是 baseline run）
   const primaryRun = runs.length > 0 ? runs[0] : undefined;
@@ -311,17 +319,19 @@ export function MessageItem({
           {/* 助手消息的操作按钮 */}
           {isAssistant && (
             <div className="flex items-center gap-1 opacity-60 md:group-hover:opacity-100 transition-opacity duration-200">
-              <MessageTtsControl
-                messageId={message.message_id}
-                projectId={projectId}
-                fallbackModel={runs?.[0]?.requested_logical_model ?? defaultTtsModel}
-                disabled={
-                  disableActions ||
-                  isActivelyGenerating ||
-                  isRegenerating ||
-                  !(message.content ?? "").trim()
-                }
-              />
+              {shouldShowTtsControl ? (
+                <MessageTtsControl
+                  messageId={message.message_id}
+                  projectId={projectId}
+                  fallbackModel={runs?.[0]?.requested_logical_model ?? defaultTtsModel}
+                  disabled={
+                    disableActions ||
+                    isActivelyGenerating ||
+                    isRegenerating ||
+                    !(message.content ?? "").trim()
+                  }
+                />
+              ) : null}
               {/* 重新生成 */}
               {onRegenerate && (
                 <Button

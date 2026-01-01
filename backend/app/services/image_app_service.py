@@ -507,7 +507,6 @@ class ImageAppService:
             lookup_model_id=model,
             api_style="openai",
             effective_provider_ids=effective_provider_ids,
-            session_id=None,
             user_id=self.api_key.user_id,
             is_superuser=bool(self.api_key.is_superuser),
         )

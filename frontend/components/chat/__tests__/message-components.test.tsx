@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MessageItem } from '../message-item';
 import type { Message, RunSummary } from '@/lib/api-types';
 import type { ComparisonVariant } from '@/lib/stores/chat-comparison-store';
+import { useUserPreferencesStore } from '@/lib/stores/user-preferences-store';
 
 // Mock i18n
 vi.mock('@/lib/i18n-context', () => ({
@@ -13,6 +14,11 @@ vi.mock('@/lib/i18n-context', () => ({
 }));
 
 describe('MessageItem', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useUserPreferencesStore.getState().resetPreferences();
+  });
+
   const mockUserMessage: Message = {
     message_id: 'msg-1',
     conversation_id: 'conv-1',
@@ -48,6 +54,30 @@ describe('MessageItem', () => {
     expect(screen.getByText('Hello! How can I help you?')).toBeInTheDocument();
     expect(screen.getByText('gpt-4')).toBeInTheDocument();
     expect(screen.getByText('1500ms')).toBeInTheDocument();
+  });
+
+  it('does not show TTS control when project TTS model is not configured', () => {
+    render(
+      <MessageItem
+        message={mockAssistantMessage}
+        runs={[mockRun]}
+        projectId="proj-1"
+      />
+    );
+    expect(screen.queryByLabelText('chat.tts.play')).not.toBeInTheDocument();
+  });
+
+  it('shows TTS control when project TTS model is configured', () => {
+    useUserPreferencesStore.getState().setPreferredTtsModel('proj-1', 'tts-model-1');
+
+    render(
+      <MessageItem
+        message={mockAssistantMessage}
+        runs={[mockRun]}
+        projectId="proj-1"
+      />
+    );
+    expect(screen.getByLabelText('chat.tts.play')).toBeInTheDocument();
   });
 
   it('shows status badge for assistant message', () => {
