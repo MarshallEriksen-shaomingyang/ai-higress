@@ -1,0 +1,118 @@
+[
+  {
+    "name": "openai_basic",
+    "kind": "openai",
+    "allow_extensions": false,
+    "provider_model_id": "tts-1",
+    "processed_text": "hello",
+    "request": {
+      "model": "auto",
+      "input": "hello",
+      "voice": "alloy",
+      "response_format": "mp3",
+      "speed": 1.0,
+      "instructions": null,
+      "input_type": "text",
+      "locale": "en-US",
+      "pitch": 0.1,
+      "volume": 0.9,
+      "reference_audio_url": null
+    },
+    "expected": {
+      "model": "tts-1",
+      "input": "hello",
+      "voice": "alloy",
+      "response_format": "mp3",
+      "speed": 1.0
+    }
+  },
+  {
+    "name": "openai_with_extensions",
+    "kind": "openai",
+    "allow_extensions": true,
+    "provider_model_id": "tts-1",
+    "processed_text": "hello",
+    "request": {
+      "model": "auto",
+      "input": "hello",
+      "voice": "alloy",
+      "response_format": "mp3",
+      "speed": 1.0,
+      "instructions": null,
+      "input_type": "text",
+      "locale": "en-US",
+      "pitch": 0.1,
+      "volume": 0.9,
+      "reference_audio_url": "https://example.com/ref.wav"
+    },
+    "expected": {
+      "model": "tts-1",
+      "input": "hello",
+      "voice": "alloy",
+      "response_format": "mp3",
+      "speed": 1.0,
+      "locale": "en-US",
+      "pitch": 0.1,
+      "volume": 0.9,
+      "reference_audio_url": "https://example.com/ref.wav"
+    }
+  },
+  {
+    "name": "openai_with_instructions",
+    "kind": "openai",
+    "allow_extensions": false,
+    "provider_model_id": "tts-1",
+    "processed_text": "hello",
+    "request": {
+      "model": "auto",
+      "input": "hello",
+      "voice": "alloy",
+      "response_format": "mp3",
+      "speed": 1.0,
+      "instructions": "cheerful"
+    },
+    "expected": {
+      "model": "tts-1",
+      "input": "hello",
+      "voice": "alloy",
+      "response_format": "mp3",
+      "speed": 1.0,
+      "instructions": "cheerful"
+    }
+  },
+  {
+    "name": "gemini_basic",
+    "kind": "gemini",
+    "processed_text": "你好",
+    "request": {
+      "model": "auto",
+      "input": "你好",
+      "voice": "echo",
+      "response_format": "wav",
+      "speed": 1.0
+    },
+    "expected": {
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "你好"
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "responseModalities": [
+          "AUDIO"
+        ],
+        "speechConfig": {
+          "voiceConfig": {
+            "prebuiltVoiceConfig": {
+              "voiceName": "Enceladus"
+            }
+          }
+        }
+      }
+    }
+  }
+]

@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   MessageSquare,
   SlidersHorizontal,
+  Mic,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ interface ChatToolbarProps {
   onFilesSelected: (files: FileList | null) => Promise<void>;
   hideModeSwitcher?: boolean;
   onOpenImageSettings?: () => void;
+  onOpenAudioSettings?: () => void;
 }
 
 export function ChatToolbar({
@@ -65,6 +67,7 @@ export function ChatToolbar({
   onFilesSelected,
   hideModeSwitcher = false,
   onOpenImageSettings,
+  onOpenAudioSettings,
 }: ChatToolbarProps) {
   const { t } = useI18n();
   const modeIcons: Record<ComposerMode, typeof MessageSquare> = {
@@ -107,6 +110,19 @@ export function ChatToolbar({
           onFilesSelected={onFilesSelected}
           uploadLabel={t("chat.message.upload_image")}
         />
+
+        {mode === "chat" && onOpenAudioSettings ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onOpenAudioSettings}
+            disabled={disabled || isSending}
+            title={t("chat.message.upload_audio")}
+            aria-label={t("chat.message.upload_audio")}
+          >
+            <Mic className="size-4" />
+          </Button>
+        ) : null}
 
         {mode === "chat" ? (
           <ModelParametersPopover

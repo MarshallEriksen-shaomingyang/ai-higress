@@ -1382,6 +1382,26 @@ data: {"error":{"type":"upstream_error","status":429,"message":"insufficient_quo
 - OSS/S3 模式：`302 Found`，响应头 `Location` 为对象存储预签名 GET URL；客户端跟随跳转后由对象存储返回图片二进制内容（`Content-Type` 为 `image/png`/`image/jpeg`/`image/webp` 等）
 - 本地模式：`200 OK`，响应体为图片二进制内容（`Content-Type` 为 `image/png`/`image/jpeg`/`image/webp` 等）
 
+### 3. 短链音频读取（签名 URL）
+
+当网关返回音频短链（`/media/audio/...`）时，该 URL 可在有效期内直接访问音频内容（无需登录/无需 API Key）。
+
+**接口**: `GET /media/audio/{object_key}`
+
+**描述**:
+- 当音频存储在 OSS/S3 时：通过签名短链获取私有桶音频对象的预签名下载地址（网关返回 302 跳转，直下）。
+- 当音频存储在本地磁盘时：通过签名短链直接返回音频二进制内容（`200 OK`）。
+
+**认证**: 无（通过签名参数校验）
+
+**查询参数**:
+- `expires` (int, 必填): 过期时间戳（Unix seconds）
+- `sig` (string, 必填): HMAC 签名
+
+**成功响应**:
+- OSS/S3 模式：`302 Found`，响应头 `Location` 为对象存储预签名 GET URL；客户端跟随跳转后由对象存储返回音频二进制内容（`Content-Type` 为 `audio/*`，取决于上传时的 MIME 类型）
+- 本地模式：`200 OK`，响应体为音频二进制内容（`Content-Type` 为 `audio/*`，取决于文件类型推断）
+
 ### 计费规则
 
 网关在记录一次 LLM 调用的 usage 时，会根据 token 用量和配置计算本次应扣的积分：
@@ -2203,6 +2223,44 @@ cost_credits = ceil(raw_cost * ModelBillingConfig.multiplier * Provider.billing_
 - 403: 当前用户无权修改该 Provider 的模型配置；
 - 404: Provider 不存在；
 - 422: capabilities 包含未知枚举值或为空。
+
+---
+
+### 3.4 管理单个模型的 TTS 约束（tts-requirements）
+
+> 仅限：超级管理员或该私有/受限 Provider 的所有者。
+
+用于配置网关侧的 TTS 选路约束（例如：某些上游要求参考音频字段，缺参时应直接拒绝选路到该上游）。
+
+**接口（获取）**: `GET /providers/{provider_id}/models/{model_id}/tts-requirements`  
+**认证**: JWT 令牌  
+
+**响应示例**:
+```json
+{
+  "provider_id": "my-private-provider",
+  "model_id": "tts-clone-1",
+  "requires_reference_audio": true
+}
+```
+
+**接口（更新）**: `PUT /providers/{provider_id}/models/{model_id}/tts-requirements`  
+**认证**: JWT 令牌  
+
+**请求体**:
+```json
+{
+  "requires_reference_audio": true
+}
+```
+
+**说明**:
+- 当 `requires_reference_audio=true` 且调用 `POST /v1/audio/speech` 未提供 `reference_audio_url` 时，网关会返回 `400`（避免选路后上游再报缺参）。
+
+**错误响应**:
+- 403: 当前用户无权修改该 Provider 的模型配置；
+- 404: Provider 不存在；
+- 422: 请求体字段类型不合法。
 
 ---
 
@@ -3953,17 +4011,22 @@ X-API-Key: {api_key}
 {
   "model": "string",
   "input": "string (max 4096 chars)",
+  "input_type": "text | ssml",
+  "locale": "string | null",
   "voice": "alloy | echo | fable | onyx | nova | shimmer",
   "response_format": "mp3 | opus | aac | wav | pcm | ogg | flac | aiff",
   "speed": 1.0,
-  "instructions": "string | null"
+  "pitch": "number | null",
+  "volume": "number | null",
+  "instructions": "string | null",
+  "reference_audio_url": "https://... | null"
 }
 ```
 
 **响应**:
-- `200 OK`: 二进制音频流，`Content-Type` 取决于 `response_format`（例如 `audio/mpeg` / `audio/wav`）
+- `200 OK`: 二进制音频（一次性返回完整音频 bytes），`Content-Type` 取决于 `response_format`（例如 `audio/mpeg` / `audio/wav`）
 - 说明：网关不做音频转码；若上游返回的是 PCM（如 `audio/L16` / `audio/pcm`），当 `response_format=wav` 时仅封装 WAV 头（不重采样/不转码）
-- `400`: 参数不合法（例如 input 为空/过长）
+- `400`: 参数不合法（例如 input 为空/过长），或请求缺少 `reference_audio_url` 导致无法路由到需要参考音频的 TTS 上游
 - `401/403`: API Key 无效或不可用
 - `402`: 开启积分校验时余额不足
 - `429`: 触发限流
@@ -3986,7 +4049,7 @@ X-API-Key: {api_key}
 ```
 
 **响应**:
-- `200 OK`: 二进制音频流
+- `200 OK`: 二进制音频（一次性返回完整音频 bytes）
 - `404`: message 不存在或无权限访问
 - `400`: message 不是纯文本消息
 - 其余错误码同上
@@ -3997,7 +4060,19 @@ X-API-Key: {api_key}
 
 ```json
 {
-  "detail": "错误描述"
+  "detail": "错误描述（字符串）或对象"
+}
+```
+
+对于部分网关错误（含上游错误转译），`detail` 可能为对象，至少包含 `message`，并可能包含 `provider`、`upstream_body` 等字段用于排障：
+
+```json
+{
+  "detail": {
+    "message": "upstream failed",
+    "provider": "provider-xxx",
+    "upstream_body": "{...}"
+  }
 }
 ```
 

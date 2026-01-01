@@ -175,6 +175,15 @@ function stringifyContentSegment(segment: any): string {
     return `[文件: ${fileUrl}]`;
   }
 
+  const audioUrl =
+    extractUrl(segment.input_audio) ??
+    extractUrl(segment.inputAudio) ??
+    extractUrl(segment.audio_url) ??
+    extractUrl(segment.audioUrl);
+  if (type === "input_audio" || type === "audio") {
+    return audioUrl ? `[语音: ${audioUrl}]` : "[语音]";
+  }
+
   if (text) {
     return text;
   }
@@ -270,6 +279,11 @@ export function normalizeMessageContent(content: MessageContent | unknown): stri
   if (!content || typeof content !== 'object') return '';
 
   const record = content as Record<string, unknown>;
+  const inputAudio = record["input_audio"];
+  if (inputAudio && typeof inputAudio === "object") {
+    const text = typeof record.text === "string" ? record.text.trim() : "";
+    if (!text) return "[语音]";
+  }
   if (typeof record.text === 'string' && !record.type) {
     return record.text;
   }

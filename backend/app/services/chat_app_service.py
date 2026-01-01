@@ -654,7 +654,8 @@ async def create_message_and_queue_baseline_run(
     client: Any,
     current_user: AuthenticatedUser,
     conversation_id: UUID,
-    content: str,
+    content: str | None,
+    input_audio: dict | None = None,
     streaming: bool,
     override_logical_model: str | None = None,
     model_preset: dict | None = None,
@@ -690,11 +691,11 @@ async def create_message_and_queue_baseline_run(
         ctx=ctx,
         assistant=assistant,
         requested_model=requested_model,
-        user_text=content,
+        user_text=(content or ""),
         model_preset=model_preset,
     )
 
-    user_message = create_user_message(db, conversation=conv, content_text=content)
+    user_message = create_user_message(db, conversation=conv, content_text=content, input_audio=input_audio)
     assistant_message: Message | None = None
     if streaming:
         assistant_message = create_assistant_message_placeholder_after_user(
@@ -903,7 +904,8 @@ async def send_message_and_run_baseline(
     client: Any,
     current_user: AuthenticatedUser,
     conversation_id: UUID,
-    content: str,
+    content: str | None,
+    input_audio: dict | None = None,
     override_logical_model: str | None = None,
     model_preset: dict | None = None,
     bridge_agent_id: str | None = None,
@@ -959,12 +961,12 @@ async def send_message_and_run_baseline(
         ctx=ctx,
         assistant=assistant,
         requested_model=requested_model,
-        user_text=content,
+        user_text=(content or ""),
         model_preset=model_preset,
     )
     t_stage = _log_timing("5_auto_model_selection", t_stage, request_id, f"selected={requested_model}")
 
-    user_message = create_user_message(db, conversation=conv, content_text=content)
+    user_message = create_user_message(db, conversation=conv, content_text=content, input_audio=input_audio)
     t_stage = _log_timing("6_create_user_message", t_stage, request_id)
 
     payload = build_openai_request_payload(
@@ -1162,7 +1164,8 @@ async def stream_message_and_run_baseline(
     client: Any,
     current_user: AuthenticatedUser,
     conversation_id: UUID,
-    content: str,
+    content: str | None,
+    input_audio: dict | None = None,
     override_logical_model: str | None = None,
     model_preset: dict | None = None,
     bridge_agent_id: str | None = None,
@@ -1215,12 +1218,12 @@ async def stream_message_and_run_baseline(
         ctx=ctx,
         assistant=assistant,
         requested_model=requested_model,
-        user_text=content,
+        user_text=(content or ""),
         model_preset=model_preset,
     )
     t_stage = _log_timing("5_auto_model_selection", t_stage, request_id, f"selected={requested_model}")
 
-    user_message = create_user_message(db, conversation=conv, content_text=content)
+    user_message = create_user_message(db, conversation=conv, content_text=content, input_audio=input_audio)
     assistant_message = create_assistant_message_placeholder_after_user(
         db,
         conversation_id=UUID(str(conv.id)),

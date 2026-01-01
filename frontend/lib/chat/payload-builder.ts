@@ -121,6 +121,7 @@ export function sanitizeBridgeFields<
 
 export function buildChatPayload(opts: {
   content: string;
+  inputAudio?: SendMessageRequest["input_audio"] | null;
   modelPreset?: Record<string, any> | null;
   overrideLogicalModel?: string | null;
   bridgeState?: BridgeState | null;
@@ -131,6 +132,7 @@ export function buildChatPayload(opts: {
 
   const payload: SendMessageRequest = {
     content: opts.content,
+    input_audio: opts.inputAudio ?? undefined,
     model_preset: opts.modelPreset ?? undefined,
     override_logical_model: opts.overrideLogicalModel ?? undefined,
     ...sanitizedBridge,

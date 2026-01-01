@@ -376,19 +376,24 @@ def create_user_message(
     db: Session,
     *,
     conversation: Conversation,
-    content_text: str,
+    content_text: str | None = None,
+    input_audio: dict | None = None,
 ) -> Message:
-    if not content_text.strip():
+    text = (content_text or "").strip()
+    if not text and not isinstance(input_audio, dict):
         raise bad_request("消息内容不能为空")
     seq = _next_message_sequence(db, conversation_id=UUID(str(conversation.id)))
+    content: dict = {"type": "text", "text": text}
+    if isinstance(input_audio, dict) and input_audio:
+        content["input_audio"] = dict(input_audio)
     msg = Message(
         conversation_id=conversation.id,
         role="user",
-        content={"type": "text", "text": content_text},
+        content=content,
         sequence=seq,
     )
     conversation.last_activity_at = datetime.now(UTC)
-    conversation.last_message_content = content_text
+    conversation.last_message_content = text or "（语音）"
     db.add_all([msg, conversation])
     db.commit()
     db.refresh(msg)

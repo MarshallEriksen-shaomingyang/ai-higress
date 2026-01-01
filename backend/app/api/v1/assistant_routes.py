@@ -5,10 +5,10 @@ import os
 import time
 from contextlib import suppress
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import select
@@ -23,6 +23,7 @@ from app.deps import get_db, get_http_client, get_redis
 from app.auth import AuthenticatedAPIKey
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.models import APIKey, AssistantPreset, Message
+from app.models import AudioAsset, User
 from app.repositories.run_event_repository import append_run_event, list_run_events
 from app.schemas.audio import MessageSpeechRequest, SpeechRequest
 from app.schemas import (
@@ -35,6 +36,10 @@ from app.schemas import (
     ConversationItem,
     ConversationListResponse,
     ConversationUpdateRequest,
+    ConversationAudioUploadResponse,
+    AudioAssetItem,
+    AudioAssetListResponse,
+    AudioAssetVisibilityUpdateRequest,
     MessageCreateRequest,
     MessageCreateResponse,
     MessageRegenerateRequest,
@@ -73,6 +78,11 @@ from app.services.tts_app_service import (
     TTSAppService,
     _content_type_for_format,
     _extract_text_from_message_content,
+)
+from app.services.audio_storage_service import (
+    assert_audio_object_key_for_user,
+    build_signed_audio_url,
+    store_audio_bytes,
 )
 
 router = APIRouter(
@@ -170,6 +180,25 @@ def _hydrate_image_generation_content(content: dict) -> dict:
     return next_content
 
 
+def _hydrate_input_audio_content(content: dict) -> dict:
+    """
+    将存储在 DB 中的 input_audio 引用（通常只保存 object_key）补全为带短链 url 的响应体。
+    """
+    if not isinstance(content, dict):
+        return content
+    input_audio = content.get("input_audio")
+    if not isinstance(input_audio, dict):
+        return content
+    object_key = input_audio.get("object_key")
+    if not isinstance(object_key, str) or not object_key.strip():
+        return content
+    hydrated = dict(input_audio)
+    hydrated["url"] = build_signed_audio_url(object_key.strip())
+    next_content = dict(content)
+    next_content["input_audio"] = hydrated
+    return next_content
+
+
 def _run_to_summary(run) -> RunSummary:
     tool_invocations: list[dict[str, Any]] = []
     try:
@@ -188,6 +217,176 @@ def _run_to_summary(run) -> RunSummary:
         latency_ms=run.latency_ms,
         error_code=run.error_code,
         tool_invocations=tool_invocations,
+    )
+
+def _infer_audio_format_from_object_key(object_key: str) -> Literal["wav", "mp3"]:
+    key = str(object_key or "").strip().lower()
+    if key.endswith(".mp3"):
+        return "mp3"
+    return "wav"
+
+
+def _normalize_audio_visibility(value: str | None) -> str:
+    v = str(value or "").strip().lower()
+    if v in {"private", "public"}:
+        return v
+    return "private"
+
+
+def _audio_asset_to_item(row: AudioAsset, owner: User) -> AudioAssetItem:
+    return AudioAssetItem(
+        audio_id=row.id,
+        owner_id=owner.id,
+        owner_username=owner.username,
+        owner_display_name=getattr(owner, "display_name", None),
+        conversation_id=getattr(row, "conversation_id", None),
+        object_key=row.object_key,
+        url=build_signed_audio_url(row.object_key),
+        content_type=str(getattr(row, "content_type", "") or "application/octet-stream"),
+        size_bytes=int(getattr(row, "size_bytes", 0) or 0),
+        format=_infer_audio_format_from_object_key(row.object_key),
+        filename=getattr(row, "filename", None),
+        display_name=getattr(row, "display_name", None),
+        visibility=_normalize_audio_visibility(getattr(row, "visibility", None)),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _resolve_input_audio_for_message(
+    *,
+    db: Session,
+    current_user: AuthenticatedUser,
+    input_audio: dict | None,
+) -> dict | None:
+    if not isinstance(input_audio, dict) or not input_audio:
+        return None
+    audio_id = input_audio.get("audio_id")
+    object_key = input_audio.get("object_key")
+    fmt = input_audio.get("format")
+
+    if audio_id is not None:
+        try:
+            audio_uuid = UUID(str(audio_id))
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid input_audio.audio_id")
+        asset = db.get(AudioAsset, audio_uuid)
+        if asset is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="audio asset not found")
+        owner_ok = UUID(str(asset.owner_id)) == UUID(str(current_user.id))
+        shared_ok = str(getattr(asset, "visibility", "") or "").strip().lower() == "public"
+        if not (owner_ok or shared_ok or current_user.is_superuser):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+        out = {
+            "audio_id": str(asset.id),
+            "object_key": str(asset.object_key),
+        }
+        fmt_val = str(fmt or "").strip().lower()
+        if fmt_val in {"wav", "mp3"}:
+            out["format"] = fmt_val
+        return out
+
+    if isinstance(object_key, str) and object_key.strip():
+        # 兼容旧客户端：直接传 object_key。仅允许：
+        # - 自己的命名空间；或
+        # - 该 object_key 对应的音频资产已被公开分享
+        key = object_key.strip()
+        try:
+            assert_audio_object_key_for_user(key, user_id=str(current_user.id))
+        except ValueError:
+            if not current_user.is_superuser:
+                row = (
+                    db.execute(
+                        select(AudioAsset.id)
+                        .where(AudioAsset.object_key == key)
+                        .where(AudioAsset.visibility == "public")
+                        .limit(1)
+                    )
+                    .scalars()
+                    .first()
+                )
+                if row is None:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+        out = {"object_key": key}
+        fmt_val = str(fmt or "").strip().lower()
+        if fmt_val in {"wav", "mp3"}:
+            out["format"] = fmt_val
+        return out
+
+    return None
+
+
+@router.post(
+    "/v1/conversations/{conversation_id}/audio-uploads",
+    response_model=ConversationAudioUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_conversation_audio_endpoint(
+    conversation_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ConversationAudioUploadResponse:
+    """
+    上传一段用户语音并落存储（本地/OSS/S3）。
+
+    说明：
+    - JWT 鉴权（仅会话所有者可上传）；
+    - 返回 object_key + 网关签名短链 url；
+    - 目前只允许常见音频格式（WAV/MP3），避免误上传。
+    """
+    _ = get_conversation(db, conversation_id=conversation_id, user_id=UUID(str(current_user.id)))
+
+    allowed_types = {"audio/wav", "audio/x-wav", "audio/wave", "audio/mpeg", "audio/mp3"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的音频类型，请上传 WAV/MP3")
+
+    max_bytes = 10 * 1024 * 1024
+    written = 0
+    chunks: list[bytes] = []
+    try:
+        while True:
+            chunk = await file.read(8192)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="音频文件过大，最大支持 10MB")
+            chunks.append(chunk)
+    finally:
+        await file.close()
+
+    data = b"".join(chunks)
+    if not data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="空音频文件")
+
+    stored = await store_audio_bytes(
+        data,
+        content_type=str(file.content_type or "application/octet-stream"),
+        filename=file.filename,
+        user_id=str(current_user.id),
+    )
+    asset = AudioAsset(
+        owner_id=UUID(str(current_user.id)),
+        conversation_id=conversation_id,
+        object_key=stored.object_key,
+        filename=file.filename,
+        display_name=file.filename,
+        content_type=stored.content_type,
+        format=_infer_audio_format_from_object_key(stored.object_key),
+        size_bytes=stored.size_bytes,
+        visibility="private",
+    )
+    db.add(asset)
+    db.commit()
+    db.refresh(asset)
+    return ConversationAudioUploadResponse(
+        audio_id=asset.id,
+        object_key=stored.object_key,
+        url=build_signed_audio_url(stored.object_key),
+        content_type=stored.content_type,
+        size_bytes=stored.size_bytes,
+        format=_infer_audio_format_from_object_key(stored.object_key),
     )
 
 
@@ -222,6 +421,92 @@ def list_assistants_endpoint(
         ],
         next_cursor=next_cursor,
     )
+
+
+@router.get("/v1/audio-assets", response_model=AudioAssetListResponse)
+def list_audio_assets_endpoint(
+    visibility: str | None = Query(
+        default=None,
+        description="过滤可见性：all(默认) | private(仅我的) | public(仅共享)",
+    ),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> AudioAssetListResponse:
+    """
+    音频资产库：列出当前用户可见的音频（自己的 + 他人已分享的 public）。
+    """
+    vis = str(visibility or "all").strip().lower()
+    user_uuid = UUID(str(current_user.id))
+
+    stmt = (
+        select(AudioAsset, User)
+        .join(User, AudioAsset.owner_id == User.id)
+        .order_by(AudioAsset.created_at.desc())
+        .limit(int(limit))
+    )
+
+    if vis in ("private", "mine"):
+        stmt = stmt.where(AudioAsset.owner_id == user_uuid)
+    elif vis in ("public", "shared"):
+        stmt = stmt.where(AudioAsset.visibility == "public")
+    else:
+        stmt = stmt.where(
+            (AudioAsset.owner_id == user_uuid) | (AudioAsset.visibility == "public")
+        )
+
+    rows = db.execute(stmt).all()
+    items = [_audio_asset_to_item(asset, owner) for asset, owner in rows]
+    return AudioAssetListResponse(items=items)
+
+
+@router.put("/v1/audio-assets/{audio_id}/visibility", response_model=AudioAssetItem)
+def update_audio_asset_visibility_endpoint(
+    audio_id: UUID,
+    payload: AudioAssetVisibilityUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> AudioAssetItem:
+    """
+    切换音频资产的分享开关（private/public）。
+    仅 owner 可操作。
+    """
+    row = db.get(AudioAsset, audio_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="audio asset not found")
+    if UUID(str(row.owner_id)) != UUID(str(current_user.id)) and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+    row.visibility = _normalize_audio_visibility(payload.visibility)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    owner = db.get(User, row.owner_id)
+    if owner is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="owner not found")
+    return _audio_asset_to_item(row, owner)
+
+
+@router.delete("/v1/audio-assets/{audio_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_audio_asset_endpoint(
+    audio_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> Response:
+    """
+    删除音频资产记录（仅 owner 可删除）。
+
+    说明：当前为最小实现，仅删除 DB 记录；对象存储中的文件不做强一致删除（避免误删）。
+    """
+    row = db.get(AudioAsset, audio_id)
+    if row is None:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    if UUID(str(row.owner_id)) != UUID(str(current_user.id)) and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/v1/assistants", response_model=AssistantPresetResponse, status_code=status.HTTP_201_CREATED)
@@ -384,6 +669,8 @@ async def create_message_endpoint(
 
     # streaming=true 或 Accept:text/event-stream 均触发 SSE
     stream = bool(payload.streaming) or wants_event_stream
+    raw_input_audio = payload.input_audio.model_dump() if payload.input_audio is not None else None
+    input_audio = _resolve_input_audio_for_message(db=db, current_user=current_user, input_audio=raw_input_audio)
     # 测试环境下跳过真正的 Celery 调度，沿用“请求内执行”以避免 broker 依赖导致卡住。
     if os.getenv("PYTEST_CURRENT_TEST"):
         if stream:
@@ -395,6 +682,7 @@ async def create_message_endpoint(
                     current_user=current_user,
                     conversation_id=conversation_id,
                     content=payload.content,
+                    input_audio=input_audio,
                     override_logical_model=payload.override_logical_model,
                     model_preset=payload.model_preset,
                     bridge_agent_id=payload.bridge_agent_id,
@@ -411,6 +699,7 @@ async def create_message_endpoint(
             current_user=current_user,
             conversation_id=conversation_id,
             content=payload.content,
+            input_audio=input_audio,
             override_logical_model=payload.override_logical_model,
             model_preset=payload.model_preset,
             bridge_agent_id=payload.bridge_agent_id,
@@ -491,6 +780,7 @@ async def create_message_endpoint(
             current_user=current_user,
             conversation_id=conversation_id,
             content=payload.content,
+            input_audio=input_audio,
             streaming=True,
             override_logical_model=payload.override_logical_model,
             model_preset=payload.model_preset,
@@ -566,6 +856,7 @@ async def create_message_endpoint(
         current_user=current_user,
         conversation_id=conversation_id,
         content=payload.content,
+        input_audio=input_audio,
         streaming=False,
         override_logical_model=payload.override_logical_model,
         model_preset=payload.model_preset,
@@ -911,6 +1202,8 @@ def list_messages_endpoint(
         content = msg.content
         if isinstance(content, dict) and str(content.get("type") or "") == "image_generation":
             content = _hydrate_image_generation_content(content)
+        if isinstance(content, dict):
+            content = _hydrate_input_audio_content(content)
         items.append(
             {
                 "message_id": msg.id,

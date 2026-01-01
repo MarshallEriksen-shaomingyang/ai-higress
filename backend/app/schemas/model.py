@@ -154,15 +154,45 @@ class ProviderModelDisabledResponse(BaseModel):
     disabled: bool = Field(..., description="当前是否已禁用该模型")
 
 
+class ModelTTSRequirementsUpdateRequest(BaseModel):
+    """
+    更新单个物理模型「TTS 约束/需求」的请求体。
+
+    说明：
+    - 该配置用于网关侧选路约束（例如：缺少 reference_audio_url 时，不路由到需要参考音频的上游）；
+    - 配置存放于 provider_models.metadata_json 的 `_gateway.tts` 保留命名空间下。
+    """
+
+    requires_reference_audio: bool = Field(
+        ...,
+        description="该上游 TTS 是否要求提供参考音频（reference_audio_url）",
+    )
+
+
+class ProviderModelTTSRequirementsResponse(BaseModel):
+    """
+    返回 provider+model 维度的 TTS 约束/需求配置。
+    """
+
+    provider_id: str = Field(..., description="Provider 的短 ID（例如 moonshot-xxx）")
+    model_id: str = Field(..., description="上游模型 ID")
+    requires_reference_audio: bool = Field(
+        default=False,
+        description="当前是否要求 reference_audio_url（未配置时默认为 false）",
+    )
+
+
 __all__ = [
     "Model",
     "ModelAliasUpdateRequest",
     "ModelCapability",
     "ModelCapabilitiesUpdateRequest",
     "ModelDisableUpdateRequest",
+    "ModelTTSRequirementsUpdateRequest",
     "ModelPricingUpdateRequest",
     "ProviderModelAliasResponse",
     "ProviderModelCapabilitiesResponse",
     "ProviderModelDisabledResponse",
     "ProviderModelPricingResponse",
+    "ProviderModelTTSRequirementsResponse",
 ]

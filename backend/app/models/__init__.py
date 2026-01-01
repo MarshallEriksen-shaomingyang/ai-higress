@@ -2,6 +2,7 @@ from .aggregate_metrics import AggregateRoutingMetrics
 from .api_key import APIKey
 from .api_key_allowed_provider import APIKeyAllowedProvider
 from .assistant_preset import AssistantPreset
+from .audio_asset import AudioAsset
 from .bandit_arm_stats import BanditArmStats
 from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from .bridge_agent_token import BridgeAgentToken
@@ -50,6 +51,7 @@ __all__ = [
     "APIKeyAllowedProvider",
     "AggregateRoutingMetrics",
     "AssistantPreset",
+    "AudioAsset",
     "BanditArmStats",
     "Base",
     "BridgeAgentToken",

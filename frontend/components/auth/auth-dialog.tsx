@@ -47,6 +47,8 @@ export function AuthDialog() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<AuthMode>("login");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTermsError, setShowTermsError] = useState(false);
   const {
     login,
     register: registerUser,
@@ -80,6 +82,11 @@ export function AuthDialog() {
 
   // 处理登录
   const handleLogin = async (data: LoginFormData) => {
+    if (!agreedToTerms) {
+      setShowTermsError(true);
+      return;
+    }
+    setShowTermsError(false);
     try {
       const { rememberMe, ...loginData } = data;
       await login(loginData, { remember: rememberMe ?? true });
@@ -99,6 +106,11 @@ export function AuthDialog() {
 
   // 处理注册
   const handleRegister = async (data: RegisterFormData) => {
+    if (!agreedToTerms) {
+      setShowTermsError(true);
+      return;
+    }
+    setShowTermsError(false);
     try {
       const { confirmPassword, ...registerData } = data;
       await registerUser(registerData);
@@ -115,6 +127,53 @@ export function AuthDialog() {
     }
   };
 
+  // 协议勾选变更处理
+  const handleTermsChange = (checked: boolean) => {
+    setAgreedToTerms(checked);
+    if (checked) {
+      setShowTermsError(false);
+    }
+  };
+
+  // 协议勾选组件
+  const TermsAgreement = () => (
+    <div className="space-y-1">
+      <label className="flex items-start space-x-2 cursor-pointer text-sm">
+        <input
+          type="checkbox"
+          checked={agreedToTerms}
+          onChange={(e) => handleTermsChange(e.target.checked)}
+          className="mt-0.5 rounded border-gray-300"
+        />
+        <span className="text-muted-foreground leading-relaxed">
+          {t("legal.agree_prefix")}
+          <Link
+            href="/legal/terms"
+            target="_blank"
+            className="text-primary hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {t("legal.terms_of_service")}
+          </Link>
+          {t("legal.and")}
+          <Link
+            href="/legal/privacy"
+            target="_blank"
+            className="text-primary hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {t("legal.privacy_policy")}
+          </Link>
+        </span>
+      </label>
+      {showTermsError && (
+        <p className="text-destructive text-xs pl-6">
+          {t("legal.agreement_required")}
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <Dialog open={isAuthDialogOpen} onOpenChange={closeAuthDialog}>
       <DialogContent className="max-w-md w-full">
@@ -128,7 +187,11 @@ export function AuthDialog() {
         </DialogHeader>
 
         {/* OAuth 登录按钮 */}
-        <OAuthButtons redirectUrl={redirectTo} />
+        <OAuthButtons
+          redirectUrl={redirectTo}
+          agreedToTerms={agreedToTerms}
+          onTermsRequired={() => setShowTermsError(true)}
+        />
 
         <BrushBorder className="mt-4">
           {isLogin ? (
@@ -151,9 +214,9 @@ export function AuthDialog() {
 
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center space-x-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="rounded border-gray-300" 
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300"
                     {...loginForm.register("rememberMe")}
                   />
                   <span>{t("auth.remember_me")}</span>
@@ -163,8 +226,10 @@ export function AuthDialog() {
                 </Link>
               </div>
 
-              <InkButton 
-                className="w-full" 
+              <TermsAgreement />
+
+              <InkButton
+                className="w-full"
                 type="submit"
                 disabled={isLoading}
               >
@@ -197,8 +262,10 @@ export function AuthDialog() {
                 error={registerForm.formState.errors.confirmPassword?.message}
               />
 
-              <InkButton 
-                className="w-full" 
+              <TermsAgreement />
+
+              <InkButton
+                className="w-full"
                 type="submit"
                 disabled={isLoading}
               >

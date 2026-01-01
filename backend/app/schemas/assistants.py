@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.image import ImageGenerationRequest
 
@@ -110,9 +110,31 @@ class BridgeToolSelection(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+class InputAudioAttachment(BaseModel):
+    """
+    用户语音输入附件（引用已上传并落存储的音频对象）。
+
+    说明：
+    - object_key 来自 `POST /v1/conversations/{conversation_id}/audio-uploads`；
+    - format 可选；未提供时后端会从 object_key 后缀推断（wav/mp3）。
+    """
+
+    audio_id: UUID | None = Field(default=None, description="音频资产 ID（推荐，用于复用/共享）")
+    object_key: str | None = Field(default=None, min_length=1, max_length=2048)
+    format: Literal["wav", "mp3"] | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_ref(self):
+        if self.audio_id is None and not (self.object_key or "").strip():
+            raise ValueError("input_audio 必须提供 audio_id 或 object_key")
+        return self
+
 
 class MessageCreateRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=20000)
+    content: str | None = Field(default=None, max_length=20000)
+    input_audio: InputAudioAttachment | None = None
     override_logical_model: str | None = Field(default=None, min_length=1, max_length=128)
     model_preset: dict | None = None
     bridge_agent_id: str | None = Field(default=None, min_length=1, max_length=128)
@@ -122,6 +144,13 @@ class MessageCreateRequest(BaseModel):
     streaming: bool = Field(default=False)
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_required_content(self):
+        text = (self.content or "").strip()
+        if not text and self.input_audio is None:
+            raise ValueError("消息内容不能为空")
+        return self
 
 
 class MessageCreateResponse(BaseModel):

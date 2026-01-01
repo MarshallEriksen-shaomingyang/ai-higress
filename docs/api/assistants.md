@@ -198,6 +198,10 @@ Request:
 ```json
 {
   "content": "你好",
+  "input_audio": {
+    "audio_id": "uuid",
+    "format": "wav"
+  },
   "override_logical_model": "gpt-4.1",
   "model_preset": {"temperature": 0.2},
   "bridge_agent_id": "aws-dev-server",
@@ -210,6 +214,10 @@ Request:
 ```
 
 说明：
+- `input_audio`（可选）：用户语音输入附件。
+  - 先调用 `POST /v1/conversations/{conversation_id}/audio-uploads` 上传语音文件，拿到 `object_key`；
+  - 上传响应里会返回 `audio_id`，推荐在发送消息时携带 `input_audio.audio_id` 引用该音频（便于复用/共享）；
+  - 当 `input_audio` 存在时，`content` 可为空字符串。
 - `bridge_agent_id`（可选，兼容字段）：指定本次对话的目标 Agent，用于开启 MCP/Bridge 的工具调用能力（LLM tool_calls -> Bridge INVOKE -> tool_result -> 继续生成）。
 - `bridge_agent_ids`（可选，推荐）：指定本次对话的目标 Agent 列表（多选）。
   - 不传则保持原有“纯聊天 baseline”行为。
@@ -255,6 +263,73 @@ Response:
 - `event: message.delta`：增量 token（字段 `delta`）
 - `event: message.completed` / `message.failed`：结束事件，包含最终 `baseline_run`
 - `event: done` + `data: [DONE]`
+
+### POST `/v1/conversations/{conversation_id}/audio-uploads`
+
+上传用户语音文件（用于语音输入），并落存储（本地/OSS/S3）。
+
+- JWT 鉴权（仅会话所有者可上传）
+- 返回 `object_key`（消息发送时引用）与 `url`（网关签名短链，可用于播放/下载：`GET /media/audio/...`）
+
+Request: `multipart/form-data`
+- `file`: 音频文件（当前仅支持 WAV/MP3；最大 10MB）
+
+Response:
+```json
+{
+  "object_key": "generated-images/user-audio/<user_id>/2025/01/01/<uuid>.wav",
+  "audio_id": "uuid",
+  "url": "http://<gateway>/media/audio/... ?expires=...&sig=...",
+  "content_type": "audio/wav",
+  "size_bytes": 12345,
+  "format": "wav"
+}
+```
+
+### GET `/v1/audio-assets`
+
+音频资产库：列出当前用户可见的音频（自己的 + 他人已分享的 public）。
+
+Query:
+- `visibility`（可选）：`all`(默认) | `private`(仅我的) | `public`(仅共享)
+- `limit`（可选）：默认 50，最大 200
+
+Response（截断）：
+```json
+{
+  "items": [
+    {
+      "audio_id": "uuid",
+      "owner_id": "uuid",
+      "owner_username": "alice",
+      "owner_display_name": "Alice",
+      "object_key": "generated-images/user-audio/<owner_id>/2025/01/01/<uuid>.wav",
+      "url": "http://<gateway>/media/audio/... ?expires=...&sig=...",
+      "content_type": "audio/wav",
+      "size_bytes": 12345,
+      "format": "wav",
+      "filename": "input.wav",
+      "display_name": "input.wav",
+      "visibility": "private | public",
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "updated_at": "2026-01-01T00:00:00+00:00"
+    }
+  ]
+}
+```
+
+### PUT `/v1/audio-assets/{audio_id}/visibility`
+
+切换“分享开关”（`private`/`public`）。仅 owner 可操作。
+
+Request:
+```json
+{ "visibility": "public" }
+```
+
+### DELETE `/v1/audio-assets/{audio_id}`
+
+删除音频资产记录（仅 owner 可删除）。
 
 ### POST `/v1/conversations/{conversation_id}/image-generations`
 

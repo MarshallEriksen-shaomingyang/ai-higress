@@ -49,6 +49,10 @@ def _read_first_non_empty_line(path: Path) -> str:
             return token
     raise ValueError("token file is empty")
 
+def _default_token_file() -> Path:
+    # Shared convention with scripts/test_tts_mp3.py
+    return Path.home() / ".config" / "ai-higress-gateway" / "tts_token"
+
 
 def _build_headers(*, auth: AuthMode, token: str, accept: str) -> dict[str, str]:
     headers: dict[str, str] = {
@@ -244,6 +248,15 @@ def main(argv: list[str] | None = None) -> int:
     else:
         token = str(args.token or "").strip()
 
+    if not token:
+        default_file = _default_token_file()
+        if default_file.exists():
+            try:
+                token = _read_first_non_empty_line(default_file)
+            except Exception as exc:
+                print(f"Failed to read default token file {default_file}: {exc}", file=sys.stderr)
+                return 2
+
     if not token and args.no_prompt:
         print("Missing token: provide --token-file or --token.", file=sys.stderr)
         return 2
@@ -325,4 +338,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -23,6 +23,12 @@ import type { ModelParameters } from "./chat-input/types";
 import { type ImageGenParams } from "./chat-input/image-gen-params-bar";
 import type { ComposerMode } from "./chat-input/chat-toolbar";
 import { ImageGenSettingsDrawer } from "./chat-input/image-gen-settings-drawer";
+import {
+  AudioInputSettingsDrawer,
+  type UploadedAudioAttachment,
+} from "./chat-input/audio-input-settings-drawer";
+import { audioService } from "@/http/audio";
+import { Button } from "@/components/ui/button";
 
 export type { ModelParameters } from "./chat-input/types";
 export type { ImageGenParams };
@@ -44,6 +50,7 @@ declare module "slate" {
 
 const IMAGE_DATA_URL_MAX_CHARS = 9000;
 const MAX_IMAGES = 3;
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 export interface SlateChatInputProps {
   conversationId: string;
@@ -110,6 +117,9 @@ export function SlateChatInput({
   const [images, setImages] = useState<string[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
+  const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
+  const [audioAttachment, setAudioAttachment] = useState<UploadedAudioAttachment | null>(null);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
 
   // 模型参数状态（持久化）：用户设置后后续每次发送都会沿用
   const parameters = useChatModelParametersStore((s) => s.parameters);
@@ -226,7 +236,12 @@ export function SlateChatInput({
   const handleSend = useCallback(async () => {
     const content = getTextContent();
     
-    if (!content && images.length === 0) {
+    if (isUploadingAudio) {
+      toast.error(t("chat.audio_input.uploading"));
+      return;
+    }
+
+    if (!content && images.length === 0 && !audioAttachment) {
       toast.error(t("chat.message.input_placeholder"));
       return;
     }
@@ -262,7 +277,7 @@ export function SlateChatInput({
         }
       } else {
         const composed = composeMessageContent(content, images);
-        if (!composed) {
+        if (!composed && !audioAttachment) {
           toast.error(t("chat.message.input_placeholder"));
           return;
         }
@@ -272,11 +287,15 @@ export function SlateChatInput({
         }
 
         const model_preset = buildModelPreset(parameters);
+        const input_audio = audioAttachment
+          ? { audio_id: audioAttachment.audio_id, format: audioAttachment.format }
+          : null;
         if (onSubmit) {
           await onSubmit({
             mode: "chat",
             content: composed,
             images,
+            input_audio,
             model_preset,
             parameters,
           });
@@ -285,6 +304,7 @@ export function SlateChatInput({
             await (onSend as any)({
               content: composed,
               images,
+              input_audio,
               model_preset,
               parameters,
             });
@@ -297,12 +317,13 @@ export function SlateChatInput({
       // 清空编辑器和图片
       clearEditor();
       setImages([]);
+      setAudioAttachment(null);
     } catch (error) {
       console.error("Failed to send message:", error);
     } finally {
       setIsSending(false);
     }
-  }, [getTextContent, images, disabled, onSend, onImageSend, parameters, clearEditor, t, mode, imageGenParams]);
+  }, [getTextContent, images, audioAttachment, isUploadingAudio, disabled, onSend, onImageSend, parameters, clearEditor, t, mode, imageGenParams]);
 
   // 清空历史记录
   const handleClearHistory = useCallback(async () => {
@@ -362,6 +383,14 @@ export function SlateChatInput({
     }
   }, [imageSettingsOpen, mode]);
 
+  useEffect(() => {
+    if (mode !== "chat") {
+      setAudioSettingsOpen(false);
+      setAudioAttachment(null);
+      setIsUploadingAudio(false);
+    }
+  }, [mode]);
+
   return (
     <div className={cn("relative flex h-full flex-col bg-background", className)}>
       <div className="flex min-h-0 flex-1 flex-col justify-end px-2 md:px-4 pt-1 pb-2 md:pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
@@ -375,6 +404,24 @@ export function SlateChatInput({
               removeLabel={t("chat.message.remove_image")}
             />
           )}
+
+          {mode === "chat" && audioAttachment ? (
+            <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2">
+              <div className="text-xs text-muted-foreground truncate">
+                {t("chat.audio_input.title")}:{" "}
+                {audioAttachment.filename || audioAttachment.object_key}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={disabled || isSending}
+                onClick={() => setAudioSettingsOpen(true)}
+              >
+                {t("chat.action.edit")}
+              </Button>
+            </div>
+          ) : null}
 
           <div
             className={cn(
@@ -423,6 +470,7 @@ export function SlateChatInput({
                   ? () => setImageSettingsOpen(true)
                   : undefined
               }
+              onOpenAudioSettings={mode === "chat" ? () => setAudioSettingsOpen(true) : undefined}
             />
           </div>
 
@@ -443,6 +491,45 @@ export function SlateChatInput({
           showModelSelect={imageSettingsShowModelSelect}
         />
       ) : null}
+
+      <AudioInputSettingsDrawer
+        open={audioSettingsOpen}
+        onOpenChange={setAudioSettingsOpen}
+        disabled={disabled || isSending}
+        isUploading={isUploadingAudio}
+        audio={audioAttachment}
+        onRemove={() => setAudioAttachment(null)}
+        onPickFromLibrary={(asset) => {
+          setAudioAttachment(asset);
+          setAudioSettingsOpen(false);
+        }}
+        onPickFile={async (file) => {
+          if (!file) return;
+          if (disabled || isSending) return;
+          if (file.size > MAX_AUDIO_BYTES) {
+            toast.error(t("chat.audio_input.too_large"));
+            return;
+          }
+          if (!String(file.type || "").startsWith("audio/")) {
+            toast.error(t("chat.audio_input.unsupported"));
+            return;
+          }
+          setIsUploadingAudio(true);
+          try {
+            const uploaded = await audioService.uploadConversationAudio(conversationId, file);
+            setAudioAttachment({
+              ...uploaded,
+              filename: file.name,
+            });
+            toast.success(t("chat.audio_input.upload_success"));
+          } catch (error) {
+            console.error("Audio upload failed", error);
+            toast.error(t("chat.audio_input.upload_failed"));
+          } finally {
+            setIsUploadingAudio(false);
+          }
+        }}
+      />
     </div>
   );
 }

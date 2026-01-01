@@ -43,6 +43,11 @@ from app.services.chat_routing_service import (
     _is_retryable_upstream_status,
 )
 from app.services.claude_cli_transformer import build_claude_cli_headers, transform_to_claude_cli_format
+from app.services.audio_input_service import (
+    AudioStorageNotConfigured,
+    InputAudioMaterializeError,
+    materialize_input_audio_in_payload,
+)
 from app.services.metrics_service import stream_sdk_with_metrics, stream_upstream_with_metrics
 from app.upstream import UpstreamStreamError
 
@@ -98,6 +103,17 @@ async def execute_http_stream(
     except Exception as exc:
         record_key_failure(key_selection, retryable=False, status_code=400, redis=redis)
         raise Exception(f"Failed to adapt request payload: {exc}")
+
+    try:
+        await materialize_input_audio_in_payload(upstream_payload, user_id=str(api_key.user_id), db=db)
+    except AudioStorageNotConfigured as exc:
+        raise InputAudioMaterializeError(str(exc), status_code=503) from exc
+    except FileNotFoundError as exc:
+        raise InputAudioMaterializeError("input_audio 不存在或不可访问", status_code=400) from exc
+    except ValueError as exc:
+        raise InputAudioMaterializeError(str(exc), status_code=400) from exc
+    except Exception as exc:
+        raise InputAudioMaterializeError("input_audio 处理失败", status_code=400) from exc
 
     upstream_payload["stream"] = True
 
@@ -186,6 +202,16 @@ async def execute_sdk_stream(
         to_style=upstream_style,
         upstream_model_id=model_id,
     )
+    try:
+        await materialize_input_audio_in_payload(upstream_payload, user_id=str(api_key.user_id), db=db)
+    except AudioStorageNotConfigured as exc:
+        raise InputAudioMaterializeError(str(exc), status_code=503) from exc
+    except FileNotFoundError as exc:
+        raise InputAudioMaterializeError("input_audio 不存在或不可访问", status_code=400) from exc
+    except ValueError as exc:
+        raise InputAudioMaterializeError(str(exc), status_code=400) from exc
+    except Exception as exc:
+        raise InputAudioMaterializeError("input_audio 处理失败", status_code=400) from exc
     upstream_payload["stream"] = True
 
     async def _encoded_upstream_iter() -> AsyncIterator[bytes]:

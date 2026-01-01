@@ -175,7 +175,7 @@ def adapt_request_payload(
     target_style = _as_style(to_style)
 
     if source_style == target_style:
-        copied = dict(payload)
+        copied = json.loads(json.dumps(payload, ensure_ascii=False))
         copied["model"] = upstream_model_id
         return copied
 

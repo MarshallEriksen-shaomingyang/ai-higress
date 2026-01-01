@@ -47,6 +47,10 @@ from app.services.claude_cli_transformer import (
     transform_to_claude_cli_format,
 )
 from app.services.metrics_service import call_sdk_generate_with_metrics, call_upstream_http_with_metrics
+from app.services.audio_input_service import (
+    AudioStorageNotConfigured,
+    materialize_input_audio_in_payload,
+)
 
 
 class TransportResult:
@@ -147,6 +151,45 @@ async def execute_http_transport(
             status_code=400,
             error_text=f"Failed to adapt request payload: {exc}",
             retryable=False,
+        )
+
+    try:
+        await materialize_input_audio_in_payload(upstream_payload, user_id=str(api_key.user_id), db=db)
+    except AudioStorageNotConfigured as exc:
+        return TransportResult(
+            success=False,
+            status_code=503,
+            error_text=str(exc),
+            retryable=False,
+            penalize=False,
+            error_category="audio_storage_not_configured",
+        )
+    except FileNotFoundError:
+        return TransportResult(
+            success=False,
+            status_code=400,
+            error_text="input_audio 不存在或不可访问",
+            retryable=False,
+            penalize=False,
+            error_category="invalid_input_audio",
+        )
+    except ValueError as exc:
+        return TransportResult(
+            success=False,
+            status_code=400,
+            error_text=str(exc),
+            retryable=False,
+            penalize=False,
+            error_category="invalid_input_audio",
+        )
+    except Exception:
+        return TransportResult(
+            success=False,
+            status_code=400,
+            error_text="input_audio 处理失败",
+            retryable=False,
+            penalize=False,
+            error_category="invalid_input_audio",
         )
 
     try:
@@ -262,6 +305,55 @@ async def execute_sdk_transport(
             to_style=upstream_style,
             upstream_model_id=model_id,
         )
+    except Exception as exc:
+        record_key_failure(key_selection, retryable=False, status_code=400, redis=redis)
+        return TransportResult(
+            success=False,
+            status_code=400,
+            error_text=f"Failed to adapt request payload: {exc}",
+            retryable=False,
+        )
+
+    try:
+        await materialize_input_audio_in_payload(upstream_payload, user_id=str(api_key.user_id), db=db)
+    except AudioStorageNotConfigured as exc:
+        return TransportResult(
+            success=False,
+            status_code=503,
+            error_text=str(exc),
+            retryable=False,
+            penalize=False,
+            error_category="audio_storage_not_configured",
+        )
+    except FileNotFoundError:
+        return TransportResult(
+            success=False,
+            status_code=400,
+            error_text="input_audio 不存在或不可访问",
+            retryable=False,
+            penalize=False,
+            error_category="invalid_input_audio",
+        )
+    except ValueError as exc:
+        return TransportResult(
+            success=False,
+            status_code=400,
+            error_text=str(exc),
+            retryable=False,
+            penalize=False,
+            error_category="invalid_input_audio",
+        )
+    except Exception:
+        return TransportResult(
+            success=False,
+            status_code=400,
+            error_text="input_audio 处理失败",
+            retryable=False,
+            penalize=False,
+            error_category="invalid_input_audio",
+        )
+
+    try:
         sdk_payload = await call_sdk_generate_with_metrics(
             driver=driver,
             api_key=key_selection.key,

@@ -32,6 +32,42 @@ def _safe_text_from_message_content(content: dict) -> str:
         return text
     return ""
 
+def _infer_audio_format_from_object_key(object_key: str) -> str:
+    key = str(object_key or "").strip().lower()
+    if key.endswith(".mp3"):
+        return "mp3"
+    return "wav"
+
+
+def _build_openai_message_content_from_db_content(content: Any) -> Any:
+    """
+    将 DB 中的 message.content（结构化 dict）转为 OpenAI chat.completions 的 message.content：
+    - 纯文本：返回 string
+    - 带 input_audio：返回 list[parts]（包含 text + input_audio，其中 input_audio 先保留 object_key）
+    """
+    if not isinstance(content, dict):
+        return None
+
+    text = _safe_text_from_message_content(content)
+
+    input_audio = content.get("input_audio")
+    if isinstance(input_audio, dict):
+        object_key = input_audio.get("object_key")
+        if isinstance(object_key, str) and object_key.strip():
+            fmt = input_audio.get("format")
+            fmt = str(fmt or "").strip().lower()
+            if fmt not in {"wav", "mp3"}:
+                fmt = _infer_audio_format_from_object_key(object_key)
+            parts: list[dict[str, Any]] = []
+            if isinstance(text, str) and text.strip():
+                parts.append({"type": "text", "text": text})
+            parts.append({"type": "input_audio", "input_audio": {"object_key": object_key.strip(), "format": fmt}})
+            return parts
+
+    if isinstance(text, str) and text.strip():
+        return text
+    return None
+
 
 def _extract_assistant_text_from_openai_response(payload: dict[str, Any] | None) -> str | None:
     if not isinstance(payload, dict):
@@ -100,18 +136,15 @@ def _build_openai_messages(
         role = str(msg.role or "").strip() or "user"
         if role not in {"user", "assistant", "system"}:
             role = "user"
-        content_text = _safe_text_from_message_content(msg.content)
-        if not content_text:
+        content_value = _build_openai_message_content_from_db_content(msg.content)
+        if content_value is None:
             continue
-        messages.append({"role": role, "content": content_text})
+        messages.append({"role": role, "content": content_value})
 
     # append new message
-    messages.append(
-        {
-            "role": "user",
-            "content": _safe_text_from_message_content(new_user_message.content),
-        }
-    )
+    new_content_value = _build_openai_message_content_from_db_content(new_user_message.content)
+    if new_content_value is not None:
+        messages.append({"role": "user", "content": new_content_value})
     return messages
 
 

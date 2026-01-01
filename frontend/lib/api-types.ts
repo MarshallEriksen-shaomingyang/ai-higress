@@ -1070,6 +1070,11 @@ export interface RequestLogsResponse {
 
 export interface SendMessageRequest {
   content: string;
+  input_audio?: {
+    audio_id?: string;
+    object_key?: string;
+    format?: "wav" | "mp3";
+  };
   override_logical_model?: string;
   model_preset?: Record<string, any>;
   bridge_agent_id?: string;

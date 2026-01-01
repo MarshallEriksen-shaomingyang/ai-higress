@@ -25,11 +25,13 @@ from app.schemas import (
     ModelAliasUpdateRequest,
     ModelCapabilitiesUpdateRequest,
     ModelDisableUpdateRequest,
+    ModelTTSRequirementsUpdateRequest,
     ProviderAPIKey,
     ProviderConfig,
     ProviderModelAliasResponse,
     ProviderModelCapabilitiesResponse,
     ProviderModelDisabledResponse,
+    ProviderModelTTSRequirementsResponse,
     ProviderSubmissionStatus,
     RoutingMetrics,
 )
@@ -707,6 +709,29 @@ def _apply_gateway_capabilities_override(
         model_row.metadata_json = {"_gateway": gateway, "upstream": existing}
 
 
+def _apply_gateway_tts_requires_reference_audio_override(
+    model_row: ProviderModel, *, requires_reference_audio: bool
+) -> None:
+    """
+    Persist gateway-managed TTS requirements into metadata_json under reserved key `_gateway.tts`.
+    """
+    existing = getattr(model_row, "metadata_json", None)
+    gateway: dict[str, Any] = {}
+    if isinstance(existing, dict) and isinstance(existing.get("_gateway"), dict):
+        gateway = dict(existing.get("_gateway") or {})
+    tts: dict[str, Any] = {}
+    if isinstance(gateway.get("tts"), dict):
+        tts = dict(gateway.get("tts") or {})
+    tts["requires_reference_audio"] = bool(requires_reference_audio)
+    gateway["tts"] = tts
+    if isinstance(existing, dict):
+        merged = dict(existing)
+        merged["_gateway"] = gateway
+        model_row.metadata_json = merged
+    else:
+        model_row.metadata_json = {"_gateway": gateway, "upstream": existing}
+
+
 @router.get(
     "/providers/{provider_id}/models/{model_id:path}/capabilities",
     response_model=ProviderModelCapabilitiesResponse,
@@ -821,6 +846,104 @@ async def update_provider_model_capabilities(
         provider_id=provider_row.provider_id,
         model_id=model_row.model_id,
         capabilities=desired,  # type: ignore[arg-type]
+    )
+
+
+@router.get(
+    "/providers/{provider_id}/models/{model_id:path}/tts-requirements",
+    response_model=ProviderModelTTSRequirementsResponse,
+)
+def get_provider_model_tts_requirements(
+    provider_id: str,
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderModelTTSRequirementsResponse:
+    """
+    获取指定 provider+model 的 TTS 约束/需求配置。
+
+    - 仅允许超级管理员或该私有 Provider 的所有者访问；
+    - 若 provider_models 中尚无该模型行或未配置 `_gateway.tts`，返回 requires_reference_audio=false。
+    """
+    provider_row = _ensure_can_edit_provider_models(db, provider_id, current_user)
+    model_row = (
+        db.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider_row.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    requires_reference_audio = False
+    if model_row is not None:
+        meta = getattr(model_row, "metadata_json", None)
+        if isinstance(meta, dict):
+            gateway = meta.get("_gateway")
+            if isinstance(gateway, dict):
+                tts = gateway.get("tts")
+                if isinstance(tts, dict) and isinstance(tts.get("requires_reference_audio"), bool):
+                    requires_reference_audio = bool(tts.get("requires_reference_audio"))
+
+    return ProviderModelTTSRequirementsResponse(
+        provider_id=provider_row.provider_id,
+        model_id=model_id,
+        requires_reference_audio=requires_reference_audio,
+    )
+
+
+@router.put(
+    "/providers/{provider_id}/models/{model_id:path}/tts-requirements",
+    response_model=ProviderModelTTSRequirementsResponse,
+)
+def update_provider_model_tts_requirements(
+    provider_id: str,
+    model_id: str,
+    payload: ModelTTSRequirementsUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> ProviderModelTTSRequirementsResponse:
+    """
+    更新指定 provider+model 的 TTS 约束/需求配置。
+    """
+    provider_row = _ensure_can_edit_provider_models(db, provider_id, current_user)
+    model_row = (
+        db.execute(
+            select(ProviderModel).where(
+                ProviderModel.provider_id == provider_row.id,
+                ProviderModel.model_id == model_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if model_row is None:
+        model_row = ProviderModel(
+            provider_id=provider_row.id,
+            model_id=model_id,
+            family=model_id[:50],
+            display_name=model_id[:100],
+            context_length=8192,
+            capabilities=["chat"],
+            pricing=None,
+            metadata_json=None,
+            meta_hash=None,
+        )
+        db.add(model_row)
+        db.flush()
+
+    _apply_gateway_tts_requires_reference_audio_override(
+        model_row, requires_reference_audio=bool(payload.requires_reference_audio)
+    )
+    db.add(model_row)
+    db.commit()
+    db.refresh(model_row)
+
+    return ProviderModelTTSRequirementsResponse(
+        provider_id=provider_row.provider_id,
+        model_id=model_row.model_id,
+        requires_reference_audio=bool(payload.requires_reference_audio),
     )
 
 

@@ -48,6 +48,7 @@ export function useConversationComposerSubmit({
       setConversationModelPreset(conversationId, payload.model_preset ?? null);
       const request = buildChatPayload({
         content: payload.content,
+        inputAudio: payload.input_audio ?? null,
         modelPreset: payload.model_preset ?? null,
         overrideLogicalModel: overrideLogicalModel ?? null,
         bridgeState: {

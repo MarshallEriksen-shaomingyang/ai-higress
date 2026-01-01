@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.chat.provider_selector import ProviderSelector
@@ -22,6 +23,7 @@ from app.api.v1.chat.routing_state import RoutingStateService
 from app.auth import AuthenticatedAPIKey
 from app.http_client import CurlCffiClient
 from app.logging_config import logger
+from app.models import Provider, ProviderModel
 from app.provider import config as provider_config
 from app.provider.key_pool import (
     NoAvailableProviderKey,
@@ -68,6 +70,8 @@ _GEMINI_VOICE_MAPPING: dict[str, str] = {
     "shimmer": "Zephyr",
 }
 
+_OPENAI_OFFICIAL_HOSTS: set[str] = {"api.openai.com"}
+
 
 def _is_google_native_provider_base_url(base_url: str) -> bool:
     raw = str(base_url or "").strip()
@@ -78,6 +82,24 @@ def _is_google_native_provider_base_url(base_url: str) -> bool:
     except Exception:
         return False
     return str(parsed.netloc or "").lower() == _GEMINI_BASE_URL_HOST
+
+
+def _is_openai_official_provider_base_url(base_url: str) -> bool:
+    """
+    OpenAI 官方 API 对未知字段通常会严格校验；为避免“可选扩展字段”导致请求失败，
+    对官方域名默认不透传扩展字段。
+    """
+    raw = str(base_url or "").strip()
+    if not raw:
+        return False
+    try:
+        parsed = urlsplit(raw)
+    except Exception:
+        return False
+    host = str(parsed.netloc or "").lower()
+    # netloc may include port
+    host = host.split(":", 1)[0]
+    return host in _OPENAI_OFFICIAL_HOSTS
 
 
 def _derive_openai_audio_speech_path(provider_cfg) -> str:
@@ -210,6 +232,68 @@ def _wrap_pcm_as_wav(
     return header + pcm
 
 
+def _model_requires_reference_audio(metadata: Any) -> bool:
+    """
+    Best-effort flag reader for provider_models.metadata_json.
+
+    Reserved key space:
+    - metadata_json["_gateway"]["tts"]["requires_reference_audio"] == true/false
+    """
+    if not isinstance(metadata, dict):
+        return False
+    gateway = metadata.get("_gateway")
+    if not isinstance(gateway, dict):
+        return False
+    tts = gateway.get("tts")
+    if not isinstance(tts, dict):
+        return False
+    value = tts.get("requires_reference_audio")
+    return bool(value) if isinstance(value, bool) else False
+
+
+def _build_openai_compatible_tts_payload(
+    *,
+    provider_model_id: str,
+    processed_text: str,
+    request: SpeechRequest,
+    allow_extensions: bool,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": provider_model_id,
+        "input": processed_text,
+        "voice": request.voice,
+        "response_format": request.response_format,
+        "speed": float(request.speed),
+    }
+    if request.instructions:
+        payload["instructions"] = str(request.instructions)
+    if allow_extensions:
+        if request.locale:
+            payload["locale"] = str(request.locale)
+        if request.pitch is not None:
+            payload["pitch"] = float(request.pitch)
+        if request.volume is not None:
+            payload["volume"] = float(request.volume)
+        if request.reference_audio_url is not None:
+            payload["reference_audio_url"] = str(request.reference_audio_url)
+    return payload
+
+
+def _build_gemini_tts_payload(*, request: SpeechRequest, processed_text: str) -> dict[str, Any]:
+    voice_name = _GEMINI_VOICE_MAPPING.get(str(request.voice), "Kore")
+    return {
+        "contents": [{"parts": [{"text": processed_text}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {"voiceName": voice_name},
+                }
+            },
+        },
+    }
+
+
 @dataclass(frozen=True)
 class _RateLimitResult:
     ok: bool
@@ -282,7 +366,13 @@ class TTSAppService:
 
     def _cache_key(self, *, user_id: str, request: SpeechRequest, processed_text: str) -> str:
         text_hash = hashlib.sha256(processed_text.encode("utf-8")).hexdigest()
-        raw = f"{user_id}:{request.model}:{request.voice}:{request.speed}:{request.response_format}:{text_hash}"
+        ref = str(getattr(request, "reference_audio_url", None) or "").strip()
+        ref_hash = hashlib.sha256(ref.encode("utf-8")).hexdigest() if ref else ""
+        raw = (
+            f"{user_id}:{request.model}:{request.voice}:{request.speed}:{request.response_format}:"
+            f"{getattr(request, 'input_type', 'text')}:{getattr(request, 'locale', None)}:"
+            f"{getattr(request, 'pitch', None)}:{getattr(request, 'volume', None)}:{ref_hash}:{text_hash}"
+        )
         digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         return f"tts:cache:{digest}"
 
@@ -328,7 +418,11 @@ class TTSAppService:
     async def stream_speech(self, request: SpeechRequest) -> AsyncIterator[bytes]:
         request_id = uuid.uuid4().hex
 
-        processed_text = self.preprocess_text(request.input)
+        input_type = str(getattr(request, "input_type", "text") or "text").strip().lower()
+        if input_type == "ssml":
+            processed_text = str(request.input or "").strip()
+        else:
+            processed_text = self.preprocess_text(request.input)
         if not processed_text:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -414,6 +508,47 @@ class TTSAppService:
                     detail={"message": "该模型不支持音频（audio）能力"},
                 )
 
+            ordered_candidates = list(selection.ordered_candidates or [])
+            if ordered_candidates:
+                provider_ids = {c.upstream.provider_id for c in ordered_candidates}
+                model_ids = {c.upstream.model_id for c in ordered_candidates}
+                requires_map: dict[tuple[str, str], bool] = {}
+                try:
+                    rows = self.db.execute(
+                        select(Provider.provider_id, ProviderModel.model_id, ProviderModel.metadata_json)
+                        .select_from(ProviderModel)
+                        .join(Provider, ProviderModel.provider_id == Provider.id)
+                        .where(Provider.provider_id.in_(list(provider_ids)))
+                        .where(ProviderModel.model_id.in_(list(model_ids)))
+                    ).all()
+                    for pid, mid, meta in rows:
+                        if isinstance(pid, str) and isinstance(mid, str):
+                            requires_map[(pid, mid)] = _model_requires_reference_audio(meta)
+                except Exception:
+                    logger.warning("tts: failed to load provider model metadata for reference-audio filtering", exc_info=True)
+
+                if request.reference_audio_url is None:
+                    filtered = [
+                        c for c in ordered_candidates if not requires_map.get((c.upstream.provider_id, c.upstream.model_id), False)
+                    ]
+                    if filtered:
+                        ordered_candidates = filtered
+                    else:
+                        required_by: list[dict[str, str]] = []
+                        for c in ordered_candidates:
+                            if requires_map.get((c.upstream.provider_id, c.upstream.model_id), False):
+                                required_by.append(
+                                    {"provider": c.upstream.provider_id, "model_id": c.upstream.model_id}
+                                )
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail={
+                                "message": "该请求缺少 reference_audio_url，无法路由到需要参考音频的 TTS 上游",
+                                "missing_field": "reference_audio_url",
+                                "required_by": required_by,
+                            },
+                        )
+
             cacheable = self._ensure_cacheable(request=request)
             cache_buffer = bytearray()
             cache_overflow = False
@@ -421,7 +556,7 @@ class TTSAppService:
             last_status: int | None = None
             last_error_detail: Any | None = None
 
-            for scored in selection.ordered_candidates:
+            for scored in ordered_candidates:
                 cand = scored.upstream
                 provider_id = cand.provider_id
                 model_id = cand.model_id
@@ -630,6 +765,7 @@ class TTSAppService:
                 detail={"message": f"Provider '{provider_id}' base_url is empty"},
             )
         url = f"{base_url}/{path.lstrip('/')}"
+        allow_extensions = not _is_openai_official_provider_base_url(base_url)
 
         headers: dict[str, str] = {
             "Content-Type": "application/json",
@@ -640,15 +776,12 @@ class TTSAppService:
         if isinstance(custom_headers, dict) and custom_headers:
             headers.update({str(k): str(v) for k, v in custom_headers.items()})
 
-        payload: dict[str, Any] = {
-            "model": provider_model_id,
-            "input": processed_text,
-            "voice": request.voice,
-            "response_format": request.response_format,
-            "speed": float(request.speed),
-        }
-        if request.instructions:
-            payload["instructions"] = str(request.instructions)
+        payload = _build_openai_compatible_tts_payload(
+            provider_model_id=provider_model_id,
+            processed_text=processed_text,
+            request=request,
+            allow_extensions=allow_extensions,
+        )
 
         async with self.client.stream("POST", url, headers=headers, json=payload) as resp:
             if int(getattr(resp, "status_code", 0) or 0) >= 400:
@@ -711,18 +844,7 @@ class TTSAppService:
         if isinstance(custom_headers, dict) and custom_headers:
             headers.update({str(k): str(v) for k, v in custom_headers.items()})
 
-        voice_name = _GEMINI_VOICE_MAPPING.get(str(request.voice), "Kore")
-        payload = {
-            "contents": [{"parts": [{"text": processed_text}]}],
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "speechConfig": {
-                    "voiceConfig": {
-                        "prebuiltVoiceConfig": {"voiceName": voice_name},
-                    }
-                },
-            },
-        }
+        payload = _build_gemini_tts_payload(request=request, processed_text=processed_text)
 
         resp = await self.client.post(url, headers=headers, json=payload)
         if int(getattr(resp, "status_code", 0) or 0) >= 400:

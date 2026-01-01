@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class SpeechRequest(BaseModel):
@@ -28,6 +28,26 @@ class SpeechRequest(BaseModel):
     instructions: str | None = Field(
         default=None,
         description="可选：语气/情感等指令（部分上游/模型支持）",
+    )
+    input_type: Literal["text", "ssml"] = Field(
+        default="text",
+        description="输入类型：text（默认）或 ssml（XML 字符串；是否支持取决于上游）",
+    )
+    locale: str | None = Field(
+        default=None,
+        description="可选：语言/地区（如 zh-CN、en-US；是否生效取决于上游/模型）",
+    )
+    pitch: float | None = Field(
+        default=None,
+        description="可选：音高（语义值域取决于上游/模型；网关不做统一归一化）",
+    )
+    volume: float | None = Field(
+        default=None,
+        description="可选：音量（语义值域取决于上游/模型；网关不做统一归一化）",
+    )
+    reference_audio_url: HttpUrl | None = Field(
+        default=None,
+        description="可选：参考音频 URL（部分上游 TTS/克隆音色能力需要；网关用于选路约束）",
     )
 
 

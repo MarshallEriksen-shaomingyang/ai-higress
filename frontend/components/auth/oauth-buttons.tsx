@@ -11,17 +11,38 @@ interface OAuthButtonsProps {
    * 如果不提供，将使用当前页面地址
    */
   redirectUrl?: string;
-  
+
   /**
    * 是否显示分隔线
    */
   showDivider?: boolean;
+
+  /**
+   * 是否已同意服务条款
+   */
+  agreedToTerms?: boolean;
+
+  /**
+   * 当需要同意服务条款时的回调
+   */
+  onTermsRequired?: () => void;
 }
 
-export function OAuthButtons({ redirectUrl, showDivider = true }: OAuthButtonsProps) {
+export function OAuthButtons({
+  redirectUrl,
+  showDivider = true,
+  agreedToTerms = false,
+  onTermsRequired,
+}: OAuthButtonsProps) {
   const { t } = useI18n();
 
   const handleLinuxDoLogin = () => {
+    // 检查是否已同意服务条款
+    if (!agreedToTerms) {
+      onTermsRequired?.();
+      return;
+    }
+
     // 保存重定向地址
     if (redirectUrl) {
       oauthRedirect.save(redirectUrl);

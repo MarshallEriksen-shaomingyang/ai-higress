@@ -123,6 +123,20 @@
   - `pronunciation_dictionary_locators`
 - 输出：`output_format`（query 参数，包含采样率/码率组合）
 
+### 国内/多云常见差异点（不逐字列字段，先抽象语义）
+这类厂商的“字段名”差异往往比云厂商更大（有的走 WebSocket/二进制协议、有的把输出格式放 header 或 query），但语义通常仍可落到第 2 节的分类里：
+
+- **输入**：`text`/`input`/`prompt`/`ssml`（部分厂商强依赖 SSML 才能表达 style/prosody）
+- **音色**：`voice`/`voice_id`/`speaker`/`spk_id`（常见“平台侧音色列表”与“自定义音色/克隆音色 id”并存）
+- **输出**：`format`/`encoding`/`sample_rate`/`bitrate`（不少厂商把采样率作为 format 的一部分）
+- **韵律/风格**：`speed`/`rate`/`pitch`/`volume`/`emotion`/`style`
+- **参考音频/克隆**：`prompt_audio`/`prompt_audio_url`/`ref_audio_url`/`clone_id`
+
+建议把你们实际要接入的国内厂商列为“探针名单”，用 `scripts/discover_tts_adapter.py` 先探测：
+1) 是否存在 OpenAPI（能直接推断 required/properties）
+2) OpenAI-compatible payload 是否能直接返回音频
+3) 错误信息是否提示必填字段（例如 `prompt_audio_url`）
+
 ---
 
 ## 4. 建议：网关“统一语义”如何定（满足多数厂商，同时保持强合约）
@@ -154,9 +168,25 @@
 
 ---
 
-## 5. 下一步落地建议（不依赖“手写 50 个 adapter”）
+## 5. 本项目参数确认建议（面向“专业聚合网关”的最小可行超集）
+
+你们现在的对外合约已经是 OpenAI-compatible（`SpeechRequest`），建议保持它稳定；要覆盖更多厂商时，优先做“**可选扩展**”而不是破坏性改名。
+
+建议的统一语义演进顺序：
+1) **保持现有字段**：`model/input/voice/response_format/speed/instructions`（已覆盖大量“纯文本合成”厂商）
+2) **优先补齐 Standard**：`input_type(text|ssml)`、`locale`、`pitch`、`volume`、`sample_rate_hz`（多数云厂商可映射）
+3) **再引入 reference audio**（可选但强烈建议纳入统一语义）：`reference_audio_url` / `reference_audio_base64` / `voice_clone_id`  
+   - 这一步能解决你们遇到的 `prompt_audio_url` 必填类上游
+   - 路由层可基于“能力 + 缺参”做硬拒绝，避免选路到不兼容上游后才 400/503
+
+如果短期不想扩 API 字段，也可以采取折中策略：
+- 在 provider 配置里标记该上游 “requires_reference_audio=true”
+- 当请求不带 reference audio 时，直接从候选中剔除该上游（避免无意义重试/Failover）
+
+---
+
+## 6. 下一步落地建议（不依赖“手写 50 个 adapter”）
 
 1) 先做 **TTS 协议探针/兼容性爬虫**：对每个 provider 识别是否 OpenAI-compatible、是否需要 reference audio、输出格式如何选（body/header/query），并把结果写到报告（JSON/YAML）。
 2) 再做 **GenericAdapter**：读取映射配置生成上游请求；少量“怪厂商”再用手写 adapter。
 3) 用 **Golden Dataset 测试**（先比 Pact 更快落地）：只测“请求体/headers 构建正确性”和“缺参时的错误提示一致性”。
-

@@ -6,6 +6,11 @@ export type ChatComposerSubmitPayload = {
   mode: "chat";
   content: string;
   images: string[];
+  input_audio?: {
+    audio_id?: string;
+    object_key?: string;
+    format?: "wav" | "mp3";
+  } | null;
   model_preset?: Record<string, number>;
   parameters: ModelParameters;
 };
@@ -21,4 +26,3 @@ export type ComposerSubmitPayload = ChatComposerSubmitPayload | ImageComposerSub
 export function isComposerMode(value: string): value is ComposerMode {
   return value === "chat" || value === "image";
 }
-

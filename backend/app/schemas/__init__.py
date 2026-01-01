@@ -34,6 +34,8 @@ from .assistants import (
     RunSummary,
 )
 from .auth import LoginRequest, RefreshTokenRequest, RegisterRequest, TokenResponse
+from .audio_uploads import ConversationAudioUploadResponse
+from .audio_assets import AudioAssetItem, AudioAssetListResponse, AudioAssetVisibilityUpdateRequest
 from .credit import (
     CreditAccountResponse,
     CreditAutoTopupBatchRequest,
@@ -75,11 +77,13 @@ from .model import (
     ModelCapabilitiesUpdateRequest,
     ModelCapability,
     ModelDisableUpdateRequest,
+    ModelTTSRequirementsUpdateRequest,
     ModelPricingUpdateRequest,
     ProviderModelAliasResponse,
     ProviderModelCapabilitiesResponse,
     ProviderModelDisabledResponse,
     ProviderModelPricingResponse,
+    ProviderModelTTSRequirementsResponse,
 )
 from .project_chat_settings import ProjectChatSettingsResponse, ProjectChatSettingsUpdateRequest
 from .project_eval_config import ProjectEvalConfigResponse, ProjectEvalConfigUpdateRequest
@@ -158,6 +162,10 @@ __all__ = [
     "RefreshTokenRequest",
     "RegisterRequest",
     "TokenResponse",
+    "ConversationAudioUploadResponse",
+    "AudioAssetItem",
+    "AudioAssetListResponse",
+    "AudioAssetVisibilityUpdateRequest",
     "CreditAccountResponse",
     "CreditAutoTopupConfig",
     "CreditAutoTopupConfigResponse",
@@ -179,11 +187,13 @@ __all__ = [
     "ModelCapability",
     "ModelDisableUpdateRequest",
     "ModelPricingUpdateRequest",
+    "ModelTTSRequirementsUpdateRequest",
     "ProviderModelPricingResponse",
     "ModelAliasUpdateRequest",
     "ProviderModelAliasResponse",
     "ProviderModelCapabilitiesResponse",
     "ProviderModelDisabledResponse",
+    "ProviderModelTTSRequirementsResponse",
     "APIKeyMetricsSummary",
     "MetricsBucket",
     "MetricsDataPoint",
