@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 import time
 from typing import Any
@@ -200,6 +201,14 @@ def _build_openai_videos_multipart_fields(
     seconds = getattr(request, "seconds", None)
     if seconds is not None:
         form["seconds"] = str(int(seconds))
+
+    image_url = getattr(request, "image_url", None)
+    if isinstance(image_url, str) and image_url.strip():
+        form["image_url"] = image_url.strip()
+
+    audio_url = getattr(request, "audio_url", None)
+    if isinstance(audio_url, str) and audio_url.strip():
+        form["audio_url"] = audio_url.strip()
 
     return {k: (None, v) for k, v in form.items() if isinstance(k, str) and v is not None}
 
@@ -607,12 +616,47 @@ class VideoAppService:
 
         upstream_payload = _build_google_veo_predict_payload(request=request)
 
+        # Handle input image for Veo
+        image_url = getattr(request, "image_url", None)
+        if isinstance(image_url, str) and image_url.strip():
+            target_url = image_url.strip()
+            # If it's a GCS URI, pass it directly
+            if target_url.startswith("gs://"):
+                upstream_payload["instances"][0]["image"] = {"uri": target_url}
+            else:
+                # Otherwise, fetch and encode
+                try:
+                    img_resp = await http_client.get(target_url, timeout=30.0)
+                    if img_resp.status_code >= 400:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Failed to fetch input image: {img_resp.status_code}",
+                        )
+                    img_bytes = img_resp.content
+                    img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+                    mime_type = str(img_resp.headers.get("content-type") or "image/png")
+                    upstream_payload["instances"][0]["image"] = {
+                        "imageBytes": img_b64,
+                        "mimeType": mime_type,
+                    }
+                except HTTPException:
+                    raise
+                except Exception as exc:
+                    logger.warning("failed to fetch video input image url=%s: %s", target_url, exc)
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Failed to fetch input image: {exc}",
+                    )
+
         if video_debug_logger.isEnabledFor(logging.DEBUG):
             safe = dict(upstream_payload)
             inst = safe.get("instances")
             if isinstance(inst, list) and inst and isinstance(inst[0], dict):
                 inst0 = dict(inst[0])
                 inst0["prompt"] = "[omitted]"
+                if "image" in inst0 and "imageBytes" in inst0["image"]:
+                    # Don't log base64 image data
+                    inst0["image"] = {**inst0["image"], "imageBytes": "[omitted]"}
                 safe["instances"] = [inst0]
             video_debug_logger.debug(
                 "google_veo upstream payload provider=%s model_id=%s url=%s body=%s",
