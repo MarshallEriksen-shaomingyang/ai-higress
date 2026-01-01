@@ -20,11 +20,37 @@ from app.schemas.video import VideoGenerationRequest
 from app.services.chat_history_service import finalize_assistant_image_generation_after_user_sequence
 from app.services.run_event_bus import build_run_event_envelope, publish_run_event, publish_run_event_best_effort
 from app.services.video_app_service import VideoAppService
+from app.services.video_task_cache import CachedTaskStatus, cache_task_status, invalidate_task_cache
 
 try:
     from redis.asyncio import Redis
 except ModuleNotFoundError:  # pragma: no cover
     Redis = object  # type: ignore[misc,assignment]
+
+
+async def _update_task_cache(
+    redis: Redis,
+    run: Run,
+    *,
+    progress: int | None = None,
+    result: dict[str, Any] | None = None,
+    error: dict[str, Any] | None = None,
+) -> None:
+    """Update task status cache after status change."""
+    try:
+        entry = CachedTaskStatus(
+            task_id=str(run.id),
+            status=run.status,  # type: ignore[arg-type]
+            created_at=run.created_at.isoformat() if run.created_at else "",
+            started_at=run.started_at.isoformat() if run.started_at else None,
+            finished_at=run.finished_at.isoformat() if run.finished_at else None,
+            progress=progress,
+            result=result,
+            error=error,
+        )
+        await cache_task_status(redis, entry)
+    except Exception as exc:
+        logger.debug("Failed to update task cache for %s: %s", run.id, exc)
 
 
 def _to_authenticated_api_key(db, *, api_key: APIKey) -> AuthenticatedAPIKey:
@@ -336,5 +362,190 @@ def execute_video_generation_run_task(run_id: str, assistant_message_id: str | N
             pass
 
 
-__all__ = ["execute_video_generation_run", "execute_video_generation_run_task"]
+# ============= 独立视频生成任务（用于 /v1/videos/generations API） =============
+
+
+async def execute_video_generation_standalone(
+    *,
+    run_id: str,
+    api_key_id: str,
+) -> str:
+    """
+    执行独立的视频生成任务（不依赖会话/消息上下文）。
+
+    该函数用于处理通过 /v1/videos/generations API 创建的任务。
+    与 execute_video_generation_run 不同，它不需要 conversation/message 上下文。
+    """
+    run_uuid = UUID(str(run_id))
+    api_key_uuid = UUID(str(api_key_id))
+    SessionFactory = SessionLocal
+
+    redis = get_redis_client()
+    try:
+        with SessionFactory() as db:
+            run = db.get(Run, run_uuid)
+            if run is None:
+                logger.warning("video_generation_standalone: run not found (run_id=%s)", run_id)
+                return "skipped:no_run"
+
+            if str(run.status or "") in {"succeeded", "failed", "canceled"}:
+                return "skipped:already_finished"
+
+            api_key = db.get(APIKey, api_key_uuid)
+            if api_key is None:
+                logger.warning("video_generation_standalone: api_key not found (api_key_id=%s)", api_key_id)
+                run.status = "failed"
+                run.error_code = "API_KEY_NOT_FOUND"
+                run.error_message = "API Key not found"
+                run.finished_at = datetime.now(UTC)
+                db.add(run)
+                db.commit()
+                return "failed:no_api_key"
+
+            try:
+                auth_key = _to_authenticated_api_key(db, api_key=api_key)
+            except RuntimeError as exc:
+                run.status = "failed"
+                run.error_code = "USER_NOT_FOUND"
+                run.error_message = str(exc)[:512]
+                run.finished_at = datetime.now(UTC)
+                db.add(run)
+                db.commit()
+                return "failed:no_user"
+
+            # 提取请求参数
+            request_payload: dict[str, Any] = {}
+            if isinstance(run.request_payload, dict):
+                request_payload = dict(run.request_payload)
+
+            prompt = str(request_payload.get("prompt") or "")
+            request_payload.pop("kind", None)
+            request_payload.pop("prompt", None)
+
+            # 更新状态为 running
+            started_at = datetime.now(UTC)
+            run.status = "running"
+            run.started_at = started_at
+            db.add(run)
+            db.commit()
+
+            # 更新缓存：任务开始执行
+            await _update_task_cache(redis, run, progress=5)
+
+            # 构建请求并执行
+            request = VideoGenerationRequest.model_validate({**request_payload, "prompt": prompt})
+
+            t0 = time.perf_counter()
+            try:
+                async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as http_client:
+                    resp = await VideoAppService(
+                        client=http_client,
+                        redis=redis,
+                        db=db,
+                        api_key=auth_key,
+                    ).generate_video(request)
+            except Exception as exc:
+                finished_at = datetime.now(UTC)
+                run.status = "failed"
+                run.finished_at = finished_at
+                run.latency_ms = int((time.perf_counter() - t0) * 1000)
+                run.error_code = "VIDEO_GENERATION_FAILED"
+                run.error_message = str(exc)[:512]
+                db.add(run)
+                db.commit()
+                logger.exception("video_generation_standalone failed (run_id=%s): %s", run_id, exc)
+
+                # 更新缓存：任务失败
+                await _update_task_cache(
+                    redis,
+                    run,
+                    progress=100,
+                    error={"code": run.error_code, "message": run.error_message},
+                )
+                return "failed"
+
+            # 成功：更新状态和结果
+            finished_at = datetime.now(UTC)
+            run.status = "succeeded"
+            run.finished_at = finished_at
+            run.latency_ms = int((time.perf_counter() - t0) * 1000)
+            run.output_preview = f"[视频] {prompt[:60]}".strip()
+
+            # 构建响应 payload
+            videos: list[dict[str, Any]] = []
+            for item in resp.data or []:
+                url = getattr(item, "url", None)
+                object_key = getattr(item, "object_key", None)
+                revised = getattr(item, "revised_prompt", None)
+                entry: dict[str, Any] = {}
+                if isinstance(url, str) and url:
+                    entry["url"] = url
+                if isinstance(object_key, str) and object_key:
+                    entry["object_key"] = object_key
+                if revised is not None:
+                    entry["revised_prompt"] = revised
+                if entry:
+                    videos.append(entry)
+
+            run.response_payload = {
+                "type": "video_generation",
+                "status": "succeeded",
+                "prompt": prompt,
+                "params": request_payload,
+                "videos": videos,
+                "created": int(getattr(resp, "created", None) or time.time()),
+            }
+            db.add(run)
+            db.commit()
+
+            # 更新缓存：任务成功
+            await _update_task_cache(
+                redis,
+                run,
+                progress=100,
+                result={
+                    "created": run.response_payload.get("created"),
+                    "data": videos,
+                },
+            )
+
+            logger.info(
+                "video_generation_standalone succeeded (run_id=%s, latency_ms=%d, videos=%d)",
+                run_id,
+                run.latency_ms or 0,
+                len(videos),
+            )
+            return "succeeded"
+    finally:
+        try:
+            await close_redis_client_for_current_loop()
+        except Exception:
+            pass
+
+
+@shared_task(name="tasks.execute_video_generation_standalone")
+def execute_video_generation_standalone_task(run_id: str, api_key_id: str) -> str:
+    """
+    Celery 任务：执行独立视频生成（用于 /v1/videos/generations API）。
+    """
+    try:
+        return asyncio.run(
+            execute_video_generation_standalone(run_id=run_id, api_key_id=api_key_id)
+        )
+    except Exception as exc:
+        logger.exception("video_generation_standalone task failed: %s", exc)
+        return "failed"
+    finally:
+        try:
+            asyncio.run(close_redis_client_for_current_loop())
+        except Exception:
+            pass
+
+
+__all__ = [
+    "execute_video_generation_run",
+    "execute_video_generation_run_task",
+    "execute_video_generation_standalone",
+    "execute_video_generation_standalone_task",
+]
 

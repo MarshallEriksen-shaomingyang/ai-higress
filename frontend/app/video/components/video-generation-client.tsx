@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { nanoid } from "nanoid";
 import {
   Settings2,
@@ -8,12 +8,13 @@ import {
   RectangleHorizontal,
   RectangleVertical,
   Square,
-  Loader2,
   Video,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import {
   Tooltip,
   TooltipContent,
@@ -30,7 +31,7 @@ import { useVideoGenerations } from "@/lib/swr/use-video-generations";
 import { useLogicalModels } from "@/lib/swr/use-logical-models";
 import { VideoConfigSheet } from "./video-config-sheet";
 import { VideoFilmstrip } from "./video-filmstrip";
-import type { VideoAspectRatio } from "@/lib/api-types";
+import type { VideoAspectRatio, VideoGenerationTaskStatusResponse } from "@/lib/api-types";
 
 const ASPECT_RATIOS: {
   value: VideoAspectRatio;
@@ -45,6 +46,9 @@ const ASPECT_RATIOS: {
 export function VideoGenerationClient() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<VideoGenTask | null>(null);
+  const [progress, setProgress] = useState<number>(0);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const currentTaskIdRef = useRef<string | null>(null);
 
   const config = useVideoComposerStore(selectVideoConfig);
   const isGenerating = useVideoComposerStore(selectIsGenerating);
@@ -58,7 +62,49 @@ export function VideoGenerationClient() {
     buildRequest,
   } = useVideoComposerStore();
 
-  const { generateVideo } = useVideoGenerations();
+  const { generateVideoAsync, cancelPolling } = useVideoGenerations({
+    onStatusChange: (status: VideoGenerationTaskStatusResponse) => {
+      // Update progress
+      if (status.progress !== undefined) {
+        setProgress(status.progress);
+      }
+
+      // Update status message
+      switch (status.status) {
+        case "queued":
+          setStatusMessage("Waiting in queue...");
+          break;
+        case "running":
+          setStatusMessage("Generating video...");
+          break;
+        case "succeeded":
+          setStatusMessage("Complete!");
+          break;
+        case "failed":
+          setStatusMessage("Failed");
+          break;
+      }
+
+      // Update task in store if we have a matching task
+      if (currentTaskIdRef.current) {
+        const taskId = currentTaskIdRef.current;
+        if (status.status === "succeeded" && status.result) {
+          updateTask(taskId, {
+            status: "success",
+            result: status.result,
+            completedAt: Date.now(),
+          });
+        } else if (status.status === "failed") {
+          updateTask(taskId, {
+            status: "failed",
+            error: status.error?.message || "Generation failed",
+            completedAt: Date.now(),
+          });
+        }
+      }
+    },
+  });
+
   const { models } = useLogicalModels();
 
   // Filter models that support video generation
@@ -77,7 +123,12 @@ export function VideoGenerationClient() {
     if (!config.prompt.trim() || !config.model || isGenerating) return;
 
     const taskId = nanoid();
+    currentTaskIdRef.current = taskId;
     const request = buildRequest();
+
+    // Reset progress
+    setProgress(0);
+    setStatusMessage("Creating task...");
 
     // Create task entry
     const task: VideoGenTask = {
@@ -102,12 +153,21 @@ export function VideoGenerationClient() {
     setIsGenerating(true);
 
     try {
-      const response = await generateVideo(request);
-      updateTask(taskId, {
-        status: "success",
-        result: response,
-        completedAt: Date.now(),
-      });
+      const response = await generateVideoAsync(request);
+
+      if (response.status === "succeeded" && response.result) {
+        updateTask(taskId, {
+          status: "success",
+          result: response.result,
+          completedAt: Date.now(),
+        });
+      } else if (response.status === "failed") {
+        updateTask(taskId, {
+          status: "failed",
+          error: response.error?.message || "Generation failed",
+          completedAt: Date.now(),
+        });
+      }
     } catch (error) {
       updateTask(taskId, {
         status: "failed",
@@ -116,6 +176,9 @@ export function VideoGenerationClient() {
       });
     } finally {
       setIsGenerating(false);
+      currentTaskIdRef.current = null;
+      setProgress(0);
+      setStatusMessage("");
     }
   }, [
     config.prompt,
@@ -125,8 +188,23 @@ export function VideoGenerationClient() {
     addTask,
     updateTask,
     setIsGenerating,
-    generateVideo,
+    generateVideoAsync,
   ]);
+
+  const handleCancel = useCallback(() => {
+    cancelPolling();
+    if (currentTaskIdRef.current) {
+      updateTask(currentTaskIdRef.current, {
+        status: "failed",
+        error: "Cancelled by user",
+        completedAt: Date.now(),
+      });
+    }
+    setIsGenerating(false);
+    currentTaskIdRef.current = null;
+    setProgress(0);
+    setStatusMessage("");
+  }, [cancelPolling, updateTask, setIsGenerating]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -167,6 +245,17 @@ export function VideoGenerationClient() {
           </div>
         )}
 
+        {/* Progress Bar (shown during generation) */}
+        {isGenerating && (
+          <div className="w-full max-w-2xl mb-4 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{statusMessage}</span>
+              <span className="text-muted-foreground">{progress}%</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+        )}
+
         {/* Magic Bar - Central Input Area */}
         <div
           className={cn(
@@ -187,11 +276,13 @@ export function VideoGenerationClient() {
             value={config.prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
+            disabled={isGenerating}
             className={cn(
               "w-full min-h-[80px] max-h-[200px] resize-none",
               "bg-transparent border-0 focus-visible:ring-0",
               "text-base placeholder:text-muted-foreground/60",
-              "scrollbar-thin scrollbar-thumb-white/10"
+              "scrollbar-thin scrollbar-thumb-white/10",
+              isGenerating && "opacity-50"
             )}
             autoFocus
           />
@@ -211,6 +302,7 @@ export function VideoGenerationClient() {
                             : "ghost"
                         }
                         size="icon"
+                        disabled={isGenerating}
                         className={cn(
                           "h-8 w-8",
                           config.aspectRatio === ratio.value
@@ -234,6 +326,7 @@ export function VideoGenerationClient() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      disabled={isGenerating}
                       className="h-8 w-8 hover:bg-white/10"
                       onClick={() => setIsConfigOpen(true)}
                     >
@@ -245,29 +338,31 @@ export function VideoGenerationClient() {
               </TooltipProvider>
             </div>
 
-            {/* Generate Button */}
-            <Button
-              onClick={handleGenerate}
-              disabled={!config.prompt.trim() || !config.model || isGenerating}
-              className={cn(
-                "px-6 gap-2",
-                "bg-gradient-to-r from-primary to-primary/80",
-                "hover:from-primary/90 hover:to-primary/70",
-                "shadow-lg shadow-primary/25"
-              )}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Generate
-                </>
-              )}
-            </Button>
+            {/* Generate / Cancel Button */}
+            {isGenerating ? (
+              <Button
+                onClick={handleCancel}
+                variant="destructive"
+                className="px-6 gap-2"
+              >
+                <XCircle className="h-4 w-4" />
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                onClick={handleGenerate}
+                disabled={!config.prompt.trim() || !config.model}
+                className={cn(
+                  "px-6 gap-2",
+                  "bg-gradient-to-r from-primary to-primary/80",
+                  "hover:from-primary/90 hover:to-primary/70",
+                  "shadow-lg shadow-primary/25"
+                )}
+              >
+                <Sparkles className="h-4 w-4" />
+                Generate
+              </Button>
+            )}
           </div>
 
           {/* Model indicator */}
@@ -280,7 +375,7 @@ export function VideoGenerationClient() {
 
         {/* Keyboard Shortcut Hint */}
         <p className="mt-3 text-xs text-muted-foreground/50">
-          Press <kbd className="px-1.5 py-0.5 rounded bg-muted/50 text-[10px]">⌘</kbd> +{" "}
+          Press <kbd className="px-1.5 py-0.5 rounded bg-muted/50 text-[10px]">Cmd</kbd> +{" "}
           <kbd className="px-1.5 py-0.5 rounded bg-muted/50 text-[10px]">Enter</kbd> to generate
         </p>
       </div>

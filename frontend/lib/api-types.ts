@@ -476,6 +476,48 @@ export interface VideoGenerationResponse {
   data: VideoObject[];
 }
 
+// Video generation task types (for async API)
+export type VideoGenerationTaskStatus = "queued" | "running" | "succeeded" | "failed";
+
+export interface VideoGenerationTaskCreated {
+  task_id: string;
+  status: "queued";
+  created_at: string;
+  poll_url: string;
+}
+
+export interface VideoGenerationTaskStatusResponse {
+  task_id: string;
+  status: VideoGenerationTaskStatus;
+  created_at: string;
+  started_at?: string;
+  finished_at?: string;
+  progress?: number;
+  result?: VideoGenerationResponse;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface VideoGenerationHistoryItem {
+  task_id: string;
+  status: string;
+  prompt?: string;
+  model?: string;
+  created_at: string;
+  finished_at?: string;
+  latency_ms?: number;
+  videos?: Array<{ url?: string; object_key?: string }>;
+  error?: string;
+}
+
+export interface VideoGenerationHistoryResponse {
+  items: VideoGenerationHistoryItem[];
+  total: number;
+  has_more: boolean;
+}
+
 export type UpdateGatewayConfigRequest = GatewayConfig;
 
 // ============= 通知相关 =============

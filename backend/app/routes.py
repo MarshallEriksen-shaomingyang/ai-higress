@@ -33,6 +33,7 @@ from .api.v1.audio_routes import router as audio_router
 from .api.v1.bridge_routes import router as bridge_router
 from .api.v1.chat_routes import router as chat_router
 from .api.v1.image_routes import router as image_router
+from .api.v1.video_routes import router as video_router
 from .api.v1.cli_config import router as cli_config_router
 from .api.v1.credit_routes import router as credit_router
 from .api.v1.eval_routes import router as eval_router
@@ -272,6 +273,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router)
     app.include_router(audio_router)
     app.include_router(image_router)
+    app.include_router(video_router)
     app.include_router(media_router)
     # MCP Bridge（Agent / Tools / Events）
     app.include_router(bridge_router)

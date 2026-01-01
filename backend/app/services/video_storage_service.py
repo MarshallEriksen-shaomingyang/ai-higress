@@ -5,6 +5,7 @@ import mimetypes
 import time
 import uuid
 from dataclasses import dataclass
+from functools import lru_cache
 from hashlib import sha256
 from pathlib import Path
 from typing import Literal
@@ -225,21 +226,52 @@ def _hmac_signature(object_key: str, expires_at: int) -> str:
     return hmac.new(secret, msg, sha256).hexdigest()
 
 
+# Cache signed URLs for 5 minutes (300 seconds) to reduce repeated calculations
+# We round expires_at to the nearest 5-minute boundary for cache effectiveness
+_SIGNED_URL_CACHE_BUCKET_SECONDS = 300
+
+
+@lru_cache(maxsize=1024)
+def _cached_build_signed_url(
+    object_key: str,
+    api_base: str,
+    expires_at_bucket: int,
+    ttl: int,
+) -> str:
+    """
+    Cached version of signed URL generation.
+
+    expires_at_bucket is rounded to 5-minute intervals for cache effectiveness.
+    The actual expires_at is calculated from the bucket + remaining TTL.
+    """
+    expires_at = expires_at_bucket + ttl
+    sig = _hmac_signature(object_key, expires_at)
+    safe_key = quote(object_key, safe="/")
+    return f"{api_base}/media/videos/{safe_key}?expires={expires_at}&sig={sig}"
+
+
 def build_signed_video_url(
     object_key: str,
     *,
     base_url: str | None = None,
     ttl_seconds: int | None = None,
 ) -> str:
+    """
+    Generate a signed URL for video access.
+
+    Uses LRU cache with 5-minute time buckets to reduce repeated calculations.
+    """
     api_base = (base_url or settings.gateway_api_base_url or "").rstrip("/")
     if not api_base:
         api_base = "http://localhost:8000"
 
     ttl = int(ttl_seconds or getattr(settings, "image_signed_url_ttl_seconds", 3600) or 3600)
-    expires_at = int(time.time()) + max(1, ttl)
-    sig = _hmac_signature(object_key, expires_at)
-    safe_key = quote(object_key, safe="/")
-    return f"{api_base}/media/videos/{safe_key}?expires={expires_at}&sig={sig}"
+
+    # Round current time to nearest 5-minute bucket for cache effectiveness
+    now = int(time.time())
+    bucket = (now // _SIGNED_URL_CACHE_BUCKET_SECONDS) * _SIGNED_URL_CACHE_BUCKET_SECONDS
+
+    return _cached_build_signed_url(object_key, api_base, bucket, ttl)
 
 
 def verify_signed_video_request(object_key: str, *, expires: int, sig: str) -> None:
