@@ -171,6 +171,8 @@ def infer_log_business(record: logging.LogRecord) -> str:
     # API routes
     if "/app/api/v1/chat_routes.py" in path:
         return "chat"
+    if "/app/api/v1/audio_routes.py" in path:
+        return "speech"
     if "/app/api/v1/" in path and "provider" in path:
         return "provider"
     if "/app/api/system_routes.py" in path:
@@ -181,6 +183,13 @@ def infer_log_business(record: logging.LogRecord) -> str:
     # Domain modules / services
     if "/app/services/chat_routing_service.py" in path:
         return "chat"
+    # Speech services (TTS/STT)
+    if "/app/services/tts_app_service.py" in path:
+        return "speech"
+    if "/app/services/stt_app_service.py" in path:
+        return "speech"
+    if "/app/services/audio_" in path:
+        return "speech"
     if "/app/provider/" in path or "/app/services/provider_" in path:
         return "provider"
     if "/app/services/credit_" in path:

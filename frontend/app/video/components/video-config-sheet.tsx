@@ -24,6 +24,7 @@ import {
   useVideoComposerStore,
   selectVideoConfig,
 } from "@/lib/stores/video-composer-store";
+import { useI18n } from "@/lib/i18n-context";
 import type { VideoResolution } from "@/lib/api-types";
 import type { LogicalModel } from "@/lib/api-types";
 
@@ -38,6 +39,7 @@ export function VideoConfigSheet({
   onOpenChange,
   models,
 }: VideoConfigSheetProps) {
+  const { t } = useI18n();
   const config = useVideoComposerStore(selectVideoConfig);
   const {
     setModel,
@@ -52,9 +54,9 @@ export function VideoConfigSheet({
   } = useVideoComposerStore();
 
   const resolutionOptions: { value: VideoResolution; label: string }[] = [
-    { value: "480p", label: "480p (SD)" },
-    { value: "720p", label: "720p (HD)" },
-    { value: "1080p", label: "1080p (FHD)" },
+    { value: "480p", label: t("video.settings.resolution_480p") },
+    { value: "720p", label: t("video.settings.resolution_720p") },
+    { value: "1080p", label: t("video.settings.resolution_1080p") },
   ];
 
   const durationOptions = [5, 8, 10, 12];
@@ -62,24 +64,24 @@ export function VideoConfigSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent className="!w-[340px] sm:!w-[420px] sm:!max-w-[420px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Advanced Settings
+            {t("video.settings.title")}
           </SheetTitle>
           <SheetDescription>
-            Configure video generation parameters
+            {t("video.settings.description")}
           </SheetDescription>
         </SheetHeader>
 
         <div className="mt-6 space-y-6">
           {/* Model Selection */}
           <div className="space-y-2">
-            <Label htmlFor="model">Model</Label>
+            <Label htmlFor="model">{t("video.settings.model")}</Label>
             <Select value={config.model} onValueChange={setModel}>
               <SelectTrigger id="model">
-                <SelectValue placeholder="Select a model" />
+                <SelectValue placeholder={t("video.settings.model_placeholder")} />
               </SelectTrigger>
               <SelectContent>
                 {models.map((model) => (
@@ -93,7 +95,7 @@ export function VideoConfigSheet({
 
           {/* Resolution */}
           <div className="space-y-2">
-            <Label htmlFor="resolution">Resolution</Label>
+            <Label htmlFor="resolution">{t("video.settings.resolution")}</Label>
             <Select
               value={config.resolution}
               onValueChange={(v) => setResolution(v as VideoResolution)}
@@ -113,7 +115,7 @@ export function VideoConfigSheet({
 
           {/* Duration */}
           <div className="space-y-2">
-            <Label>Duration: {config.duration}s</Label>
+            <Label>{t("video.settings.duration")}: {config.duration}s</Label>
             <div className="flex gap-2">
               {durationOptions.map((d) => (
                 <Button
@@ -130,7 +132,7 @@ export function VideoConfigSheet({
 
           {/* FPS */}
           <div className="space-y-2">
-            <Label>Frame Rate: {config.fps} FPS</Label>
+            <Label>{t("video.settings.fps")}: {config.fps} FPS</Label>
             <div className="flex gap-2">
               {fpsOptions.map((f) => (
                 <Button
@@ -147,13 +149,13 @@ export function VideoConfigSheet({
 
           {/* Seed */}
           <div className="space-y-2">
-            <Label htmlFor="seed">Seed (optional)</Label>
+            <Label htmlFor="seed">{t("video.settings.seed")}</Label>
             <div className="flex gap-2">
               <Input
                 id="seed"
                 type="number"
                 min={0}
-                placeholder="Random"
+                placeholder={t("video.settings.seed_placeholder")}
                 value={config.seed ?? ""}
                 onChange={(e) =>
                   setSeed(e.target.value ? Number(e.target.value) : undefined)
@@ -164,22 +166,22 @@ export function VideoConfigSheet({
                 variant="outline"
                 size="icon"
                 onClick={() => setSeed(Math.floor(Math.random() * 4294967295))}
-                title="Generate random seed"
+                title={t("video.settings.seed_random")}
               >
                 <RotateCcw className="h-4 w-4" />
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Use same seed for reproducible results
+              {t("video.settings.seed_hint")}
             </p>
           </div>
 
           {/* Negative Prompt */}
           <div className="space-y-2">
-            <Label htmlFor="negative-prompt">Negative Prompt</Label>
+            <Label htmlFor="negative-prompt">{t("video.settings.negative_prompt")}</Label>
             <Textarea
               id="negative-prompt"
-              placeholder="Things to avoid in the video..."
+              placeholder={t("video.settings.negative_prompt_placeholder")}
               value={config.negativePrompt}
               onChange={(e) => setNegativePrompt(e.target.value)}
               className="min-h-[80px] resize-none"
@@ -191,10 +193,10 @@ export function VideoConfigSheet({
             <div className="space-y-0.5">
               <Label htmlFor="enhance-prompt" className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
-                Enhance Prompt
+                {t("video.settings.enhance_prompt")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                AI will improve your prompt for better results
+                {t("video.settings.enhance_prompt_hint")}
               </p>
             </div>
             <Switch
@@ -209,10 +211,10 @@ export function VideoConfigSheet({
             <div className="space-y-0.5">
               <Label htmlFor="generate-audio" className="flex items-center gap-2">
                 <Volume2 className="h-4 w-4" />
-                Generate Audio
+                {t("video.settings.generate_audio")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Add AI-generated sound effects
+                {t("video.settings.generate_audio_hint")}
               </p>
             </div>
             <Switch
@@ -230,7 +232,7 @@ export function VideoConfigSheet({
               onClick={resetConfig}
             >
               <RotateCcw className="h-4 w-4 mr-2" />
-              Reset to Defaults
+              {t("video.settings.reset")}
             </Button>
           </div>
         </div>

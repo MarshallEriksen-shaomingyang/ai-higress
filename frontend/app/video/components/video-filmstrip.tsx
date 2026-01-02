@@ -15,6 +15,7 @@ import {
   selectVideoHistory,
   type VideoGenTask,
 } from "@/lib/stores/video-composer-store";
+import { useI18n } from "@/lib/i18n-context";
 
 interface VideoFilmstripProps {
   onSelectVideo?: (task: VideoGenTask) => void;
@@ -24,12 +25,18 @@ function FilmstripItem({
   task,
   onSelect,
   onRemove,
+  statusLabels,
 }: {
   task: VideoGenTask;
   onSelect?: () => void;
   onRemove: () => void;
+  statusLabels: Record<string, string>;
 }) {
   const videoUrl = task.result?.data?.[0]?.url;
+
+  const getStatusLabel = (status: string) => {
+    return statusLabels[status] || status;
+  };
 
   return (
     <div
@@ -106,7 +113,7 @@ function FilmstripItem({
             task.status === "pending" && "bg-muted text-muted-foreground"
           )}
         >
-          {task.status}
+          {getStatusLabel(task.status)}
         </div>
       )}
     </div>
@@ -116,8 +123,15 @@ function FilmstripItem({
 export const VideoFilmstrip = memo(function VideoFilmstrip({
   onSelectVideo,
 }: VideoFilmstripProps) {
+  const { t } = useI18n();
   const history = useVideoComposerStore(selectVideoHistory);
   const { removeTask, clearHistory } = useVideoComposerStore();
+
+  const statusLabels: Record<string, string> = {
+    generating: t("video.filmstrip.status_generating"),
+    failed: t("video.filmstrip.status_failed"),
+    pending: t("video.filmstrip.status_pending"),
+  };
 
   if (history.length === 0) {
     return null;
@@ -127,7 +141,7 @@ export const VideoFilmstrip = memo(function VideoFilmstrip({
     <div className="w-full">
       <div className="flex items-center justify-between mb-2 px-1">
         <span className="text-xs text-muted-foreground">
-          Recent ({history.length})
+          {t("video.filmstrip.recent")} ({history.length})
         </span>
         <TooltipProvider>
           <Tooltip>
@@ -138,10 +152,10 @@ export const VideoFilmstrip = memo(function VideoFilmstrip({
                 className="h-6 text-xs text-muted-foreground hover:text-destructive"
                 onClick={clearHistory}
               >
-                Clear all
+                {t("video.filmstrip.clear_all")}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Clear all history</TooltipContent>
+            <TooltipContent>{t("video.filmstrip.clear_all_tooltip")}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
@@ -158,6 +172,7 @@ export const VideoFilmstrip = memo(function VideoFilmstrip({
             task={task}
             onSelect={() => onSelectVideo?.(task)}
             onRemove={() => removeTask(task.id)}
+            statusLabels={statusLabels}
           />
         ))}
       </div>

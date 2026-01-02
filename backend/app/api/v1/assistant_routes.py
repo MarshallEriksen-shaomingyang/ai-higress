@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import select
@@ -85,6 +85,7 @@ from app.services.tts_app_service import (
     _content_type_for_format,
     _extract_text_from_message_content,
 )
+from app.services.stt_app_service import STTAppService
 from app.services.audio_storage_service import (
     assert_audio_object_key_for_user,
     build_signed_audio_url,
@@ -402,7 +403,25 @@ async def upload_conversation_audio_endpoint(
         content_type=str(file.content_type or "application/octet-stream"),
         filename=file.filename,
         user_id=str(current_user.id),
+        db=db,
     )
+
+    # 如果是重复文件，查找已存在的 AudioAsset
+    if stored.is_duplicate:
+        existing_asset = db.query(AudioAsset).filter(
+            AudioAsset.object_key == stored.object_key,
+            AudioAsset.owner_id == UUID(str(current_user.id)),
+        ).first()
+        if existing_asset is not None:
+            return ConversationAudioUploadResponse(
+                audio_id=existing_asset.id,
+                object_key=stored.object_key,
+                url=build_signed_audio_url(stored.object_key),
+                content_type=stored.content_type,
+                size_bytes=stored.size_bytes,
+                format=_infer_audio_format_from_object_key(stored.object_key),
+            )
+
     asset = AudioAsset(
         owner_id=UUID(str(current_user.id)),
         conversation_id=conversation_id,
@@ -425,6 +444,91 @@ async def upload_conversation_audio_endpoint(
         size_bytes=stored.size_bytes,
         format=_infer_audio_format_from_object_key(stored.object_key),
     )
+
+
+@router.post("/v1/conversations/{conversation_id}/audio-transcriptions")
+async def transcribe_conversation_audio_endpoint(
+    conversation_id: UUID,
+    file: UploadFile = File(...),
+    model: str | None = Form(default=None),
+    language: str | None = Form(default=None),
+    prompt: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    client: Any = Depends(get_http_client),
+    current_user: AuthenticatedUser = Depends(require_jwt_token),
+) -> dict[str, Any]:
+    """
+    会话内语音转文字（STT）：上传音频并返回转写文本。
+
+    - JWT 鉴权（仅会话所有者可调用）
+    - 不落库、不走 OSS
+    - 复用多 provider 选路：要求所选逻辑模型具备 audio 能力
+    """
+    # Ensure conversation access
+    conv = get_conversation(
+        db,
+        conversation_id=UUID(str(conversation_id)),
+        user_id=UUID(str(current_user.id)),
+    )
+    assistant = db.get(AssistantPreset, UUID(str(conv.assistant_id)))
+    if assistant is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Assistant not found")
+    api_key_row = db.get(APIKey, UUID(str(conv.api_key_id)))
+    if api_key_row is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Project API key not found")
+
+    if not bool(getattr(api_key_row, "is_active", True)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project API key disabled")
+    expires_at = getattr(api_key_row, "expires_at", None)
+    if expires_at is not None and expires_at <= datetime.now(UTC):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project API key expired")
+
+    requested_model = str(model or "").strip() or str(getattr(assistant, "default_logical_model", "") or "").strip()
+    if not requested_model:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing model")
+
+    max_bytes = 10 * 1024 * 1024
+    written = 0
+    chunks: list[bytes] = []
+    try:
+        while True:
+            chunk = await file.read(8192)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="音频文件过大，最大支持 10MB")
+            chunks.append(chunk)
+    finally:
+        await file.close()
+
+    data = b"".join(chunks)
+    if not data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="空音频文件")
+
+    auth_key = AuthenticatedAPIKey(
+        id=UUID(str(api_key_row.id)),
+        user_id=UUID(str(api_key_row.user_id)),
+        user_username=str(current_user.username),
+        is_superuser=bool(current_user.is_superuser),
+        name=str(api_key_row.name),
+        is_active=bool(api_key_row.is_active),
+        disabled_reason=getattr(api_key_row, "disabled_reason", None),
+        has_provider_restrictions=bool(api_key_row.has_provider_restrictions),
+        allowed_provider_ids=list(getattr(api_key_row, "allowed_provider_ids", []) or []),
+    )
+
+    service = STTAppService(client=client, redis=redis, db=db, api_key=auth_key)
+    out = await service.transcribe_bytes(
+        model=requested_model,
+        audio_bytes=data,
+        filename=file.filename or "audio.wav",
+        content_type=str(file.content_type or "application/octet-stream"),
+        language=language,
+        prompt=prompt,
+    )
+    return {"text": out.text}
 
 
 @router.get("/v1/assistants", response_model=AssistantPresetListResponse)

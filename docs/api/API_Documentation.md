@@ -4052,6 +4052,29 @@ X-API-Key: {api_key}
 - `429`: 触发限流
 - `503`: 上游全部失败或不可用
 
+### 1.5 语音转写（STT，API Key）
+
+**接口**: `POST /v1/audio/transcriptions`
+
+**鉴权**: API Key（`Authorization: Bearer {api_key}` 或 `X-API-Key: {api_key}`）
+
+**请求**: `multipart/form-data`
+- `file`: 音频文件（最大 10MB）
+- `model`: 逻辑模型 ID（由网关选路到具体上游模型）
+- `language`（可选）：例如 `zh` / `zh-CN` / `en`
+- `prompt`（可选）：转写提示词（部分上游支持）
+
+**响应**:
+```json
+{ "text": "转写后的文本" }
+```
+
+**错误码**:
+- `400`: 参数不合法（如缺少 model / 空音频）
+- `401/403`: API Key 无效或不可用
+- `402`: 开启积分校验时余额不足
+- `502/503`: 上游失败或不可用
+
 ### 2. 会话消息朗读（JWT）
 
 **接口**: `POST /v1/messages/{message_id}/speech`

@@ -9,6 +9,7 @@ from .bridge_agent_token import BridgeAgentToken
 from .conversation import Conversation
 from .credit import CreditAccount, CreditAutoTopupRule, CreditTransaction, ModelBillingConfig
 from .eval import Eval
+from .file_hash import FileHash
 from .identity import Identity
 from .message import Message
 from .notification import Notification, NotificationReceipt
@@ -61,6 +62,7 @@ __all__ = [
     "CreditTransaction",
     "Eval",
     "EvalRating",
+    "FileHash",
     "GatewayConfig",
     "Identity",
     "Message",

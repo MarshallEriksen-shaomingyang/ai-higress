@@ -286,6 +286,25 @@ Response:
 }
 ```
 
+### POST `/v1/conversations/{conversation_id}/audio-transcriptions`
+
+会话内语音转文字（STT）：上传音频并返回转写文本（用于“语音输入/听写”）。
+
+- JWT 鉴权（仅会话所有者可调用）
+- 不落库、不走 OSS
+- 复用网关选路：要求所选逻辑模型具备 `audio` 能力
+
+Request: `multipart/form-data`
+- `file`: 音频文件（最大 10MB）
+- `model`（可选）：逻辑模型 ID；为空则回退到该会话助手的 `default_logical_model`
+- `language`（可选）：例如 `zh` / `zh-CN` / `en`
+- `prompt`（可选）：转写提示词（部分上游支持）
+
+Response:
+```json
+{ "text": "转写后的文本" }
+```
+
 ### GET `/v1/audio-assets`
 
 音频资产库：列出当前用户可见的音频（自己的 + 他人已分享的 public）。

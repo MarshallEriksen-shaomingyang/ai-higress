@@ -8,13 +8,16 @@ import uuid
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote
 
 import anyio
 
 from app.logging_config import logger
 from app.settings import settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class ImageStorageNotConfigured(RuntimeError):
@@ -84,6 +87,7 @@ class StoredImage:
     object_key: str
     content_type: str
     size_bytes: int
+    is_duplicate: bool = False  # 是否为已存在的重复文件
 
 
 def _normalize_prefix(prefix: str) -> str:
@@ -195,16 +199,61 @@ def _create_s3_client():
 
 
 async def store_image_bytes(
-    data: bytes, *, content_type: str | None = None, kind: str | None = None
+    data: bytes,
+    *,
+    content_type: str | None = None,
+    kind: str | None = None,
+    user_id: str | None = None,
+    db: "Session | None" = None,
 ) -> StoredImage:
     """
     将图片写入存储后端（本地磁盘或 OSS/S3），返回对象 key。
+
+    Args:
+        data: 图片二进制数据
+        content_type: 可选的 MIME 类型（不传会自动检测）
+        kind: 可选的子目录类型
+        user_id: 可选的用户 ID（用于去重隔离）
+        db: 可选的数据库会话（传入时启用去重检查）
+
+    Returns:
+        StoredImage 包含存储信息，is_duplicate 表示是否为重复文件
     """
     if not data:
         raise ValueError("empty image bytes")
 
     detected_type = content_type or _detect_content_type_from_bytes(data)
     ext = _guess_ext(detected_type)
+
+    # 如果提供了数据库会话，进行去重检查
+    if db is not None:
+        from app.services.file_hash_service import (
+            compute_content_hash,
+            find_existing_file,
+            register_file_hash,
+        )
+
+        content_hash = compute_content_hash(data)
+        existing = find_existing_file(
+            db,
+            content_hash=content_hash,
+            file_type="image",
+            owner_id=user_id,
+        )
+        if existing is not None:
+            logger.info(
+                "image_dedup_hit",
+                content_hash=content_hash[:16],
+                existing_key=existing.object_key,
+                user_id=user_id,
+            )
+            return StoredImage(
+                object_key=existing.object_key,
+                content_type=existing.content_type,
+                size_bytes=existing.size_bytes,
+                is_duplicate=True,
+            )
+
     object_key = _build_object_key(ext=ext, kind=kind)
 
     mode = get_effective_image_storage_mode()
@@ -236,17 +285,37 @@ async def store_image_bytes(
         else:
             await anyio.to_thread.run_sync(_put_s3)
 
+    # 存储成功后注册文件哈希（如果提供了数据库会话）
+    if db is not None:
+        from app.services.file_hash_service import compute_content_hash, register_file_hash
+
+        content_hash = compute_content_hash(data)
+        register_file_hash(
+            db,
+            content_hash=content_hash,
+            file_type="image",
+            object_key=object_key,
+            content_type=detected_type,
+            size_bytes=len(data),
+            owner_id=user_id,
+        )
+
     return StoredImage(object_key=object_key, content_type=detected_type, size_bytes=len(data))
 
 
 async def store_image_b64(
-    b64_data: str, *, content_type: str | None = None, kind: str | None = None
+    b64_data: str,
+    *,
+    content_type: str | None = None,
+    kind: str | None = None,
+    user_id: str | None = None,
+    db: "Session | None" = None,
 ) -> StoredImage:
     try:
         raw = base64.b64decode(b64_data)
     except Exception as exc:
         raise ValueError("invalid base64 image data") from exc
-    return await store_image_bytes(raw, content_type=content_type, kind=kind)
+    return await store_image_bytes(raw, content_type=content_type, kind=kind, user_id=user_id, db=db)
 
 
 def _hmac_signature(object_key: str, expires_at: int) -> str:

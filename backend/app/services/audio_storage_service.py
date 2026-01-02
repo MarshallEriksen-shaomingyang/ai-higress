@@ -8,13 +8,16 @@ import uuid
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote
 
 import anyio
 
 from app.logging_config import logger
 from app.settings import settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class AudioStorageNotConfigured(RuntimeError):
@@ -181,6 +184,7 @@ class StoredAudio:
     object_key: str
     content_type: str
     size_bytes: int
+    is_duplicate: bool = False  # 是否为已存在的重复文件
 
 
 async def store_audio_bytes(
@@ -189,11 +193,55 @@ async def store_audio_bytes(
     content_type: str,
     filename: str | None = None,
     user_id: str | None = None,
+    db: "Session | None" = None,
 ) -> StoredAudio:
+    """
+    存储音频文件。
+
+    Args:
+        data: 音频二进制数据
+        content_type: MIME 类型
+        filename: 可选的原始文件名
+        user_id: 可选的用户 ID（用于路径隔离和去重）
+        db: 可选的数据库会话（传入时启用去重检查）
+
+    Returns:
+        StoredAudio 包含存储信息，is_duplicate 表示是否为重复文件
+    """
     if not data:
         raise ValueError("empty audio bytes")
     ct = str(content_type or "").strip().lower() or "application/octet-stream"
     ext = _guess_ext(ct, filename=filename)
+
+    # 如果提供了数据库会话，进行去重检查
+    if db is not None:
+        from app.services.file_hash_service import (
+            compute_content_hash,
+            find_existing_file,
+            register_file_hash,
+        )
+
+        content_hash = compute_content_hash(data)
+        existing = find_existing_file(
+            db,
+            content_hash=content_hash,
+            file_type="audio",
+            owner_id=user_id,
+        )
+        if existing is not None:
+            logger.info(
+                "audio_dedup_hit",
+                content_hash=content_hash[:16],
+                existing_key=existing.object_key,
+                user_id=user_id,
+            )
+            return StoredAudio(
+                object_key=existing.object_key,
+                content_type=existing.content_type,
+                size_bytes=existing.size_bytes,
+                is_duplicate=True,
+            )
+
     object_key = _build_object_key(ext=ext, user_id=user_id)
 
     mode = get_effective_audio_storage_mode()
@@ -218,16 +266,29 @@ async def store_audio_bytes(
 
     if mode == "local":
         await anyio.to_thread.run_sync(_put_local)
-        return StoredAudio(object_key=object_key, content_type=ct, size_bytes=len(data))
-
-    if not _oss_is_configured():
+    elif not _oss_is_configured():
         raise AudioStorageNotConfigured("IMAGE_OSS_* 未配置，无法启用 OSS/S3 音频存储")
-
-    kind = _oss_backend_kind()
-    if kind == "aliyun_oss":
-        await anyio.to_thread.run_sync(_put_oss)
     else:
-        await anyio.to_thread.run_sync(_put_s3)
+        kind = _oss_backend_kind()
+        if kind == "aliyun_oss":
+            await anyio.to_thread.run_sync(_put_oss)
+        else:
+            await anyio.to_thread.run_sync(_put_s3)
+
+    # 存储成功后注册文件哈希（如果提供了数据库会话）
+    if db is not None:
+        from app.services.file_hash_service import compute_content_hash, register_file_hash
+
+        content_hash = compute_content_hash(data)
+        register_file_hash(
+            db,
+            content_hash=content_hash,
+            file_type="audio",
+            object_key=object_key,
+            content_type=ct,
+            size_bytes=len(data),
+            owner_id=user_id,
+        )
 
     return StoredAudio(object_key=object_key, content_type=ct, size_bytes=len(data))
 

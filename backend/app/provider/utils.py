@@ -130,12 +130,20 @@ def derive_openai_videos_path(provider_chat_path: str | None) -> str:
     return derive_openai_path(provider_chat_path, "videos")
 
 
+def derive_openai_audio_transcriptions_path(provider_chat_path: str | None) -> str:
+    """
+    从 chat_completions_path 推导 audio/transcriptions 路径。
+    """
+    return derive_openai_path(provider_chat_path, "audio/transcriptions")
+
+
 __all__ = [
     "is_google_native_provider_base_url",
     "is_openai_official_provider_base_url",
     "google_v1beta_base",
     "derive_openai_path",
     "derive_openai_audio_speech_path",
+    "derive_openai_audio_transcriptions_path",
     "derive_openai_images_generations_path",
     "derive_openai_videos_path",
 ]

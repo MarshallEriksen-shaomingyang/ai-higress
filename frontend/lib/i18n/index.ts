@@ -29,6 +29,7 @@ import { chatTranslations } from "./chat";
 import { bridgeTranslations } from "./bridge";
 import { requestLogsTranslations } from "./request-logs";
 import { legalTranslations } from "./legal";
+import { videoTranslations } from "./video";
 
 // Function to merge translation objects
 const mergeTranslations = (
@@ -79,7 +80,8 @@ export const allTranslations = mergeTranslations(
   chatTranslations,
   bridgeTranslations,
   requestLogsTranslations,
-  legalTranslations
+  legalTranslations,
+  videoTranslations
 );
 
 // Export individual translation modules for dynamic loading
@@ -114,4 +116,5 @@ export {
   bridgeTranslations,
   requestLogsTranslations,
   legalTranslations,
+  videoTranslations,
 };

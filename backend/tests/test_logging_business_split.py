@@ -55,6 +55,61 @@ def test_daily_folder_business_handler_routes_by_pathname(tmp_path: Path) -> Non
     handler.close()
 
 
+def test_daily_folder_business_handler_routes_speech_logs(tmp_path: Path) -> None:
+    """Test that speech-related logs (TTS/STT) are routed to speech.log."""
+    handler = DailyFolderBusinessFileHandler(
+        log_dir=tmp_path,
+        backup_days=7,
+        timezone_name="UTC",
+        now_fn=_fixed_now,
+    )
+    handler.setFormatter(logging.Formatter("[%(biz)s] %(message)s"))
+
+    # TTS service log
+    handler.emit(
+        _make_record(
+            name="apiproxy",
+            pathname="backend/app/services/tts_app_service.py",
+            msg="tts: upstream http error",
+        )
+    )
+    # STT service log
+    handler.emit(
+        _make_record(
+            name="apiproxy",
+            pathname="backend/app/services/stt_app_service.py",
+            msg="stt: candidate failed",
+        )
+    )
+    # Audio routes log
+    handler.emit(
+        _make_record(
+            name="apiproxy",
+            pathname="backend/app/api/v1/audio_routes.py",
+            msg="audio transcription request",
+        )
+    )
+    # Audio storage service log
+    handler.emit(
+        _make_record(
+            name="apiproxy",
+            pathname="backend/app/services/audio_storage_service.py",
+            msg="audio file stored",
+        )
+    )
+
+    day_dir = tmp_path / "2025-01-02"
+    speech_log = day_dir / "speech.log"
+    assert speech_log.exists(), "speech.log should be created"
+    lines = speech_log.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 4
+    assert "[speech] tts: upstream http error" in lines[0]
+    assert "[speech] stt: candidate failed" in lines[1]
+    assert "[speech] audio transcription request" in lines[2]
+    assert "[speech] audio file stored" in lines[3]
+    handler.close()
+
+
 def test_daily_folder_file_handler_writes_to_named_file(tmp_path: Path) -> None:
     handler = DailyFolderFileHandler(
         log_dir=tmp_path,
