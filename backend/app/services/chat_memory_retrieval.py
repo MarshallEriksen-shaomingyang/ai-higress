@@ -319,6 +319,7 @@ async def maybe_retrieve_user_memory_context(
             embedding_logical_model=embedding_model,
             text=query,
             idempotency_key=idempotency_key,
+            input_type="search_query",
         )
         embed_latency_ms = (time.perf_counter() - embed_start) * 1000
         recorder.record_embedding(

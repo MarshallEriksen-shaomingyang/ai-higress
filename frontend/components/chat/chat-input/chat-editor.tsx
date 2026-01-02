@@ -21,6 +21,7 @@ interface ChatEditorProps {
   placeholder: string;
   onKeyDown: (event: KeyboardEvent) => void;
   onPaste: (event: ClipboardEvent) => void;
+  onChange?: (value: Descendant[]) => void;
   className?: string;
   isSlashCommand?: boolean;
 }
@@ -53,6 +54,7 @@ export function ChatEditor({
   placeholder,
   onKeyDown,
   onPaste,
+  onChange,
   className,
   isSlashCommand = false,
 }: ChatEditorProps) {
@@ -89,7 +91,7 @@ export function ChatEditor({
       ref={editorRef}
       className={cn("flex-1 min-h-0 px-3 pt-3 pb-2 overflow-y-auto min-h-[72px]", className)}
     >
-      <Slate editor={editor} initialValue={initialValue}>
+      <Slate editor={editor} initialValue={initialValue} onChange={onChange}>
         <Editable
           placeholder={placeholder}
           readOnly={disabled || isSending}

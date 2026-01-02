@@ -146,7 +146,7 @@ export function ChatHomeClient({ assistantId }: { assistantId?: string | null } 
                     imageGenParams={imageGenParams}
                     onImageGenParamsChange={setImageGenParams}
                     onSend={handleSend}
-                    hideModeSwitcher={true}
+                    hideModeSwitcher={false}
                     className="border-0 h-full"
                   />
                 </div>

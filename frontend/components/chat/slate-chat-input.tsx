@@ -509,7 +509,7 @@ export function SlateChatInput({
   );
 
   // 监听编辑器内容变化，检测斜杠命令
-  useEffect(() => {
+  const handleEditorChange = useCallback(() => {
     const content = getTextContent();
     if (isSlashCommandInput(content)) {
       setSlashCommandInput(content);
@@ -518,7 +518,7 @@ export function SlateChatInput({
       setSlashCommandInput("");
       setShowSlashMenu(false);
     }
-  }, [editor.children, getTextContent]);
+  }, [getTextContent]);
 
   return (
     <div className={cn("relative flex h-full flex-col bg-background", className)}>
@@ -587,6 +587,7 @@ export function SlateChatInput({
               }
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              onChange={handleEditorChange}
             />
 
             <ChatToolbar

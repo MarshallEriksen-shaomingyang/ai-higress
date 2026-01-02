@@ -35,6 +35,28 @@ def _extract_first_embedding_vector(payload: dict[str, Any] | None) -> list[floa
     return out
 
 
+_ASYMMETRIC_MODEL_HINTS = (
+    "embed-english-v3",
+    "embed-multilingual-v3",
+    "cohere-embed",
+)
+_OPENAI_EMBED_MODEL_HINTS = (
+    "text-embedding-",
+    "embedding-ada-002",
+)
+
+
+def _model_requires_input_type(model: str) -> bool:
+    m = model.lower()
+    return any(hint in m for hint in _ASYMMETRIC_MODEL_HINTS)
+
+
+def _model_allows_input_type(model: str) -> bool:
+    m = model.lower()
+    # OpenAI embeddings are strict about unexpected params; skip attaching input_type for them.
+    return not any(hint in m for hint in _OPENAI_EMBED_MODEL_HINTS)
+
+
 async def embed_text(
     db: DbSession,
     *,
@@ -45,6 +67,7 @@ async def embed_text(
     embedding_logical_model: str,
     text: str,
     idempotency_key: str,
+    input_type: str | None = None,
 ) -> list[float] | None:
     """
     Call upstream embeddings via the existing RequestHandler pipeline.
@@ -63,6 +86,14 @@ async def embed_text(
     # 多数 OpenAI-compatible embeddings 既支持 string 也支持 string[]；
     # 为兼容部分上游严格要求数组格式，这里统一按单元素数组发送。
     payload: dict[str, Any] = {"model": model, "input": [input_text]}
+    chosen_input_type: str | None = None
+    if _model_requires_input_type(model):
+        chosen_input_type = (input_type or "search_document").strip().lower()
+    elif input_type and _model_allows_input_type(model):
+        chosen_input_type = str(input_type).strip().lower()
+    if chosen_input_type:
+        payload["input_type"] = chosen_input_type
+
     handler = RequestHandler(api_key=api_key, db=db, redis=redis, client=client)
     resp = await handler.handle(
         payload=payload,

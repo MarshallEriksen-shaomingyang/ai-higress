@@ -56,7 +56,7 @@ export const ConversationChatInput = memo(function ConversationChatInput({
           onModeChange={setMode}
           imageGenParams={image}
           onImageGenParamsChange={handleImageGenParamsChange}
-          hideModeSwitcher={true}
+          hideModeSwitcher={false}
           imageSettingsShowModelSelect={false}
         />
       </div>
