@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
@@ -31,10 +32,23 @@ function isTtsFormatValue(value: string): value is TtsFormatValue {
   return (TTS_FORMAT_VALUES as readonly string[]).includes(value);
 }
 
+const TTS_VOICE_VALUES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] as const;
+type TtsVoiceValue = (typeof TTS_VOICE_VALUES)[number];
+
+function isTtsVoiceValue(value: string): value is TtsVoiceValue {
+  return (TTS_VOICE_VALUES as readonly string[]).includes(value);
+}
+
 export function ChatSettingsPageClient() {
   const { t } = useI18n();
   const { selectedProjectId } = useChatStore();
-  const { preferences, setPreferredTtsModel, setPreferredTtsFormat } = useUserPreferencesStore();
+  const {
+    preferences,
+    setPreferredTtsModel,
+    setPreferredTtsVoice,
+    setPreferredTtsFormat,
+    setPreferredTtsSpeed,
+  } = useUserPreferencesStore();
 
   const { settings, mutate: mutateProjectSettings } = useProjectChatSettings(selectedProjectId);
   const updateProjectSettings = useUpdateProjectChatSettings();
@@ -63,8 +77,12 @@ export function ChatSettingsPageClient() {
 
   const projectTtsModelValue =
     (selectedProjectId && preferences.preferredTtsModelByProject[selectedProjectId]) || null;
+  const projectTtsVoiceValue =
+    (selectedProjectId && preferences.preferredTtsVoiceByProject?.[selectedProjectId]) || null;
   const projectTtsFormatValue =
     (selectedProjectId && preferences.preferredTtsFormatByProject[selectedProjectId]) || null;
+  const projectTtsSpeedValue =
+    (selectedProjectId && preferences.preferredTtsSpeedByProject?.[selectedProjectId]) || null;
   const { filterOptions: filterTtsOptions } = useSelectableTtsModels(selectedProjectId, {
     extraModels: [projectTtsModelValue],
   });
@@ -95,6 +113,33 @@ export function ChatSettingsPageClient() {
       console.warn("Unexpected TTS response_format:", next);
       setPreferredTtsFormat(selectedProjectId, null);
     }
+    toast.success(t("chat.settings.saved"));
+  };
+
+  const updateProjectTtsVoice = (value: string) => {
+    if (!selectedProjectId) return;
+    const next = (value || "").trim();
+    if (!next || next === DISABLE_VALUE) {
+      setPreferredTtsVoice(selectedProjectId, null);
+    } else if (isTtsVoiceValue(next)) {
+      setPreferredTtsVoice(selectedProjectId, next);
+    } else {
+      console.warn("Unexpected TTS voice:", next);
+      setPreferredTtsVoice(selectedProjectId, null);
+    }
+    toast.success(t("chat.settings.saved"));
+  };
+
+  const effectiveTtsSpeed = Number.isFinite(projectTtsSpeedValue) ? (projectTtsSpeedValue as number) : 1.0;
+  const [ttsSpeedDraft, setTtsSpeedDraft] = useState<number>(effectiveTtsSpeed);
+  useEffect(() => {
+    setTtsSpeedDraft(effectiveTtsSpeed);
+  }, [effectiveTtsSpeed, selectedProjectId]);
+
+  const resetProjectTtsSpeed = () => {
+    if (!selectedProjectId) return;
+    setPreferredTtsSpeed(selectedProjectId, null);
+    setTtsSpeedDraft(1.0);
     toast.success(t("chat.settings.saved"));
   };
 
@@ -225,6 +270,31 @@ export function ChatSettingsPageClient() {
                 </div>
 
                 <div className="grid gap-2">
+                  <div className="text-sm font-medium">{t("chat.settings.project.tts_voice")}</div>
+                  <Select
+                    value={projectTtsVoiceValue ?? DISABLE_VALUE}
+                    onValueChange={(value) => updateProjectTtsVoice(value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("chat.settings.project.tts_voice_placeholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={DISABLE_VALUE}>
+                        {t("chat.settings.project.tts_voice_default")}
+                      </SelectItem>
+                      {TTS_VOICE_VALUES.map((voice) => (
+                        <SelectItem key={voice} value={voice}>
+                          {voice}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-muted-foreground">
+                    {t("chat.settings.project.tts_voice_help")}
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
                   <div className="text-sm font-medium">{t("chat.settings.project.tts_format")}</div>
                   <Select
                     value={projectTtsFormatValue ?? DISABLE_VALUE}
@@ -249,6 +319,51 @@ export function ChatSettingsPageClient() {
                   </Select>
                   <div className="text-xs text-muted-foreground">
                     {t("chat.settings.project.tts_format_help")}
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium">{t("chat.settings.project.tts_speed")}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-muted-foreground tabular-nums">
+                        {ttsSpeedDraft.toFixed(2)}×
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={resetProjectTtsSpeed}
+                      >
+                        {t("chat.settings.project.tts_speed_reset")}
+                      </Button>
+                    </div>
+                  </div>
+                  <Slider
+                    value={[ttsSpeedDraft]}
+                    min={0.25}
+                    max={4}
+                    step={0.05}
+                    onValueChange={(values) => {
+                      const next = values?.[0];
+                      if (!Number.isFinite(next)) return;
+                      setTtsSpeedDraft(next);
+                    }}
+                    onValueCommit={(values) => {
+                      if (!selectedProjectId) return;
+                      const next = values?.[0];
+                      if (!Number.isFinite(next)) return;
+                      // speed=1.0 视作默认，不落本地偏好
+                      if (Math.abs(next - 1.0) < 1e-9) {
+                        setPreferredTtsSpeed(selectedProjectId, null);
+                      } else {
+                        setPreferredTtsSpeed(selectedProjectId, next);
+                      }
+                      toast.success(t("chat.settings.saved"));
+                    }}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    {t("chat.settings.project.tts_speed_help")}
                   </div>
                 </div>
 

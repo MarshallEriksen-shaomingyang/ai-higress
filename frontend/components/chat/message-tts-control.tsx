@@ -51,17 +51,30 @@ export function MessageTtsControl({
     if (!key) return null;
     return s.preferences.preferredTtsFormatByProject?.[key] ?? null;
   });
+  const preferredTtsVoice = useUserPreferencesStore((s) => {
+    const key = (projectId || "").trim();
+    if (!key) return null;
+    return s.preferences.preferredTtsVoiceByProject?.[key] ?? null;
+  });
+  const preferredTtsSpeed = useUserPreferencesStore((s) => {
+    const key = (projectId || "").trim();
+    if (!key) return null;
+    return s.preferences.preferredTtsSpeedByProject?.[key] ?? null;
+  });
   const effectiveModel = preferredTtsModel || fallbackModel;
   const effectiveFormat = preferredTtsFormat || "mp3";
+  const effectiveVoice = preferredTtsVoice || "alloy";
+  const effectiveSpeedRaw = Number.isFinite(preferredTtsSpeed) ? (preferredTtsSpeed as number) : 1.0;
+  const effectiveSpeed = Math.min(4.0, Math.max(0.25, effectiveSpeedRaw));
 
   const payload = useMemo<MessageSpeechRequest>(
     () => ({
       model: effectiveModel || undefined,
-      voice: "alloy",
+      voice: effectiveVoice,
       response_format: effectiveFormat,
-      speed: 1.0,
+      speed: effectiveSpeed,
     }),
-    [effectiveFormat, effectiveModel]
+    [effectiveFormat, effectiveModel, effectiveSpeed, effectiveVoice]
   );
 
   const resetAudio = useCallback(() => {

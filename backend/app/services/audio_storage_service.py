@@ -36,11 +36,8 @@ def _normalize_prefix(value: str | None) -> str:
 
 
 def _audio_object_prefix() -> str:
-    base = _normalize_prefix(getattr(settings, "image_oss_prefix", None))
-    kind = _normalize_prefix(_AUDIO_OBJECT_KIND)
-    if base and kind:
-        return f"{base}/{kind}"
-    return base or kind
+    # 使用独立的音频前缀，不复用图片前缀
+    return _normalize_prefix(_AUDIO_OBJECT_KIND)
 
 
 def _normalize_user_id(value: str | None) -> str | None:
@@ -64,8 +61,10 @@ def _build_object_key(*, ext: str, user_id: str | None) -> str:
 
 
 def _local_base_dir() -> Path:
-    base = Path(str(getattr(settings, "image_local_dir", "") or "")).expanduser()
-    return base.resolve()
+    # 使用独立的音频存储目录（与图片目录平级）
+    image_dir = Path(str(getattr(settings, "image_local_dir", "") or "")).expanduser()
+    audio_dir = image_dir.parent / "audio"
+    return audio_dir.resolve()
 
 
 def _local_path_for_object_key(object_key: str) -> Path:

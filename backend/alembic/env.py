@@ -100,6 +100,14 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         _ensure_alembic_version_num_length(connection, length=128)
+        # SQLAlchemy 2.0 的 Connection 会在首次 execute() 时自动开启事务（autobegin）。
+        # 如果在 Alembic 自己的 begin_transaction() 之前已经存在一个“隐式外层事务”，
+        # 后续迁移可能只在 SAVEPOINT 中提交，最终在连接关闭时被回滚，表现为：
+        # - 日志显示已运行 upgrade，但 alembic_version 不更新
+        # - 新建表/列也不落库
+        # 这里主动提交/结束隐式事务，确保 Alembic 全权管理迁移事务边界。
+        if connection.in_transaction():
+            connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

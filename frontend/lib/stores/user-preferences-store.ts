@@ -15,11 +15,18 @@ export interface UserPreferences {
   preferredImageModelByProject: Record<string, string>;
   /** 用户偏好的语音模型（TTS，按项目存储） */
   preferredTtsModelByProject: Record<string, string>;
+  /** 用户偏好的语音音色（TTS voice，按项目存储） */
+  preferredTtsVoiceByProject: Record<
+    string,
+    "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"
+  >;
   /** 用户偏好的语音返回格式（TTS，按项目存储） */
   preferredTtsFormatByProject: Record<
     string,
     "mp3" | "opus" | "aac" | "wav" | "pcm" | "ogg" | "flac" | "aiff"
   >;
+  /** 用户偏好的语速（TTS speed，按项目存储） */
+  preferredTtsSpeedByProject: Record<string, number>;
 }
 
 /**
@@ -31,10 +38,15 @@ interface UserPreferencesState {
   setPreferredChatModel: (projectId: string | null | undefined, model: string | null) => void;
   setPreferredImageModel: (projectId: string | null | undefined, model: string | null) => void;
   setPreferredTtsModel: (projectId: string | null | undefined, model: string | null) => void;
+  setPreferredTtsVoice: (
+    projectId: string | null | undefined,
+    voice: UserPreferences["preferredTtsVoiceByProject"][string] | null
+  ) => void;
   setPreferredTtsFormat: (
     projectId: string | null | undefined,
     format: UserPreferences["preferredTtsFormatByProject"][string] | null
   ) => void;
+  setPreferredTtsSpeed: (projectId: string | null | undefined, speed: number | null) => void;
   resetPreferences: () => void;
 }
 
@@ -46,7 +58,9 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   preferredChatModelByProject: {},
   preferredImageModelByProject: {},
   preferredTtsModelByProject: {},
+  preferredTtsVoiceByProject: {},
   preferredTtsFormatByProject: {},
+  preferredTtsSpeedByProject: {},
 };
 
 /**
@@ -108,6 +122,21 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
           };
         }),
 
+      setPreferredTtsVoice: (projectId, voice) =>
+        set((state) => {
+          const key = (projectId || "").trim();
+          if (!key) return state;
+          const next = { ...state.preferences.preferredTtsVoiceByProject };
+          if (!voice) {
+            delete next[key];
+          } else {
+            next[key] = voice;
+          }
+          return {
+            preferences: { ...state.preferences, preferredTtsVoiceByProject: next },
+          };
+        }),
+
       setPreferredTtsFormat: (projectId, format) =>
         set((state) => {
           const key = (projectId || "").trim();
@@ -122,6 +151,21 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
             preferences: { ...state.preferences, preferredTtsFormatByProject: next },
           };
         }),
+
+      setPreferredTtsSpeed: (projectId, speed) =>
+        set((state) => {
+          const key = (projectId || "").trim();
+          if (!key) return state;
+          const next = { ...state.preferences.preferredTtsSpeedByProject };
+          if (speed === null || speed === undefined) {
+            delete next[key];
+          } else {
+            next[key] = speed;
+          }
+          return {
+            preferences: { ...state.preferences, preferredTtsSpeedByProject: next },
+          };
+        }),
       
       resetPreferences: () =>
         set({ preferences: DEFAULT_PREFERENCES }),
@@ -129,7 +173,7 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
     {
       name: "user-preferences", // localStorage key
       storage: createJSONStorage(() => localStorage),
-      version: 4,
+      version: 5,
       migrate: (persistedState: unknown, version: number) => {
         if (!persistedState || typeof persistedState !== "object") {
           return { preferences: DEFAULT_PREFERENCES };
@@ -146,11 +190,13 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
           preferredChatModelByProject: prefs.preferredChatModelByProject ?? {},
           preferredImageModelByProject: prefs.preferredImageModelByProject ?? {},
           preferredTtsModelByProject: prefs.preferredTtsModelByProject ?? {},
+          preferredTtsVoiceByProject: (prefs as any).preferredTtsVoiceByProject ?? {},
           preferredTtsFormatByProject: (prefs as any).preferredTtsFormatByProject ?? {},
+          preferredTtsSpeedByProject: (prefs as any).preferredTtsSpeedByProject ?? {},
         };
 
         // 如果版本号未变化，也直接返回合并后的结构
-        if (version >= 4) {
+        if (version >= 5) {
           return { preferences: next };
         }
         return { preferences: next };
