@@ -125,6 +125,8 @@ export function SlateChatInput({
   const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
   const [audioAttachment, setAudioAttachment] = useState<UploadedAudioAttachment | null>(null);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
+  const [audioLocalFile, setAudioLocalFile] = useState<File | null>(null);
   const [voiceSelectorOpen, setVoiceSelectorOpen] = useState(false);
 
   // 语音模式：选中的参考音频
@@ -169,6 +171,46 @@ export function SlateChatInput({
       children: [{ text: "" }],
     });
   }, [editor]);
+
+  const insertTextToEditor = useCallback(
+    (text: string) => {
+      const next = String(text || "").trim();
+      if (!next) return;
+
+      try {
+        ReactEditor.focus(editor);
+      } catch {
+        // ignore focus errors
+      }
+      try {
+        Transforms.select(editor, Editor.end(editor, []));
+      } catch {
+        // ignore selection errors
+      }
+
+      const existing = getTextContent();
+      const prefix = existing ? "\n" : "";
+      Transforms.insertText(editor, `${prefix}${next}`);
+    },
+    [editor, getTextContent]
+  );
+
+  const resolveAudioFileForTranscription = useCallback(async () => {
+    if (audioLocalFile) return audioLocalFile;
+    if (!audioAttachment?.url) return null;
+
+    const resp = await fetch(audioAttachment.url);
+    if (!resp.ok) {
+      throw new Error(`Failed to fetch audio asset: ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const fallbackName = audioAttachment.filename
+      ? audioAttachment.filename
+      : `audio.${audioAttachment.format}`;
+    return new File([blob], fallbackName, {
+      type: audioAttachment.content_type || blob.type || "application/octet-stream",
+    });
+  }, [audioAttachment, audioLocalFile]);
 
   const handleFilesSelected = useCallback(
     async (files: FileList | null) => {
@@ -571,10 +613,15 @@ export function SlateChatInput({
         onOpenChange={setAudioSettingsOpen}
         disabled={disabled || isSending}
         isUploading={isUploadingAudio}
+        isTranscribing={isTranscribingAudio}
         audio={audioAttachment}
-        onRemove={() => setAudioAttachment(null)}
+        onRemove={() => {
+          setAudioAttachment(null);
+          setAudioLocalFile(null);
+        }}
         onPickFromLibrary={(asset) => {
           setAudioAttachment(asset);
+          setAudioLocalFile(null);
           setAudioSettingsOpen(false);
         }}
         onPickFile={async (file) => {
@@ -588,6 +635,7 @@ export function SlateChatInput({
             toast.error(t("chat.audio_input.unsupported"));
             return;
           }
+          setAudioLocalFile(file);
           setIsUploadingAudio(true);
           try {
             const uploaded = await audioService.uploadConversationAudio(conversationId, file);
@@ -601,6 +649,34 @@ export function SlateChatInput({
             toast.error(t("chat.audio_input.upload_failed"));
           } finally {
             setIsUploadingAudio(false);
+          }
+        }}
+        onTranscribeToText={async (params) => {
+          if (disabled || isSending) return;
+          if (isUploadingAudio) {
+            toast.error(t("chat.audio_input.uploading"));
+            return;
+          }
+          if (!audioAttachment) {
+            toast.error(t("chat.audio_input.empty"));
+            return;
+          }
+          setIsTranscribingAudio(true);
+          try {
+            const file = await resolveAudioFileForTranscription();
+            if (!file) {
+              toast.error(t("chat.audio_input.empty"));
+              return;
+            }
+            const res = await audioService.transcribeConversationAudio(conversationId, file, params);
+            insertTextToEditor(res.text);
+            toast.success(t("chat.audio_input.transcribe_success"));
+            setAudioSettingsOpen(false);
+          } catch (e) {
+            console.error("Audio transcription failed", e);
+            toast.error(t("chat.audio_input.transcribe_failed"));
+          } finally {
+            setIsTranscribingAudio(false);
           }
         }}
       />

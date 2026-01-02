@@ -193,6 +193,15 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.audio_input.unsupported": "Unsupported audio type",
     "chat.audio_input.upload_success": "Audio uploaded",
     "chat.audio_input.upload_failed": "Failed to upload audio",
+    "chat.audio_input.transcribe_title": "Speech-to-text (STT)",
+    "chat.audio_input.transcribe_help": "Transcribe the selected audio and insert the text into the input box (leave optional fields empty to use defaults).",
+    "chat.audio_input.transcribe_model_placeholder": "Model (optional, leave empty to follow assistant default)",
+    "chat.audio_input.transcribe_language_placeholder": "Language (optional, e.g. zh / zh-CN / en)",
+    "chat.audio_input.transcribe_prompt_placeholder": "Prompt (optional, supported by some models)",
+    "chat.audio_input.transcribe_action": "Insert transcription",
+    "chat.audio_input.transcribing": "Transcribing...",
+    "chat.audio_input.transcribe_failed": "Failed to transcribe audio",
+    "chat.audio_input.transcribe_success": "Inserted transcription",
 
     // ===== 语音库 =====
     "chat.audio_library.title": "Audio library",
@@ -217,6 +226,19 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.voice_selector.speech_mode_on": "Speech output enabled",
     "chat.voice_selector.speech_mode_off": "Speech output disabled",
     "chat.voice_selector.no_voice_selected": "Please select a voice first",
+
+    // ===== Voice Card =====
+    "chat.voice_card.preview": "Preview",
+    "chat.voice_card.pause": "Pause",
+    "chat.voice_card.public": "Shared with everyone",
+    "chat.voice_card.private": "Only visible to you",
+    "chat.voice_card.make_public": "Share with everyone",
+    "chat.voice_card.make_private": "Make private",
+    "chat.voice_card.made_public": "Voice is now shared",
+    "chat.voice_card.made_private": "Voice is now private",
+    "chat.voice_card.deleted": "Voice deleted",
+    "chat.voice_card.update_failed": "Failed to update",
+    "chat.voice_card.delete_failed": "Failed to delete",
 
     "chat.tool_invocations.badge_single": "Tools × {count}",
     "chat.tool_invocations.badge_agent": "{agent} · {count}",
@@ -711,6 +733,15 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.audio_input.unsupported": "不支持的音频类型",
     "chat.audio_input.upload_success": "语音上传成功",
     "chat.audio_input.upload_failed": "语音上传失败",
+    "chat.audio_input.transcribe_title": "语音转文字（STT）",
+    "chat.audio_input.transcribe_help": "将当前选中的语音转写为文字并插入输入框（可选参数留空则使用默认）。",
+    "chat.audio_input.transcribe_model_placeholder": "模型（可选，留空跟随会话助手默认）",
+    "chat.audio_input.transcribe_language_placeholder": "语言（可选，如 zh / zh-CN / en）",
+    "chat.audio_input.transcribe_prompt_placeholder": "提示词（可选，部分模型支持）",
+    "chat.audio_input.transcribe_action": "转写到输入框",
+    "chat.audio_input.transcribing": "转写中…",
+    "chat.audio_input.transcribe_failed": "语音转写失败",
+    "chat.audio_input.transcribe_success": "已插入转写文本",
 
     // ===== 语音库 =====
     "chat.audio_library.title": "语音库",
@@ -735,6 +766,19 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
     "chat.voice_selector.speech_mode_on": "语音输出已开启",
     "chat.voice_selector.speech_mode_off": "语音输出已关闭",
     "chat.voice_selector.no_voice_selected": "请先选择一个语音",
+
+    // ===== 语音卡片 =====
+    "chat.voice_card.preview": "试听",
+    "chat.voice_card.pause": "暂停",
+    "chat.voice_card.public": "已共享给所有人",
+    "chat.voice_card.private": "仅自己可见",
+    "chat.voice_card.make_public": "共享给所有人",
+    "chat.voice_card.make_private": "设为私有",
+    "chat.voice_card.made_public": "语音已共享",
+    "chat.voice_card.made_private": "语音已设为私有",
+    "chat.voice_card.deleted": "语音已删除",
+    "chat.voice_card.update_failed": "更新失败",
+    "chat.voice_card.delete_failed": "删除失败",
 
     "chat.tool_invocations.badge_single": "工具 × {count}",
     "chat.tool_invocations.badge_agent": "{agent} · {count}",

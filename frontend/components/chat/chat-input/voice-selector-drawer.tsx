@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
-import { Mic, Trash2, UploadCloud, Check } from "lucide-react";
+import { useId, useMemo, useState, useCallback } from "react";
+import { Mic, Trash2, UploadCloud, Check, Globe, Lock, Play, Pause, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -11,17 +11,232 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n-context";
 import { useResponsiveDrawerDirection } from "@/lib/hooks/use-responsive-drawer-direction";
 import { useAudioAssets } from "@/lib/swr/use-audio-assets";
-import { audioService } from "@/http/audio";
+import { audioService, type AudioAssetItem } from "@/http/audio";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import type { SelectedVoiceAudio } from "@/lib/stores/user-preferences-store";
+
+// ============================================
+// Voice Card Component
+// ============================================
+
+interface VoiceCardProps {
+  item: AudioAssetItem;
+  isSelected: boolean;
+  isOwner: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+  onToggleVisibility: (visibility: "private" | "public") => Promise<void>;
+  onDelete: () => Promise<void>;
+  t: (key: string) => string;
+}
+
+function VoiceCard({
+  item,
+  isSelected,
+  isOwner,
+  disabled = false,
+  onSelect,
+  onToggleVisibility,
+  onDelete,
+  t,
+}: VoiceCardProps) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const isPublic = item.visibility === "public";
+  const displayName = item.display_name || item.filename || item.audio_id.slice(0, 8);
+  const sizeKB = Math.round(item.size_bytes / 1024);
+
+  const handlePlayPause = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!audioEl) {
+      const audio = new Audio(item.url);
+      audio.onended = () => setIsPlaying(false);
+      audio.onpause = () => setIsPlaying(false);
+      audio.onplay = () => setIsPlaying(true);
+      setAudioEl(audio);
+      audio.play().catch(() => setIsPlaying(false));
+    } else {
+      if (isPlaying) {
+        audioEl.pause();
+      } else {
+        audioEl.play().catch(() => setIsPlaying(false));
+      }
+    }
+  }, [audioEl, isPlaying, item.url]);
+
+  const handleToggleVisibility = useCallback(async () => {
+    if (disabled || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await onToggleVisibility(isPublic ? "private" : "public");
+      toast.success(isPublic ? t("chat.voice_card.made_private") : t("chat.voice_card.made_public"));
+    } catch {
+      toast.error(t("chat.voice_card.update_failed"));
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [disabled, isUpdating, isPublic, onToggleVisibility, t]);
+
+  const handleDelete = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (disabled || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await onDelete();
+      toast.success(t("chat.voice_card.deleted"));
+    } catch {
+      toast.error(t("chat.voice_card.delete_failed"));
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [disabled, isUpdating, onDelete, t]);
+
+  return (
+    <Card
+      className={cn(
+        "group relative cursor-pointer transition-all hover:shadow-md",
+        isSelected && "ring-2 ring-primary shadow-md",
+        disabled && "opacity-60 cursor-not-allowed"
+      )}
+      onClick={disabled ? undefined : onSelect}
+    >
+      <div className="p-3">
+        {/* 顶部：名称 + 状态 */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              {isSelected && (
+                <Check className="size-4 shrink-0 text-primary" />
+              )}
+              <span className="text-sm font-medium truncate">{displayName}</span>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+              <span>{item.format.toUpperCase()}</span>
+              <span>·</span>
+              <span>{sizeKB} KB</span>
+              {!isOwner && (
+                <>
+                  <span>·</span>
+                  <span className="truncate">
+                    {t("chat.audio_library.by")} {item.owner_display_name || item.owner_username}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 右上角：可见性标识 + 更多菜单（仅所有者） */}
+          <div className="flex items-center gap-1 shrink-0">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={cn(
+                    "size-6 rounded-full flex items-center justify-center",
+                    isPublic ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"
+                  )}>
+                    {isPublic ? <Globe className="size-3" /> : <Lock className="size-3" />}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {isPublic ? t("chat.voice_card.public") : t("chat.voice_card.private")}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {isOwner && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => e.stopPropagation()}
+                    disabled={disabled || isUpdating}
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem onClick={handleToggleVisibility} disabled={isUpdating}>
+                    {isPublic ? (
+                      <>
+                        <Lock className="size-4 mr-2" />
+                        {t("chat.voice_card.make_private")}
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="size-4 mr-2" />
+                        {t("chat.voice_card.make_public")}
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleDelete}
+                    disabled={isUpdating}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="size-4 mr-2" />
+                    {t("chat.audio_library.delete")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+
+        {/* 底部：播放按钮 */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full h-8"
+          onClick={handlePlayPause}
+          disabled={disabled}
+        >
+          {isPlaying ? (
+            <>
+              <Pause className="size-3 mr-1.5" />
+              {t("chat.voice_card.pause")}
+            </>
+          ) : (
+            <>
+              <Play className="size-3 mr-1.5" />
+              {t("chat.voice_card.preview")}
+            </>
+          )}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+// ============================================
+// Voice Selector Drawer
+// ============================================
 
 export interface VoiceSelectorDrawerProps {
   open: boolean;
@@ -125,7 +340,8 @@ export function VoiceSelectorDrawer({
           </DrawerTitle>
         </DrawerHeader>
 
-        <div className="px-4 pb-4 space-y-3">
+        <div className="px-4 pb-4 space-y-4">
+          {/* Hidden file input */}
           <Input
             id={inputId}
             type="file"
@@ -139,165 +355,107 @@ export function VoiceSelectorDrawer({
             }}
           />
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{t("chat.voice_selector.upload")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={disabled || isUploading}
-                onClick={() => {
-                  const el = document.getElementById(inputId);
-                  if (el instanceof HTMLInputElement) el.click();
-                }}
-                className="w-full"
-              >
-                <UploadCloud className="size-4 mr-2" />
-                {isUploading ? t("chat.audio_input.uploading") : t("chat.voice_selector.upload_new")}
-              </Button>
-            </CardContent>
-          </Card>
+          {/* Upload Button */}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || isUploading}
+            onClick={() => {
+              const el = document.getElementById(inputId);
+              if (el instanceof HTMLInputElement) el.click();
+            }}
+            className="w-full"
+          >
+            <UploadCloud className="size-4 mr-2" />
+            {isUploading ? t("chat.audio_input.uploading") : t("chat.voice_selector.upload_new")}
+          </Button>
 
-          {selectedVoice && (
-            <Card className="border-primary">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Check className="size-4 text-primary" />
-                  {t("chat.voice_selector.selected")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="text-sm truncate">{selectedVoice.filename || selectedVoice.audio_id}</div>
-                <audio controls src={selectedVoice.url} className="w-full h-8" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={disabled}
-                  onClick={() => onSelectVoice(null)}
-                  className="w-full"
-                >
-                  <Trash2 className="size-4 mr-2" />
-                  {t("chat.voice_selector.clear_selection")}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
+          {/* Toggle: Show shared */}
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">{t("chat.audio_library.title")}</div>
             <div className="flex items-center gap-2">
-              <div className="text-xs text-muted-foreground">{t("chat.audio_library.show_shared")}</div>
+              <span className="text-xs text-muted-foreground">{t("chat.audio_library.show_shared")}</span>
               <Switch checked={showShared} onCheckedChange={setShowShared} disabled={disabled || isUploading} />
             </div>
           </div>
 
-          <Card>
-            <CardContent className="pt-4 space-y-3 max-h-64 overflow-y-auto">
-              {isLoading ? (
-                <div className="text-xs text-muted-foreground">{t("chat.audio_library.loading")}</div>
-              ) : items.length === 0 ? (
-                <div className="text-xs text-muted-foreground">{t("chat.audio_library.empty")}</div>
-              ) : (
-                <div className="space-y-3">
-                  {grouped.mine.length ? (
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">{t("chat.audio_library.mine")}</div>
+          {/* Voice List */}
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+            {isLoading ? (
+              <div className="text-sm text-muted-foreground text-center py-8">
+                {t("chat.audio_library.loading")}
+              </div>
+            ) : items.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-8">
+                {t("chat.audio_library.empty")}
+              </div>
+            ) : (
+              <>
+                {/* My Voices */}
+                {grouped.mine.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      {t("chat.audio_library.mine")}
+                    </div>
+                    <div className="grid gap-2">
                       {grouped.mine.map((it) => (
-                        <div
+                        <VoiceCard
                           key={it.audio_id}
-                          className={cn(
-                            "flex items-center justify-between gap-2 p-2 rounded-md cursor-pointer transition-colors",
-                            isSelected(it.audio_id)
-                              ? "bg-primary/10 border border-primary"
-                              : "hover:bg-muted/50"
-                          )}
-                          onClick={() => handleSelectItem(it)}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm truncate">{it.display_name || it.filename || it.audio_id}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {it.format.toUpperCase()} · {Math.round(it.size_bytes / 1024)} KB
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isSelected(it.audio_id) && <Check className="size-4 text-primary" />}
-                            <Switch
-                              checked={it.visibility === "public"}
-                              disabled={disabled || isUploading}
-                              onClick={(e) => e.stopPropagation()}
-                              onCheckedChange={async (checked) => {
-                                try {
-                                  await audioService.updateAudioAssetVisibility(it.audio_id, checked ? "public" : "private");
-                                  await mutate();
-                                } catch (e) {
-                                  console.error("updateAudioAssetVisibility failed", e);
-                                }
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="destructive"
-                              disabled={disabled || isUploading}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  if (isSelected(it.audio_id)) {
-                                    onSelectVoice(null);
-                                  }
-                                  await audioService.deleteAudioAsset(it.audio_id);
-                                  await mutate();
-                                } catch (err) {
-                                  console.error("deleteAudioAsset failed", err);
-                                }
-                              }}
-                            >
-                              {t("chat.audio_library.delete")}
-                            </Button>
-                          </div>
-                        </div>
+                          item={it}
+                          isSelected={isSelected(it.audio_id)}
+                          isOwner={true}
+                          disabled={disabled || isUploading}
+                          onSelect={() => handleSelectItem(it)}
+                          onToggleVisibility={async (visibility) => {
+                            await audioService.updateAudioAssetVisibility(it.audio_id, visibility);
+                            await mutate();
+                          }}
+                          onDelete={async () => {
+                            if (isSelected(it.audio_id)) {
+                              onSelectVoice(null);
+                            }
+                            await audioService.deleteAudioAsset(it.audio_id);
+                            await mutate();
+                          }}
+                          t={t}
+                        />
                       ))}
                     </div>
-                  ) : null}
+                  </div>
+                )}
 
-                  {showShared && grouped.shared.length ? (
-                    <>
-                      <Separator />
-                      <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">{t("chat.audio_library.shared")}</div>
+                {/* Shared Voices */}
+                {showShared && grouped.shared.length > 0 && (
+                  <>
+                    {grouped.mine.length > 0 && <Separator />}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        {t("chat.audio_library.shared")}
+                      </div>
+                      <div className="grid gap-2">
                         {grouped.shared.map((it) => (
-                          <div
+                          <VoiceCard
                             key={it.audio_id}
-                            className={cn(
-                              "flex items-center justify-between gap-2 p-2 rounded-md cursor-pointer transition-colors",
-                              isSelected(it.audio_id)
-                                ? "bg-primary/10 border border-primary"
-                                : "hover:bg-muted/50"
-                            )}
-                            onClick={() => handleSelectItem(it)}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm truncate">{it.display_name || it.filename || it.audio_id}</div>
-                              <div className="text-xs text-muted-foreground truncate">
-                                {t("chat.audio_library.by")}{" "}
-                                {it.owner_display_name || it.owner_username}
-                              </div>
-                            </div>
-                            {isSelected(it.audio_id) && <Check className="size-4 text-primary" />}
-                          </div>
+                            item={it}
+                            isSelected={isSelected(it.audio_id)}
+                            isOwner={false}
+                            disabled={disabled || isUploading}
+                            onSelect={() => handleSelectItem(it)}
+                            onToggleVisibility={async () => {}}
+                            onDelete={async () => {}}
+                            t={t}
+                          />
                         ))}
                       </div>
-                    </>
-                  ) : null}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
 
-          <div className="text-xs text-muted-foreground">
+          {/* Hint */}
+          <div className="text-xs text-muted-foreground text-center">
             {t("chat.voice_selector.hint")}
           </div>
         </div>

@@ -37,25 +37,36 @@ export function AudioInputSettingsDrawer({
   onOpenChange,
   disabled = false,
   isUploading = false,
+  isTranscribing = false,
   audio,
   onPickFile,
   onPickFromLibrary,
   onRemove,
+  onTranscribeToText,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   disabled?: boolean;
   isUploading?: boolean;
+  isTranscribing?: boolean;
   audio: UploadedAudioAttachment | null;
   onPickFile: (file: File | null) => void | Promise<void>;
   onPickFromLibrary: (asset: UploadedAudioAttachment) => void;
   onRemove: () => void;
+  onTranscribeToText: (params: {
+    model?: string | null;
+    language?: string | null;
+    prompt?: string | null;
+  }) => void | Promise<void>;
 }) {
   const { t } = useI18n();
   const direction = useResponsiveDrawerDirection();
   const inputId = useId();
   const [showShared, setShowShared] = useState(true);
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
+  const [sttModel, setSttModel] = useState("");
+  const [sttLanguage, setSttLanguage] = useState("");
+  const [sttPrompt, setSttPrompt] = useState("");
 
   const { items, isLoading, mutate } = useAudioAssets({
     visibility: showShared ? "all" : "private",
@@ -143,6 +154,55 @@ export function AudioInputSettingsDrawer({
                   {t("chat.audio_input.empty")}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{t("chat.audio_input.transcribe_title")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-2">
+                <div className="text-xs text-muted-foreground">
+                  {t("chat.audio_input.transcribe_help")}
+                </div>
+                <Input
+                  value={sttModel}
+                  onChange={(e) => setSttModel(e.target.value)}
+                  placeholder={t("chat.audio_input.transcribe_model_placeholder")}
+                  disabled={disabled || isUploading || isTranscribing}
+                />
+                <Input
+                  value={sttLanguage}
+                  onChange={(e) => setSttLanguage(e.target.value)}
+                  placeholder={t("chat.audio_input.transcribe_language_placeholder")}
+                  disabled={disabled || isUploading || isTranscribing}
+                />
+                <Input
+                  value={sttPrompt}
+                  onChange={(e) => setSttPrompt(e.target.value)}
+                  placeholder={t("chat.audio_input.transcribe_prompt_placeholder")}
+                  disabled={disabled || isUploading || isTranscribing}
+                />
+              </div>
+
+              <Button
+                type="button"
+                className="w-full"
+                disabled={disabled || isUploading || isTranscribing || !audio}
+                onClick={async () => {
+                  if (!audio) return;
+                  await onTranscribeToText({
+                    model: sttModel.trim() || null,
+                    language: sttLanguage.trim() || null,
+                    prompt: sttPrompt.trim() || null,
+                  });
+                }}
+              >
+                {isTranscribing
+                  ? t("chat.audio_input.transcribing")
+                  : t("chat.audio_input.transcribe_action")}
+              </Button>
             </CardContent>
           </Card>
 

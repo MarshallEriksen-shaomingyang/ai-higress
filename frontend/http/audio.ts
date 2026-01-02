@@ -31,6 +31,10 @@ export type AudioAssetListResponse = {
   items: AudioAssetItem[];
 };
 
+export type ConversationAudioTranscriptionResponse = {
+  text: string;
+};
+
 export const audioService = {
   uploadConversationAudio: async (
     conversationId: string,
@@ -67,5 +71,31 @@ export const audioService = {
 
   deleteAudioAsset: async (audioId: string): Promise<void> => {
     await httpClient.delete(`/v1/audio-assets/${audioId}`);
+  },
+
+  transcribeConversationAudio: async (
+    conversationId: string,
+    file: File,
+    params?: { model?: string | null; language?: string | null; prompt?: string | null }
+  ): Promise<ConversationAudioTranscriptionResponse> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const model = (params?.model ?? "").trim();
+    const language = (params?.language ?? "").trim();
+    const prompt = (params?.prompt ?? "").trim();
+    if (model) formData.append("model", model);
+    if (language) formData.append("language", language);
+    if (prompt) formData.append("prompt", prompt);
+
+    const response = await httpClient.post<ConversationAudioTranscriptionResponse>(
+      `/v1/conversations/${conversationId}/audio-transcriptions`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+    return response.data;
   },
 };
