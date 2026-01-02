@@ -11,6 +11,7 @@ from .credit import CreditAccount, CreditAutoTopupRule, CreditTransaction, Model
 from .eval import Eval
 from .file_hash import FileHash
 from .identity import Identity
+from .kb_attribute import KBAttribute
 from .message import Message
 from .notification import Notification, NotificationReceipt
 from .permission import Permission
@@ -65,6 +66,7 @@ __all__ = [
     "FileHash",
     "GatewayConfig",
     "Identity",
+    "KBAttribute",
     "Message",
     "ModelBillingConfig",
     "Notification",

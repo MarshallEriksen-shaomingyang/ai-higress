@@ -1,4 +1,24 @@
 
+## 知识库 / 记忆（Qdrant）
+
+- [x] Qdrant 基础接入（settings/compose/client/store）
+- [x] named vector 固定为 `text`，维度由 embedding 结果长度决定（不再手填维度）
+- [x] 单一大集合（shared）策略：`kb_shared_v1` + payload 强制隔离（`owner_user_id` + `project_id`）
+- [x] 写入旁路异步：idle 5 分钟触发 `tasks.extract_chat_memory`
+- [x] 写入增量游标：`Conversation.last_memory_extracted_sequence` + batch tail-recursion 追赶积压
+- [x] 读取闭环：按需检索（gating）+ 强制 filter + system message 注入
+- [x] 结构化属性闭环：`structured_ops` → `kb_attributes`（Postgres）→ system block 确定性注入（偏好/约束）
+- [x] 灰测接口：`POST /v1/projects/{project_id}/memory-route/dry-run`
+- [x] 开发专用日志：`apiproxy.memory_debug`（非生产落盘 `memory-debug.log`）+ 生产结构化 `biz=memory` INFO 日志
+
+- [ ] system 投稿审核/发布闭环（防投毒）：列表/审核/发布/回滚 + 只读检索 `approved=true`
+- [ ] 检索 Query 改写（小模型）：从启发式升级为结构化改写，保留成本门禁
+- [ ] 检索阈值与去噪：score 阈值、去重、top-k 动态调整，避免检索污染
+- [ ] 记忆管理 API：用户侧“列表/删除/导出我的记忆”（shared 下必须按 owner filter 删除）
+- [ ] embedding 版本迁移：`kb_shared_v2` 双写 + backfill + 切读（Plan B）
+
+---
+
 路由智能化：在现有权重/故障转移基础上增加"延迟+成功率+单 token 成本"实时调度与 A/B 策略，自动降权失效 provider，并支持按模型能力标签（文本/多模态/工具调用）做路由过滤。
 SLA 与治理：为每个 provider/用户/API Key 提供并发与 QPS 限额、熔断与退避策略，结合错误率阈值自动进入降级（如切回默认模型或返回缓存回复），并在管理端可视化当前限流/熔断状态。
 安全与合规：增加请求/响应内容审核与敏感信息脱敏（PII、密钥、代码泄露）流水线，可配置阻断/打码；补充全链路审计日志（谁在何时调用了哪个模型，命中哪些策略），满足合规和取证需求。

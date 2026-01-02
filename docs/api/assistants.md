@@ -221,6 +221,17 @@ Response:
       "keywords": ["k1", "k2"]
     }
   ],
+  "structured_ops": [
+    {
+      "op": "UPSERT",
+      "scope": "user",
+      "category": "preference",
+      "key": "response.style",
+      "value": "concise",
+      "confidence": 0.8,
+      "reason": "可选：提取理由"
+    }
+  ],
   "raw_model_output": "{...}"
 }
 ```

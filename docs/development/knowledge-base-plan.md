@@ -18,6 +18,7 @@
 ### 0.2 已实现的关键能力（读写闭环）
 - **Write（旁路异步 + 增量游标）**：Celery 任务 `tasks.extract_chat_memory`，idle 5 分钟触发；采用 `Conversation.last_memory_extracted_sequence` 做 DB 游标增量抽取，并用“尾递归自派发”追赶积压：`backend/app/tasks/chat_memory.py`。
 - **Read（按需检索注入）**：聊天主链路在构建 payload 后、调用上游前，best-effort 检索用户记忆并注入 system message（默认不检索，有 gating）：`backend/app/services/chat_memory_retrieval.py` + `backend/app/services/chat_app_service.py`。
+- **结构化属性（确定性存储）**：路由模型输出 `structured_ops`（UPSERT），worker 落库 `kb_attributes`，聊天组装时将偏好/约束以 system block 注入（用于确定性行为约束）：`backend/app/models/kb_attribute.py`、`backend/app/repositories/kb_attribute_repository.py`、`backend/app/services/chat_run_service.py`。
 - **灰测接口（验证路由模型能力）**：`POST /v1/projects/{project_id}/memory-route/dry-run`：`backend/app/api/v1/project_memory_routes.py`。
 - **开发专用日志**：`apiproxy.memory_debug` 仅非生产落盘 `memory-debug.log`，另有生产可用的 `biz=memory` 结构化 INFO 日志：`backend/app/logging_config.py`、`backend/app/tasks/chat_memory.py`。
 
@@ -142,7 +143,7 @@ system 维度的写入必须走管道：
 
 为避免“把不相关内容检索出来污染上下文”，建议按用途拆 collection，而不是把所有内容混到一个大库里。
 
-> 注意：以下为规划建议的 schema，属于“拟新增”，并非当前系统已实现字段。
+> 注意：以下为“规划 + 现状对齐”的 schema。字段名以仓库现有实现为准，后续扩展需保持兼容与可迁移。
 
 ### 4.1 推荐的 Collection 列表（MVP 可先做 2 个）
 - `kb_system`：系统通用知识（system）
@@ -177,10 +178,9 @@ system 维度的写入必须走管道：
 - `kb_shared_v1`：**必须** `must(owner_user_id==当前用户 && project_id==当前项目 && scope=user && approved=true)`（由服务层强制注入，业务层不可绕过）
 - `kb_system`：不带 owner，但必须保证只检索 `approved=true`；用户投稿进入 system 时默认 `approved=false`，需要审核发布
 
-补充说明（为何采用 per-user collection）：
-- 权限边界更直观：默认无法跨用户检索，减少误配置导致的数据泄露面。
-- 可支持“用户级别一键删除整个知识库”（drop collection）实现更简单。
-- 代价：collection 数量随用户增长；需要运维侧关注（Qdrant collection 过多会增加管理成本）。
+补充说明（collection 拆分策略取舍）：
+- shared（当前 MVP 默认）：运维最省（collection 数固定），但必须“焊死” filter（`owner_user_id`+`project_id`）避免串读。
+- per_user（可选）：权限边界更直观、用户级删除更简单（drop collection），代价是 collection 数随用户增长，运维成本更高。
 
 向量字段约定（避免“向量名称/维度”在环境变量里漂移）：
 - 统一使用 **named vector**，向量名固定为 `text`（由后端代码内置，不通过环境变量配置）。
@@ -336,6 +336,7 @@ system 维度的写入必须走管道：
 - [ ] 检索阈值与去噪：增加 score 阈值、去重、top-k 动态调整，避免“检索污染”
 - [ ] system 维度检索（只读 approved=true）：支持在合适场景注入 system 记忆（仍保持 default-not-retrieve）
 - [ ] system 投稿审核/发布闭环：提供“候选列表→审核→发布→回滚”能力（防投毒）
+- [ ] 结构化 key 规范化：沉淀 key 白名单/命名空间（例如 response.* / tech_stack.*），并在写入时做校验与降级（未知 key 只入向量不入结构化）
 
 ### 9.2 平台治理与运维（建议优先级：中）
 - [ ] Qdrant scroll + 批量 backfill 工具：支持迁移/重算 embedding（v1→v2）

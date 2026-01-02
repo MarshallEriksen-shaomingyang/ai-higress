@@ -16,6 +16,7 @@ from app.auth import AuthenticatedAPIKey
 from app.utils.response_utils import extract_first_choice_text, parse_json_response_body
 
 MemoryScope = Literal["none", "user", "system"]
+StructuredScope = Literal["user", "project"]
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class MemoryRouteDecision:
     scope: MemoryScope
     memory_text: str
     memory_items: list[dict[str, Any]]
+    structured_ops: list[dict[str, Any]]
 
 
 _SYSTEM_PROMPT = (
@@ -52,6 +54,14 @@ _SYSTEM_PROMPT = (
     "- user：用户个人事实/偏好/长期约束/待办/项目私有细节。\n"
     "- system：仅当内容“与任何特定用户无关、无隐私、可复用、通用”的结论/步骤/经验规则；如包含个人信息或项目专属细节，一律不要选 system。\n"
     "\n"
+    "结构化属性（structured_ops，用于写入 PostgreSQL 形成确定性行为）：\n"
+    "- 仅提取“明确、稳定、会影响后续行为”的偏好/约束（不要写临时状态）。\n"
+    "- scope 只能是：user（用户偏好）或 project（项目约束）。\n"
+    "- op 目前仅支持：UPSERT（同一个 subject + key 覆盖更新）。\n"
+    "- key 使用稳定的 dotted path（例如 response.style、tech_stack.backend_framework）。\n"
+    "- value 必须是 JSON（string/number/bool/object/array）。\n"
+    "- 严禁写入任何密钥/密码/token/API key/私钥/手机号/邮箱/地址等敏感信息；如对话包含敏感信息，structured_ops 也必须为空。\n"
+    "\n"
     "输出格式：必须且只能输出 JSON（不要 Markdown、不要解释），字段如下：\n"
     "{\n"
     '  "should_store": true|false,\n'
@@ -64,8 +74,19 @@ _SYSTEM_PROMPT = (
     '      "keywords": ["k1","k2"]\n'
     "    }\n"
     "  ]\n"
+    '  ,"structured_ops": [\n'
+    "    {\n"
+    '      "op": "UPSERT",\n'
+    '      "scope": "user|project",\n'
+    '      "category": "preference|constraint",\n'
+    '      "key": "string",\n'
+    '      "value": "any json",\n'
+    '      "confidence": 0.0,\n'
+    '      "reason": "optional"\n'
+    "    }\n"
+    "  ]\n"
     "}\n"
-    "当 should_store=false 时：scope=none，memory_text 为空字符串，memory_items 为空数组。\n"
+    "当 should_store=false 时：scope=none，memory_text 为空字符串，memory_items 为空数组，structured_ops 为空数组。\n"
 )
 
 
@@ -85,16 +106,22 @@ def _build_user_prompt(transcript: str) -> str:
 def parse_memory_route_decision(text: str) -> MemoryRouteDecision:
     raw = (text or "").strip()
     if not raw:
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[])
+        return MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
+        )
 
     try:
         obj = json.loads(raw)
     except Exception:
         # tolerate LLM extra whitespace/newlines, but do not attempt heuristic extraction
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[])
+        return MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
+        )
 
     if not isinstance(obj, dict):
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[])
+        return MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
+        )
 
     should_store = bool(obj.get("should_store", False))
     scope = str(obj.get("scope", "none") or "none").strip().lower()
@@ -136,18 +163,61 @@ def parse_memory_route_decision(text: str) -> MemoryRouteDecision:
         if joined:
             memory_text = joined
 
+    structured_ops_raw = obj.get("structured_ops")
+    structured_ops: list[dict[str, Any]] = []
+    if isinstance(structured_ops_raw, list):
+        for it in structured_ops_raw:
+            if not isinstance(it, dict):
+                continue
+            op = str(it.get("op") or "").strip().upper()
+            if op != "UPSERT":
+                continue
+            sscope = str(it.get("scope") or "").strip().lower()
+            if sscope not in ("user", "project"):
+                continue
+            category = str(it.get("category") or "").strip().lower()
+            if category not in ("preference", "constraint"):
+                category = "preference" if sscope == "user" else "constraint"
+            key = str(it.get("key") or "").strip()
+            if not key:
+                continue
+            value = it.get("value")
+            confidence = it.get("confidence")
+            conf: float | None = None
+            if isinstance(confidence, (int, float)):
+                conf = float(confidence)
+            reason = it.get("reason")
+            structured_ops.append(
+                {
+                    "op": "UPSERT",
+                    "scope": sscope,
+                    "category": category,
+                    "key": key,
+                    "value": value,
+                    "confidence": conf,
+                    "reason": reason if isinstance(reason, str) else None,
+                }
+            )
+
     if not should_store:
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[])
+        return MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=structured_ops
+        )
     if not memory_text:
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[])
+        return MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=structured_ops
+        )
     if scope == "none":
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[])
+        return MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=structured_ops
+        )
 
     return MemoryRouteDecision(
         should_store=True,
         scope=scope,  # type: ignore[arg-type]
         memory_text=memory_text,
         memory_items=memory_items,
+        structured_ops=structured_ops,
     )
 
 
@@ -164,11 +234,15 @@ async def route_chat_memory(
 ) -> MemoryRouteDecision:
     model = str(router_logical_model or "").strip()
     if not model:
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[])
+        return MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
+        )
 
     text = (transcript or "").strip()
     if not text:
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[])
+        return MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
+        )
 
     payload: dict[str, Any] = {
         "model": model,
@@ -208,11 +282,21 @@ async def route_chat_memory_with_raw(
 ) -> tuple[MemoryRouteDecision, str]:
     model = str(router_logical_model or "").strip()
     if not model:
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[]), ""
+        return (
+            MemoryRouteDecision(
+                should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
+            ),
+            "",
+        )
 
     text = (transcript or "").strip()
     if not text:
-        return MemoryRouteDecision(should_store=False, scope="none", memory_text="", memory_items=[]), ""
+        return (
+            MemoryRouteDecision(
+                should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
+            ),
+            "",
+        )
 
     payload: dict[str, Any] = {
         "model": model,

@@ -24,6 +24,7 @@ from app.services.project_eval_config_service import (
 from app.services.qdrant_collection_service import ensure_collection_ready
 from app.services.qdrant_bootstrap_service import ensure_system_collection_ready
 from app.services.chat_memory_router import route_chat_memory
+from app.repositories.kb_attribute_repository import make_subject_id, upsert_attribute
 from app.storage.qdrant_kb_store import upsert_point
 from app.utils.response_utils import safe_text_from_message_content
 
@@ -224,6 +225,79 @@ async def extract_and_store_chat_memory(
                     transcript=transcript,
                     idempotency_key=f"mem_route:{conversation_id}:{batch_last_seq}",
                 )
+
+                # Deterministic path: apply structured ops to Postgres (best-effort).
+                try:
+                    if getattr(decision, "structured_ops", None):
+                        applied = 0
+                        for op in list(decision.structured_ops or []):
+                            if not isinstance(op, dict):
+                                continue
+                            if str(op.get("op") or "").strip().upper() != "UPSERT":
+                                continue
+                            sscope = str(op.get("scope") or "").strip().lower()
+                            if sscope not in ("user", "project"):
+                                continue
+                            category = str(op.get("category") or "").strip().lower() or "config"
+                            key = str(op.get("key") or "").strip()
+                            if not key:
+                                continue
+                            value = op.get("value")
+                            confidence = op.get("confidence")
+                            conf: float | None = None
+                            if isinstance(confidence, (int, float)):
+                                conf = float(confidence)
+
+                            if sscope == "user":
+                                subject_id = make_subject_id(scope="user", user_id=UUID(str(user.id)))
+                                upsert_attribute(
+                                    db,
+                                    subject_id=subject_id,
+                                    scope="user",
+                                    category=category,
+                                    key=key,
+                                    value=value,
+                                    owner_user_id=UUID(str(user.id)),
+                                    project_id=None,
+                                    confidence=conf,
+                                    source_conversation_id=UUID(str(conversation_id)),
+                                    source_until_sequence=int(batch_last_seq),
+                                )
+                            else:
+                                subject_id = make_subject_id(scope="project", project_id=UUID(str(api_key.id)))
+                                upsert_attribute(
+                                    db,
+                                    subject_id=subject_id,
+                                    scope="project",
+                                    category=category,
+                                    key=key,
+                                    value=value,
+                                    owner_user_id=None,
+                                    project_id=UUID(str(api_key.id)),
+                                    confidence=conf,
+                                    source_conversation_id=UUID(str(conversation_id)),
+                                    source_until_sequence=int(batch_last_seq),
+                                )
+                            applied += 1
+
+                        if applied and memory_debug_logger.isEnabledFor(logging.DEBUG):
+                            memory_debug_logger.debug(
+                                "chat_memory: structured_ops_applied (conversation_id=%s user_id=%s batch_last=%s count=%s)",
+                                str(conversation_id),
+                                str(user.id),
+                                int(batch_last_seq),
+                                int(applied),
+                            )
+                except Exception:
+                    # Never block main memory pipeline on structured attribute persistence.
+                    if memory_debug_logger.isEnabledFor(logging.DEBUG):
+                        memory_debug_logger.debug(
+                            "chat_memory: structured_ops failed (conversation_id=%s user_id=%s batch_last=%s)",
+                            str(conversation_id),
+                            str(user.id),
+                            int(batch_last_seq),
+                            exc_info=True,
+                        )
 
                 if not decision.should_store or not decision.memory_text:
                     if memory_debug_logger.isEnabledFor(logging.DEBUG):

@@ -116,6 +116,7 @@ async def dry_run_project_memory_route(
         scope=decision.scope,
         memory_text=decision.memory_text,
         memory_items=decision.memory_items or [],
+        structured_ops=getattr(decision, "structured_ops", None) or [],
         raw_model_output=raw,
     )
 

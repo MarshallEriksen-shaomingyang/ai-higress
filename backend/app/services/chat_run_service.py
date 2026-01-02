@@ -90,6 +90,52 @@ def _extract_assistant_text_from_openai_response(payload: dict[str, Any] | None)
     return None
 
 
+def _safe_inline_json(value: Any, *, max_len: int = 160) -> str:
+    try:
+        text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    except Exception:
+        text = str(value)
+    text = (text or "").strip().replace("\r", " ").replace("\n", " ")
+    if len(text) <= max_len:
+        return text
+    return text[:max_len].rstrip() + "…"
+
+
+def _build_deterministic_attribute_system_block(db: Session, *, conversation: Conversation) -> str:
+    """
+    Build a deterministic instruction block from structured attributes (PostgreSQL).
+
+    This is different from Qdrant semantic memory: these values are treated as
+    hard preferences/constraints and should be stable key-value facts.
+    """
+    try:
+        from app.repositories.kb_attribute_repository import list_attributes, make_subject_id
+
+        user_sid = make_subject_id(scope="user", user_id=UUID(str(conversation.user_id)))
+        proj_sid = make_subject_id(scope="project", project_id=UUID(str(conversation.api_key_id)))
+
+        user_attrs = list_attributes(db, subject_id=user_sid, limit=50)
+        proj_attrs = list_attributes(db, subject_id=proj_sid, limit=50)
+    except Exception:
+        return ""
+
+    if not user_attrs and not proj_attrs:
+        return ""
+
+    lines: list[str] = []
+    lines.append("以下为结构化偏好/约束（确定性配置，优先级高于普通对话内容）：")
+    if user_attrs:
+        lines.append("用户偏好（user preferences）：")
+        for it in user_attrs[:20]:
+            lines.append(f"- {it.key} = {_safe_inline_json(it.value)}")
+    if proj_attrs:
+        lines.append("项目约束（project constraints）：")
+        for it in proj_attrs[:20]:
+            lines.append(f"- {it.key} = {_safe_inline_json(it.value)}")
+    lines.append("规则：如果用户当前请求与上述偏好/约束冲突，请提示冲突并请求确认。")
+    return "\n".join(lines).strip()
+
+
 def _build_openai_messages(
     db: Session,
     *,
@@ -127,6 +173,10 @@ def _build_openai_messages(
     system_prompt = (assistant.system_prompt or "").strip()
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
+
+    deterministic_block = _build_deterministic_attribute_system_block(db, conversation=conv) if conv is not None else ""
+    if deterministic_block:
+        messages.append({"role": "system", "content": deterministic_block})
     if summary_text and summary_until > 0:
         messages.append({"role": "system", "content": f"Conversation summary:\n{summary_text}"})
 
