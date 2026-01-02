@@ -17,18 +17,23 @@
 
 ### 0.2 已实现的关键能力（读写闭环）
 - **Write（旁路异步 + 增量游标）**：Celery 任务 `tasks.extract_chat_memory`，idle 5 分钟触发；采用 `Conversation.last_memory_extracted_sequence` 做 DB 游标增量抽取，并用“尾递归自派发”追赶积压：`backend/app/tasks/chat_memory.py`。
-- **Read（按需检索注入）**：聊天主链路在构建 payload 后、调用上游前，best-effort 检索用户记忆并注入 system message（默认不检索，有 gating）：`backend/app/services/chat_memory_retrieval.py` + `backend/app/services/chat_app_service.py`。
-- **结构化属性（确定性存储）**：路由模型输出 `structured_ops`（UPSERT），worker 落库 `kb_attributes`，聊天组装时将偏好/约束以 system block 注入（用于确定性行为约束）：`backend/app/models/kb_attribute.py`、`backend/app/repositories/kb_attribute_repository.py`、`backend/app/services/chat_run_service.py`。
-- **灰测接口（验证路由模型能力）**：`POST /v1/projects/{project_id}/memory-route/dry-run`：`backend/app/api/v1/project_memory_routes.py`。
-- **开发专用日志**：`apiproxy.memory_debug` 仅非生产落盘 `memory-debug.log`，另有生产可用的 `biz=memory` 结构化 INFO 日志：`backend/app/logging_config.py`、`backend/app/tasks/chat_memory.py`。
+- **Read（按需检索注入 + 智能改写）**：聊天主链路 best-effort 检索并注入 system message（有 gating）。支持 **LLM Query 改写** 处理代词消解与上下文补全：`backend/app/services/chat_memory_retrieval.py`。
+- **检索质量治理**：引入 `MIN_SCORE_THRESHOLD=0.75`、内容哈希去重及动态 Top-K 策略，确保 RAG 召回精度。
+- **结构化属性（确定性存储）**：路由模型输出 `structured_ops`（UPSERT），具备 **Key 白名单与 Schema 校验**，落库 `kb_attributes`（Postgres）：`backend/app/services/kb_attribute_schema.py`、`backend/app/repositories/kb_attribute_repository.py`。
+- **治理与 API 闭环**：
+    - **用户侧**：支持列表、删除、导出个人记忆：`backend/app/api/v1/user_memory_routes.py`。
+    - **管理侧**：支持 System 候选条目审核、修正发布及手动创建：`backend/app/api/v1/admin_memory_routes.py`。
+- **灰测与监控**：`POST /v1/projects/{project_id}/memory-route/dry-run` + `apiproxy.memory_debug` 专项日志。
 
 ### 0.3 代码落点速查
 - Qdrant Client：`backend/app/qdrant_client.py`
-- Qdrant store（create/upsert/search）：`backend/app/storage/qdrant_kb_store.py`
-- collection 命名与策略（shared/per_user/sharded_by_model）：`backend/app/storage/qdrant_kb_collections.py`
+- Qdrant store（create/upsert/search/scroll/delete）：`backend/app/storage/qdrant_kb_store.py`
+- collection 命名与策略：`backend/app/storage/qdrant_kb_collections.py`
 - system collection bootstrap：`backend/app/services/qdrant_bootstrap_service.py`
 - embedding 统一调用：`backend/app/services/embedding_service.py`
-- 记忆路由 Prompt/解析：`backend/app/services/chat_memory_router.py`
+- 记忆路由与改写：`backend/app/services/chat_memory_router.py` + `backend/app/services/chat_memory_retrieval.py`
+- 结构化校验：`backend/app/services/kb_attribute_schema.py`
+- API 接口：`backend/app/api/v1/user_memory_routes.py` + `backend/app/api/v1/admin_memory_routes.py`
 
 ---
 
@@ -245,14 +250,16 @@ system 维度的写入必须走管道：
 
 ## 7. 里程碑建议（MVP → 扩展）
 
-### Phase 1（MVP）
-- `kb_user` + `kb_system` 两个维度与基础检索（但默认不触发）
-- 异步“对话→记忆提炼→写入 kb_user_<user_id>”（聊天即记忆）
-- system 发布：先走人工审核，不自动上升
+### Phase 1（MVP）[DONE]
+- `kb_user` + `kb_system` 两个维度与基础检索（默认不触发）
+- 异步“对话→记忆提炼→写入 kb_shared_v1”（聊天即记忆）
+- 结构化属性写入与 Key 白名单校验
+- 用户/管理侧记忆管理 API (List/Delete/Export/Approve)
 
-### Phase 2
-- 语义缓存 `semantic_cache`（收益最大）
-- 路由判定 + query 改写（按需触发检索）
+### Phase 2 [IN PROGRESS]
+- 语义缓存 `semantic_cache`（TODO）
+- 路由判定 + **Query 改写**（DONE）
+- 检索阈值与去噪（DONE）
 
 ### Phase 3
 - 动态 few-shot、语义风控、规则/元数据增强全链路治理
@@ -310,40 +317,33 @@ system 维度的写入必须走管道：
 - `app/services/embedding_service.py`（已实现）
   - 职责：统一“文本→向量”调用（后续可做批量、缓存、降级）。
 - `app/storage/qdrant_kb_store.py`（已实现）
-  - 职责：封装 Qdrant 的 upsert/search/delete/scroll，负责 payload filter 组装与错误分类（连接失败/鉴权失败/超时）。
+  - 职责：封装 Qdrant 的 upsert/search/delete/scroll/points，负责 payload filter 组装与错误分类。
 - `app/services/chat_memory_retrieval.py`（已实现）
-  - 职责：gating + 构造检索 query（MVP 先不用额外 LLM 改写）+ 强制 filter + 注入 system context。
-- `app/repositories/knowledge_base_repository.py`（TODO）
-  - 职责：PostgreSQL 侧的审计索引表（point_id、owner、source、状态、TTL、删除标记等），支撑“列表/删除/导出/审核发布”。
+  - 职责：gating + **LLM Query 改写** + 强制 filter + 注入 system context。
+- `app/repositories/kb_attribute_repository.py`（已实现）
+  - 职责：PostgreSQL 侧的结构化属性存储。
 
 ### 8.5 降级策略（落地时必须先写清）
-建议把 Qdrant 相关异常统一归类为“可降级”：
-- Qdrant 连接失败/超时：跳过检索链路，直连主模型；并记录一次指标（方便看出故障期间影响面）。
-- embedding 失败：同样跳过检索链路（不要阻断聊天主流程）。
-- system collection 的“审核过滤”不可用：宁可不检索 system，也不要误泄露未审核内容。
-
-### 8.6 “用户选择 embedding 模型”与“每用户 collection 自动创建”的一致性约束（必须提前定）
-由于 Qdrant collection 的向量参数（size/distance）是固定的，而不同 embedding 模型可能有不同维度：
-- MVP 推荐做法：**全平台统一 embedding 模型 + 单一大集合**（shared），从根源消除“不同维度无法混存”的问题。
-- 若未来要更换 embedding 模型：采用版本化迁移（新建 `kb_shared_v2`、双写、回填、切读），避免在同一 collection 混用不同维度。
+...
 
 ---
 
 ## 9. TODO 与可增强点（按优先级建议）
 
 ### 9.1 MVP 后优先做（建议优先级：高）
-- [ ] 检索 Query 改写（LLM 小模型）：将 `build_retrieval_query()` 从启发式升级为“结构化改写”，并保留成本门禁
-- [ ] 检索阈值与去噪：增加 score 阈值、去重、top-k 动态调整，避免“检索污染”
-- [ ] system 维度检索（只读 approved=true）：支持在合适场景注入 system 记忆（仍保持 default-not-retrieve）
-- [ ] system 投稿审核/发布闭环：提供“候选列表→审核→发布→回滚”能力（防投毒）
-- [ ] 结构化 key 规范化：沉淀 key 白名单/命名空间（例如 response.* / tech_stack.*），并在写入时做校验与降级（未知 key 只入向量不入结构化）
+- [x] 检索 Query 改写（LLM 小模型）：将 `build_retrieval_query()` 升级为基于 LLM 的改写，并保留成本门禁
+- [x] 检索阈值与去噪：增加 score 阈值、内容哈希去重、top-k 动态调整，避免检索污染
+- [x] system 维度检索：在合适场景注入已审核的 system 记忆（仍保持 default-not-retrieve）
+- [x] system 投稿审核/发布闭环：提供“候选列表→审核→发布→拒绝”能力
+- [x] 结构化 key 规范化：沉淀 key 白名单并在写入时做校验
 
 ### 9.2 平台治理与运维（建议优先级：中）
+- [ ] 语义缓存 `semantic_cache`：基于向量匹配的快速回复，显著降成本
 - [ ] Qdrant scroll + 批量 backfill 工具：支持迁移/重算 embedding（v1→v2）
-- [ ] 记忆删除/导出：用户侧“查看/删除/导出我的记忆”（shared 策略下必须支持按 owner filter 删除）
+- [x] 记忆删除/导出：用户侧“查看/删除/导出我的记忆”（shared 策略下必须支持按 owner filter 删除）
 - [ ] 指标与告警：记忆检索触发率、命中率、额外延迟、每会话积压批次数（识别异常/成本暴涨）
 
 ### 9.3 体验与智能化（建议优先级：中/低）
 - [ ] 记忆去重/合并：同一事实多次出现合并为一条（可用哈希或小模型判等）
 - [ ] 记忆 TTL/权重：按类型设置 TTL 与检索权重（偏好/项目规范 > 临时事实）
-- [ ] 更精细 gating：关键词 → 小模型判定 need_retrieval → 改写/检索（三级漏斗）
+- [ ] 更精细 gating：更智能的判定是否需要检索的漏斗机制

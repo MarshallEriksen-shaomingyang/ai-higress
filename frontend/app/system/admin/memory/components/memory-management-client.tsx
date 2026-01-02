@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -41,6 +43,7 @@ import {
 } from 'lucide-react';
 
 import { useI18n } from '@/lib/i18n-context';
+import { useApiKeys } from '@/lib/swr/use-api-keys';
 import { adminMemoryService, type AdminMemoryItem } from '@/http';
 import useSWR from 'swr';
 
@@ -135,17 +138,45 @@ function MemoryListSkeleton() {
 
 export function MemoryManagementClient() {
   const { t } = useI18n();
+  const { apiKeys, loading: apiKeysLoading } = useApiKeys();
   const [activeTab, setActiveTab] = useState<'candidates' | 'published'>('candidates');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isApproveOpen, setIsApproveOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<AdminMemoryItem | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [formData, setFormData] = useState({
     content: '',
     categories: '',
     keywords: '',
   });
   const [submitting, setSubmitting] = useState(false);
+
+  const selectableProjects = useMemo(
+    () => (apiKeys || []).filter((k) => !!k?.id),
+    [apiKeys]
+  );
+
+  useEffect(() => {
+    if (!selectableProjects.length) return;
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem('admin_memory_project_id') : null;
+    if (saved && selectableProjects.some((k) => k.id === saved)) {
+      setSelectedProjectId(saved);
+      return;
+    }
+    if (!selectedProjectId && selectableProjects.length === 1) {
+      setSelectedProjectId(selectableProjects[0].id);
+    }
+  }, [selectableProjects, selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedProjectId) return;
+    try {
+      window.localStorage.setItem('admin_memory_project_id', selectedProjectId);
+    } catch {
+      // ignore
+    }
+  }, [selectedProjectId]);
 
   // Fetch candidates
   const {
@@ -199,6 +230,10 @@ export function MemoryManagementClient() {
 
   const handleApprove = async () => {
     if (!selectedItem) return;
+    if (!selectedProjectId) {
+      toast.error(t('system.memory.project_required'));
+      return;
+    }
     setSubmitting(true);
     try {
       const categories = formData.categories
@@ -211,6 +246,7 @@ export function MemoryManagementClient() {
         .filter(Boolean);
 
       await adminMemoryService.approve(selectedItem.id, {
+        project_id: selectedProjectId,
         content: formData.content.trim() || undefined,
         categories: categories.length > 0 ? categories : undefined,
         keywords: keywords.length > 0 ? keywords : undefined,
@@ -231,6 +267,10 @@ export function MemoryManagementClient() {
       toast.error(t('system.memory.content_required'));
       return;
     }
+    if (!selectedProjectId) {
+      toast.error(t('system.memory.project_required'));
+      return;
+    }
     setSubmitting(true);
     try {
       const categories = formData.categories
@@ -243,6 +283,7 @@ export function MemoryManagementClient() {
         .filter(Boolean);
 
       await adminMemoryService.create({
+        project_id: selectedProjectId,
         content: formData.content.trim(),
         categories,
         keywords,
@@ -286,6 +327,21 @@ export function MemoryManagementClient() {
               <CardTitle>{t('system.memory.title')}</CardTitle>
             </div>
             <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground">{t('system.memory.project')}</Label>
+                <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                  <SelectTrigger className="w-[240px]">
+                    <SelectValue placeholder={t('system.memory.project_select_placeholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectableProjects.map((k) => (
+                      <SelectItem key={k.id} value={k.id}>
+                        {k.name} ({k.key_prefix})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button variant="outline" size="sm" onClick={handleRefresh}>
                 <RefreshCw className="w-4 h-4 mr-1" />
                 {t('common.refresh')}
@@ -384,7 +440,22 @@ export function MemoryManagementClient() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('system.memory.content')}</label>
+              <Label>{t('system.memory.project')}</Label>
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId} disabled={apiKeysLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t('system.memory.project_select_placeholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectableProjects.map((k) => (
+                    <SelectItem key={k.id} value={k.id}>
+                      {k.name} ({k.key_prefix})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('system.memory.content')}</Label>
               <Textarea
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
@@ -393,7 +464,7 @@ export function MemoryManagementClient() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('system.memory.categories')}</label>
+              <Label>{t('system.memory.categories')}</Label>
               <Input
                 value={formData.categories}
                 onChange={(e) => setFormData({ ...formData, categories: e.target.value })}
@@ -401,7 +472,7 @@ export function MemoryManagementClient() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('system.memory.keywords')}</label>
+              <Label>{t('system.memory.keywords')}</Label>
               <Input
                 value={formData.keywords}
                 onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
@@ -429,7 +500,22 @@ export function MemoryManagementClient() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('system.memory.content')}</label>
+              <Label>{t('system.memory.project')}</Label>
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId} disabled={apiKeysLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t('system.memory.project_select_placeholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectableProjects.map((k) => (
+                    <SelectItem key={k.id} value={k.id}>
+                      {k.name} ({k.key_prefix})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('system.memory.content')}</Label>
               <Textarea
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
@@ -437,14 +523,14 @@ export function MemoryManagementClient() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('system.memory.categories')}</label>
+              <Label>{t('system.memory.categories')}</Label>
               <Input
                 value={formData.categories}
                 onChange={(e) => setFormData({ ...formData, categories: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('system.memory.keywords')}</label>
+              <Label>{t('system.memory.keywords')}</Label>
               <Input
                 value={formData.keywords}
                 onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}

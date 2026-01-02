@@ -19,6 +19,7 @@ from app.schemas.admin_memory import (
 )
 from app.settings import settings
 from app.services.embedding_service import embed_text
+from app.services.api_key_service import get_api_key_by_id
 from app.services.project_eval_config_service import (
     DEFAULT_PROVIDER_SCOPES,
     get_effective_provider_ids_for_user,
@@ -47,43 +48,29 @@ async def _get_embedding_vector(
     client,
     text: str,
     current_user: AuthenticatedUser,
+    project_id: UUID,
 ) -> list[float]:
     embedding_model = str(getattr(settings, "kb_global_embedding_logical_model", "") or "").strip()
     if not embedding_model:
-         # Fallback logic mirroring tasks.chat_memory: try to infer from project or just fail
-         # Since this is admin interface for system memory, we really need the global model.
-         raise HTTPException(
-             status_code=status.HTTP_400_BAD_REQUEST,
-             detail="KB_GLOBAL_EMBEDDING_LOGICAL_MODEL not configured. System memory requires a global embedding model."
-         )
+        # Fallback logic mirroring tasks.chat_memory: try to infer from project or just fail
+        # Since this is admin interface for system memory, we really need the global model.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="KB_GLOBAL_EMBEDDING_LOGICAL_MODEL not configured. System memory requires a global embedding model.",
+        )
 
     # We need an AuthenticatedAPIKey for RequestHandler. 
     # Since this is admin operating, we can create a synthetic one or look up admin's key.
     # For simplicity, we synthesize one representing the admin user.
-    from app.models import APIKey, User
+    from app.models import User
     
     admin_user = db.get(User, UUID(str(current_user.id)))
     if not admin_user:
         raise HTTPException(status_code=404, detail="Admin user not found")
 
-    # Try to find a valid API Key for the admin to resolve providers
-    # If admin has no key, we can't invoke LLM/Embedding easily via existing pipeline.
-    # We'll just grab the first active key for this user.
-    stmt = (
-        APIKey.query(db)  # type: ignore
-        .filter(APIKey.user_id == admin_user.id)
-        .filter(APIKey.is_active.is_(True))
-        .limit(1)
-    )
-    api_key = db.execute(stmt).scalars().first()
-    
-    if not api_key:
-        # Create a temporary internal key context if needed, or fail.
-        # For MVP admin tools, require admin to have an API key.
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Admin user needs an active API Key to perform embeddings."
-        )
+    api_key = get_api_key_by_id(db, project_id, user_id=UUID(str(admin_user.id)))
+    if api_key is None or not bool(getattr(api_key, "is_active", False)):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project API Key not found or inactive")
 
     cfg = get_or_default_project_eval_config(db, project_id=UUID(str(api_key.id)))
     effective_provider_ids = get_effective_provider_ids_for_user(
@@ -265,7 +252,7 @@ async def approve_candidate(
     text_changed = new_text != current_payload.get("text", "")
     
     if text_changed or not vec:
-        vec = await _get_embedding_vector(db, redis, client, new_text, current_user)
+        vec = await _get_embedding_vector(db, redis, client, new_text, current_user, payload.project_id)
         
     # 4. Upsert with approved=True
     updated_payload = current_payload.copy()
@@ -314,13 +301,13 @@ async def create_system_memory(
     
     # Ensure collection exists (lazy init)
     try:
-         # Best effort hint, will be corrected by ensure logic if needed
-        await ensure_system_collection_ready(vector_size_hint=1536) 
+        # Best effort hint, will be corrected by ensure logic if needed
+        await ensure_system_collection_ready(vector_size_hint=1536)
     except Exception:
         pass
 
     # 1. Embed
-    vec = await _get_embedding_vector(db, redis, client, payload.content, current_user)
+    vec = await _get_embedding_vector(db, redis, client, payload.content, current_user, payload.project_id)
     
     # 2. Upsert
     point_id = uuid4().hex

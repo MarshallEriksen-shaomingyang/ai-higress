@@ -37,6 +37,7 @@ from .role_permission import RolePermission
 from .run import Run
 from .run_event import RunEvent
 from .system_gateway_config import GatewayConfig
+from .system_config import SystemConfig
 from .upstream_proxy import UpstreamProxyConfig, UpstreamProxyEndpoint, UpstreamProxySource
 from .user import User
 from .workflow import Workflow
@@ -91,6 +92,7 @@ __all__ = [
     "RolePermission",
     "Run",
     "RunEvent",
+    "SystemConfig",
     "TimestampMixin",
     "UUIDPrimaryKeyMixin",
     "UpstreamProxyConfig",

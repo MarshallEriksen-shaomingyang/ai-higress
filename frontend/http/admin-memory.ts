@@ -20,12 +20,14 @@ export interface AdminMemoryListResponse {
 }
 
 export interface AdminMemoryApproveRequest {
+  project_id: string;
   content?: string;
   categories?: string[];
   keywords?: string[];
 }
 
 export interface AdminMemoryCreateRequest {
+  project_id: string;
   content: string;
   categories: string[];
   keywords: string[];

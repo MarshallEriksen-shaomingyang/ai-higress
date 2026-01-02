@@ -60,6 +60,9 @@ AI Higress 项目的完整 API 接口文档。
 ### [Workflows（工作流自动化）](./workflows.md)
 **说明**: `/v1/workflows` 与 `/v1/workflow-runs/*`（Spec 模版、执行实例、SSE 事件流）
 
+### [Admin Memory（系统记忆审核/发布）](./admin-memory.md)
+**说明**: `/v1/admin/memories/*`（候选列表、审核发布、手动创建；Create/Approve 需显式 `project_id` 作为 embedding 调用上下文）
+
 ---
 
 ## 🔍 快速查找

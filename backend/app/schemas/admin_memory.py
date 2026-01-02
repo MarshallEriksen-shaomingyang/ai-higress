@@ -21,12 +21,14 @@ class AdminMemoryItemResponse(BaseModel):
 
 
 class AdminMemoryApproveRequest(BaseModel):
+    project_id: UUID = Field(..., description="用于路由/配额/审计的项目 ID（即 API Key ID）")
     content: Optional[str] = Field(default=None, min_length=1, description="可选：修正后的内容")
     categories: Optional[List[str]] = Field(default=None, description="可选：修正后的分类")
     keywords: Optional[List[str]] = Field(default=None, description="可选：修正后的关键词")
 
 
 class AdminMemoryCreateRequest(BaseModel):
+    project_id: UUID = Field(..., description="用于路由/配额/审计的项目 ID（即 API Key ID）")
     content: str = Field(..., min_length=1, description="记忆内容")
     categories: List[str] = Field(default_factory=list, description="分类")
     keywords: List[str] = Field(default_factory=list, description="关键词")

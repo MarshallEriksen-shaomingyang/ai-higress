@@ -29,5 +29,12 @@ class GatewayConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default=text("15"),
     )
 
+    # KB / Memory global config
+    kb_global_embedding_model = Column(
+        String(128),
+        nullable=True,
+        doc="Global embedding logical model ID for KB. If NULL, fallback to env var.",
+    )
+
 
 __all__ = ["GatewayConfig"]
