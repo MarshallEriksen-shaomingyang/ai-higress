@@ -21,6 +21,7 @@ from .provider_allowed_user import ProviderAllowedUser
 from .provider_api_key import ProviderAPIKey
 from .provider_api_key import ProviderAPIKey as ProviderKey
 from .provider_audit_log import ProviderAuditLog
+from .memory_metrics_history import MemoryMetricsHistory, MemoryMetricsHourly
 from .provider_metrics_history import (
     ProviderRoutingMetricsDaily,
     ProviderRoutingMetricsHistory,
@@ -68,6 +69,8 @@ __all__ = [
     "GatewayConfig",
     "Identity",
     "KBAttribute",
+    "MemoryMetricsHistory",
+    "MemoryMetricsHourly",
     "Message",
     "ModelBillingConfig",
     "Notification",

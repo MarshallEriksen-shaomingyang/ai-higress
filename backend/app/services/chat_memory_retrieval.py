@@ -17,6 +17,7 @@ from app.auth import AuthenticatedAPIKey
 from app.qdrant_client import QdrantNotConfigured, get_qdrant_client, qdrant_is_configured
 from app.settings import settings
 from app.services.embedding_service import embed_text
+from app.services.system_config_service import get_kb_global_embedding_logical_model
 from app.storage.qdrant_kb_collections import get_kb_user_collection_name
 from app.storage.qdrant_kb_store import QDRANT_DEFAULT_VECTOR_NAME, search_points
 from app.utils.response_utils import extract_first_choice_text, parse_json_response_body
@@ -226,7 +227,7 @@ async def maybe_retrieve_user_memory_context(
     if not should_retrieve_user_memory(user_text):
         return ""
 
-    embedding_model = str(getattr(settings, "kb_global_embedding_logical_model", "") or "").strip()
+    embedding_model = str(get_kb_global_embedding_logical_model(db) or "").strip()
     if not embedding_model:
         # MVP expects global embedding; fallback to project-level only when global is not set.
         return ""

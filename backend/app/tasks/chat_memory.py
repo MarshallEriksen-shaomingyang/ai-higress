@@ -16,6 +16,7 @@ from app.qdrant_client import QdrantNotConfigured, close_qdrant_client_for_curre
 from app.redis_client import close_redis_client_for_current_loop, get_redis_client
 from app.settings import settings
 from app.services.embedding_service import embed_text
+from app.services.system_config_service import get_kb_global_embedding_logical_model
 from app.services.project_eval_config_service import (
     DEFAULT_PROVIDER_SCOPES,
     get_effective_provider_ids_for_user,
@@ -181,7 +182,7 @@ async def extract_and_store_chat_memory(
         if not router_model:
             router_model = (getattr(api_key, "chat_default_logical_model", None) or "").strip() or "auto"
 
-        embedding_model = (getattr(settings, "kb_global_embedding_logical_model", None) or "").strip()
+        embedding_model = (get_kb_global_embedding_logical_model(db) or "").strip()
         if not embedding_model:
             # Backward compatibility: allow project-level override only when not using shared strategy.
             strategy = str(getattr(settings, "qdrant_kb_user_collection_strategy", "shared") or "shared").strip().lower()

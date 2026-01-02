@@ -26,6 +26,7 @@ from app.services.project_eval_config_service import (
     get_or_default_project_eval_config,
 )
 from app.services.qdrant_bootstrap_service import ensure_system_collection_ready
+from app.services.system_config_service import get_kb_global_embedding_logical_model
 from app.storage.qdrant_kb_store import (
     delete_points,
     scroll_points,
@@ -50,7 +51,7 @@ async def _get_embedding_vector(
     current_user: AuthenticatedUser,
     project_id: UUID,
 ) -> list[float]:
-    embedding_model = str(getattr(settings, "kb_global_embedding_logical_model", "") or "").strip()
+    embedding_model = str(get_kb_global_embedding_logical_model(db) or "").strip()
     if not embedding_model:
         # Fallback logic mirroring tasks.chat_memory: try to infer from project or just fail
         # Since this is admin interface for system memory, we really need the global model.
@@ -298,16 +299,15 @@ async def create_system_memory(
     Manually create a published system memory.
     """
     collection_name = _get_system_collection_name()
-    
-    # Ensure collection exists (lazy init)
-    try:
-        # Best effort hint, will be corrected by ensure logic if needed
-        await ensure_system_collection_ready(vector_size_hint=1536)
-    except Exception:
-        pass
 
     # 1. Embed
     vec = await _get_embedding_vector(db, redis, client, payload.content, current_user, payload.project_id)
+
+    # Ensure system collection exists using the known vector size (best-effort).
+    try:
+        await ensure_system_collection_ready(vector_size_hint=len(vec))
+    except Exception:
+        pass
     
     # 2. Upsert
     point_id = uuid4().hex
@@ -323,7 +323,7 @@ async def create_system_memory(
         "categories": payload.categories,
         "keywords": payload.keywords,
         "created_at": datetime.now(UTC).isoformat(),
-        "embedding_model": str(getattr(settings, "kb_global_embedding_logical_model", "unknown")),
+        "embedding_model": str(get_kb_global_embedding_logical_model(db) or "unknown"),
     }
     
     await upsert_point(

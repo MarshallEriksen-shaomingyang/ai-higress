@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import APIKey
 from app.settings import settings
+from app.services.system_config_service import get_kb_global_embedding_logical_model
 from app.storage.qdrant_kb_collections import get_kb_user_collection_name
 from app.storage.qdrant_kb_store import (
     QDRANT_DEFAULT_VECTOR_NAME,
@@ -37,7 +38,7 @@ async def ensure_collection_ready(
     preferred_vector_size:
       - When provided, avoids probing the embedding model dimension.
     """
-    global_model = str(getattr(settings, "kb_global_embedding_logical_model", "") or "").strip()
+    global_model = str(get_kb_global_embedding_logical_model(db) or "").strip()
     project_model = str(getattr(api_key, "kb_embedding_logical_model", "") or "").strip()
     strategy = str(getattr(settings, "qdrant_kb_user_collection_strategy", "shared") or "shared").strip().lower()
     if strategy == "shared" and not global_model:
