@@ -575,6 +575,7 @@ export function SlateChatInput({
               initialValue={initialValue}
               disabled={disabled}
               isSending={isSending}
+              isSlashCommand={showSlashMenu}
               placeholder={
                 disabled
                   ? t("chat.conversation.archived_notice")

@@ -5,6 +5,7 @@ import uuid
 
 from celery import shared_task
 from sqlalchemy import Select, delete, func, select, text
+from sqlalchemy.exc import ProgrammingError
 
 from app.celery_app import celery_app
 from app.db import SessionLocal
@@ -45,9 +46,17 @@ def _clamp_retention_days(value: int) -> int:
 
 
 def _get_effective_metrics_retention_days(session) -> int:
-    row = session.execute(select(GatewayConfigRow)).scalars().first()
-    if row is not None and row.metrics_retention_days:
-        return _clamp_retention_days(int(row.metrics_retention_days))
+    try:
+        row = session.execute(select(GatewayConfigRow.metrics_retention_days).limit(1)).first()
+        value = int(row[0]) if row and row[0] is not None else None
+        if value:
+            return _clamp_retention_days(value)
+    except ProgrammingError:
+        # DB 尚未完成迁移（表/列缺失等），直接回退到 env 默认值。
+        try:
+            session.rollback()
+        except Exception:
+            pass
     return _clamp_retention_days(int(settings.dashboard_metrics_retention_days))
 
 

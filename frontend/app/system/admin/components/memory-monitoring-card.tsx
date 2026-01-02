@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import { useI18n } from '@/lib/i18n-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,11 @@ export function MemoryMonitoringCard() {
   const { t } = useI18n();
   const router = useRouter();
   const { data: alertsData, loading } = useMemoryMetricsAlerts({ timeRange: 'today' });
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleNavigate = () => {
     router.push('/system/admin/memory-monitoring');
@@ -31,7 +37,7 @@ export function MemoryMonitoringCard() {
           <CardTitle className="text-lg font-normal">
             {t('system.memory_monitoring.card_title')}
           </CardTitle>
-          {!loading && (
+          {mounted && !loading && (
             hasAlerts ? (
               <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
                 <AlertTriangle className="h-3 w-3" />

@@ -68,7 +68,7 @@ class MemoryMetricsHistory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     # Aggregation window (default 60s bucket)
-    window_start = Column(DateTime(timezone=True), nullable=False, index=True)
+    window_start = Column(DateTime(timezone=True), nullable=False)
     window_duration: Mapped[int] = Column(
         Integer,
         nullable=False,
@@ -235,7 +235,7 @@ class MemoryMetricsHourly(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_id: Mapped[UUID | None] = Column(PG_UUID(as_uuid=True), nullable=True, index=True)
     project_id: Mapped[UUID | None] = Column(PG_UUID(as_uuid=True), nullable=True, index=True)
 
-    window_start = Column(DateTime(timezone=True), nullable=False, index=True)
+    window_start = Column(DateTime(timezone=True), nullable=False)
     window_duration: Mapped[int] = Column(Integer, nullable=False, server_default=text("3600"))
 
     # Aggregated counts

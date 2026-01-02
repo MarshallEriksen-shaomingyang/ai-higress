@@ -47,6 +47,34 @@ def _utc_now() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
 
+def _retrieval_skipped_expr(model):
+    """
+    Hourly rollup 表不一定包含 retrieval_skipped 字段；可由 total_requests - retrieval_triggered 推导。
+    """
+    if hasattr(model, "retrieval_skipped"):
+        return model.retrieval_skipped
+    return model.total_requests - model.retrieval_triggered
+
+
+def _routing_skipped_expr(model):
+    """
+    Hourly rollup 表不一定包含 routing_skipped 字段；可由 routing_requests - stored_user - stored_system 推导。
+    """
+    if hasattr(model, "routing_skipped"):
+        return model.routing_skipped
+    return model.routing_requests - model.routing_stored_user - model.routing_stored_system
+
+
+def _latency_sum_expr(model):
+    """
+    KPI/pulse 需要 latency 的分子（sum_ms）。History 表有 retrieval_latency_sum_ms；
+    Hourly rollup 只有 retrieval_latency_avg_ms，因此用 avg_ms * retrieval_triggered 近似还原。
+    """
+    if hasattr(model, "retrieval_latency_sum_ms"):
+        return model.retrieval_latency_sum_ms
+    return model.retrieval_latency_avg_ms * model.retrieval_triggered
+
+
 def _resolve_time_range(time_range: str) -> tuple[dt.datetime, dt.datetime]:
     """Resolve time range string to start/end datetime."""
     now = _utc_now()
@@ -100,18 +128,18 @@ async def get_memory_kpis(
     stmt = select(
         func.coalesce(func.sum(model.total_requests), 0).label("total_requests"),
         func.coalesce(func.sum(model.retrieval_triggered), 0).label("retrieval_triggered"),
-        func.coalesce(func.sum(model.retrieval_skipped), 0).label("retrieval_skipped"),
+        func.coalesce(func.sum(_retrieval_skipped_expr(model)), 0).label("retrieval_skipped"),
         func.coalesce(func.sum(model.memory_hits), 0).label("memory_hits"),
         func.coalesce(func.sum(model.memory_misses), 0).label("memory_misses"),
         func.coalesce(func.sum(model.routing_requests), 0).label("routing_requests"),
         func.coalesce(func.sum(model.routing_stored_user), 0).label("routing_stored_user"),
         func.coalesce(func.sum(model.routing_stored_system), 0).label("routing_stored_system"),
-        func.coalesce(func.sum(model.routing_skipped), 0).label("routing_skipped"),
+        func.coalesce(func.sum(_routing_skipped_expr(model)), 0).label("routing_skipped"),
         func.coalesce(func.sum(model.session_count), 0).label("session_count"),
         func.coalesce(func.sum(model.backlog_batches_sum), 0).label("backlog_batches_sum"),
         func.coalesce(func.max(model.backlog_batches_max), 0).label("backlog_batches_max"),
         # Weighted average latency
-        func.coalesce(func.sum(model.retrieval_latency_sum_ms), 0).label("latency_sum"),
+        func.coalesce(func.sum(_latency_sum_expr(model)), 0).label("latency_sum"),
         # For P95, use weighted average of P95s
         func.coalesce(
             func.sum(model.retrieval_latency_p95_ms * model.retrieval_triggered) /
@@ -203,7 +231,7 @@ async def get_memory_pulse(
         func.coalesce(func.sum(model.routing_requests), 0).label("routing_requests"),
         func.coalesce(func.sum(model.session_count), 0).label("session_count"),
         func.coalesce(func.sum(model.backlog_batches_sum), 0).label("backlog_batches_sum"),
-        func.coalesce(func.sum(model.retrieval_latency_sum_ms), 0).label("latency_sum"),
+        func.coalesce(func.sum(_latency_sum_expr(model)), 0).label("latency_sum"),
     ).where(
         model.window_start >= start_at,
         model.window_start < end_at,

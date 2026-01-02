@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import { useI18n } from '@/lib/i18n-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -70,8 +71,14 @@ interface MemoryKpiCardsProps {
 export function MemoryKpiCards({ timeRange = '7d' }: MemoryKpiCardsProps) {
   const { t } = useI18n();
   const { data, loading, error } = useMemoryMetricsKpis({ timeRange });
+  const [mounted, setMounted] = useState(false);
 
-  if (loading) {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Always show skeleton until mounted to prevent hydration mismatch
+  if (!mounted || loading) {
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 8 }).map((_, i) => (

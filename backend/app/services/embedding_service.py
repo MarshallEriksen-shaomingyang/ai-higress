@@ -60,7 +60,9 @@ async def embed_text(
     if not input_text:
         return None
 
-    payload: dict[str, Any] = {"model": model, "input": input_text}
+    # 多数 OpenAI-compatible embeddings 既支持 string 也支持 string[]；
+    # 为兼容部分上游严格要求数组格式，这里统一按单元素数组发送。
+    payload: dict[str, Any] = {"model": model, "input": [input_text]}
     handler = RequestHandler(api_key=api_key, db=db, redis=redis, client=client)
     resp = await handler.handle(
         payload=payload,
@@ -77,4 +79,3 @@ async def embed_text(
 
 
 __all__ = ["embed_text"]
-

@@ -272,6 +272,7 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
 
     // ===== Slash Commands =====
     "chat.slash_command.title": "Switch Mode",
+    "chat.slash_command.current_mode": "Current Mode",
 
     // ===== Image Generation =====
     "chat.image_gen.mode_chat": "Chat",
@@ -817,6 +818,7 @@ export const chatTranslations: Record<Language, Record<string, string>> = {
 
     // ===== 斜杠命令 =====
     "chat.slash_command.title": "切换模式",
+    "chat.slash_command.current_mode": "当前模式",
 
     // ===== Image Generation =====
     "chat.image_gen.mode_chat": "聊天",

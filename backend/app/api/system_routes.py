@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm import Session, load_only
 
 from app.jwt_auth import AuthenticatedUser, require_jwt_token
 from app.logging_config import logger
@@ -44,6 +45,22 @@ from app.deps import get_db, get_redis
 
 router = APIRouter(tags=["system"], prefix="/system")
 
+def _is_gateway_config_schema_error(exc: Exception) -> bool:
+    """
+    检测 gateway_config 表/列缺失导致的 SQL 错误。
+
+    说明：一些分支/环境可能尚未跑完迁移；/system/gateway-config 属于展示型接口，
+    不应因为 schema 漂移而直接 500。
+    """
+    if not isinstance(exc, ProgrammingError):
+        return False
+    orig = getattr(exc, "orig", None)
+    sqlstate = getattr(orig, "sqlstate", None)
+    if sqlstate in {"42P01", "42703"}:  # undefined_table / undefined_column
+        return True
+    msg = str(orig or exc).lower()
+    return ("undefinedtable" in msg) or ("undefinedcolumn" in msg) or ("does not exist" in msg)
+
 
 def _apply_gateway_config_to_settings(row: GatewayConfigRow) -> None:
     """
@@ -70,7 +87,43 @@ def _get_or_create_gateway_config_row(db: Session) -> GatewayConfigRow:
     """
     从数据库获取当前网关配置，如不存在则根据 settings 中的默认值创建一条记录。
     """
-    row = db.execute(select(GatewayConfigRow)).scalars().first()
+    try:
+        # 注意：旧 DB 可能缺少新增列（如 kb_global_embedding_model），这里避免 SELECT *。
+        row = (
+            db.execute(
+                select(GatewayConfigRow).options(
+                    # 仅加载 /system/gateway-config 需要的列，减少 schema 漂移导致的风险
+                    # （缺列时会触发 ProgrammingError，后续会降级处理）。
+                    # load_only 不会影响后续写入；写入失败则在 commit 处捕获并提示迁移。
+                    load_only(
+                        GatewayConfigRow.api_base_url,
+                        GatewayConfigRow.max_concurrent_requests,
+                        GatewayConfigRow.request_timeout_ms,
+                        GatewayConfigRow.cache_ttl_seconds,
+                        GatewayConfigRow.probe_prompt,
+                        GatewayConfigRow.metrics_retention_days,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+    except ProgrammingError as exc:
+        db.rollback()
+        if _is_gateway_config_schema_error(exc):
+            logger.warning("gateway_config schema not ready, fallback to settings defaults", exc_info=True)
+            row = GatewayConfigRow(
+                api_base_url=settings.gateway_api_base_url,
+                max_concurrent_requests=settings.gateway_max_concurrent_requests,
+                request_timeout_ms=settings.gateway_request_timeout_ms,
+                cache_ttl_seconds=settings.gateway_cache_ttl_seconds,
+                probe_prompt=settings.probe_prompt,
+                metrics_retention_days=settings.dashboard_metrics_retention_days,
+            )
+            _apply_gateway_config_to_settings(row)
+            return row
+        raise
+
     if row is None:
         row = GatewayConfigRow(
             api_base_url=settings.gateway_api_base_url,
@@ -81,8 +134,24 @@ def _get_or_create_gateway_config_row(db: Session) -> GatewayConfigRow:
             metrics_retention_days=settings.dashboard_metrics_retention_days,
         )
         db.add(row)
-        db.commit()
-        db.refresh(row)
+        try:
+            db.commit()
+            db.refresh(row)
+        except ProgrammingError as exc:
+            db.rollback()
+            if _is_gateway_config_schema_error(exc):
+                logger.warning("gateway_config schema not ready, skip DB write and use settings defaults", exc_info=True)
+                row = GatewayConfigRow(
+                    api_base_url=settings.gateway_api_base_url,
+                    max_concurrent_requests=settings.gateway_max_concurrent_requests,
+                    request_timeout_ms=settings.gateway_request_timeout_ms,
+                    cache_ttl_seconds=settings.gateway_cache_ttl_seconds,
+                    probe_prompt=settings.probe_prompt,
+                    metrics_retention_days=settings.dashboard_metrics_retention_days,
+                )
+                _apply_gateway_config_to_settings(row)
+                return row
+            raise
     # 每次获取时都同步到 settings，确保进程内配置与数据库一致。
     _apply_gateway_config_to_settings(row)
     return row
@@ -328,8 +397,17 @@ def update_gateway_config(
         row.metrics_retention_days = payload.metrics_retention_days
 
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    try:
+        db.commit()
+        db.refresh(row)
+    except ProgrammingError as exc:
+        db.rollback()
+        if _is_gateway_config_schema_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="gateway_config 数据表结构未就绪，请先运行数据库迁移（alembic upgrade head）",
+            ) from exc
+        raise
 
     # 同步到当前进程内的 settings，便于其它代码复用。
     _apply_gateway_config_to_settings(row)

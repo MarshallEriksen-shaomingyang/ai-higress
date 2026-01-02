@@ -63,6 +63,43 @@ async def test_validate_kb_global_embedding_model_dimension_rejects_when_qdrant_
 
 
 @pytest.mark.asyncio
+async def test_validate_kb_global_embedding_model_dimension_includes_upstream_error_context(
+    db_session, monkeypatch
+):
+    monkeypatch.setattr(settings, "qdrant_kb_user_collection_strategy", "shared", raising=False)
+    monkeypatch.setattr(system_config_service, "qdrant_is_configured", lambda: True)
+    monkeypatch.setattr(system_config_service, "_list_all_provider_ids", lambda _db: {"mock"})
+
+    def _fake_exc():
+        return HTTPException(
+            status_code=502,
+            detail=(
+                "Upstream error provider=nvida-66849c86 upstream_status=400: "
+                "Missing required parameter: input"
+            ),
+        )
+
+    async def _fake_embed_text(*args, **kwargs):
+        raise _fake_exc()
+
+    monkeypatch.setattr(system_config_service, "embed_text", _fake_embed_text)
+
+    with pytest.raises(HTTPException) as exc:
+        await system_config_service.validate_kb_global_embedding_model_dimension(
+            db_session,
+            redis=object(),
+            client=object(),
+            current_user_id=uuid4(),
+            current_username="admin",
+            new_model="embed-model",
+        )
+
+    assert exc.value.status_code == 400
+    assert "upstream_status=400" in str(exc.value.detail)
+    assert "Missing required parameter: input" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
 async def test_validate_kb_global_embedding_model_dimension_rejects_on_dimension_mismatch(
     db_session, monkeypatch
 ):

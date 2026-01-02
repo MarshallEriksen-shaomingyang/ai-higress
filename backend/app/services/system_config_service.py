@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
@@ -26,6 +27,7 @@ from app.storage.qdrant_kb_store import (
     ensure_collection_vector_size,
     get_collection_vector_size,
 )
+from app.api.v1.chat.upstream_error_classifier import extract_error_message
 
 
 KB_GLOBAL_EMBEDDING_LOGICAL_MODEL_KEY = "KB_GLOBAL_EMBEDDING_LOGICAL_MODEL"
@@ -115,6 +117,40 @@ def _list_all_provider_ids(db: Session) -> set[str]:
     return out
 
 
+_UPSTREAM_STATUS_RE = re.compile(r"\\bupstream_status=(\\d{3})\\b")
+
+
+def _extract_upstream_status(detail: Any) -> int | None:
+    if detail is None:
+        return None
+    text = str(detail)
+    m = _UPSTREAM_STATUS_RE.search(text)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except Exception:
+        return None
+
+
+def _extract_upstream_message(detail: Any) -> str:
+    """
+    尽量把上游错误精简成可读消息，避免把整段网关上下文/JSON 原样抛给前端。
+    """
+    if detail is None:
+        return ""
+    if isinstance(detail, dict):
+        return extract_error_message(str(detail)).strip()
+
+    text = str(detail)
+    # candidate_retry 的 detail 形如 "...: <message>"，优先截取末尾 message。
+    if ": " in text:
+        _, msg = text.rsplit(": ", 1)
+        if msg.strip():
+            return msg.strip()
+    return extract_error_message(text).strip()
+
+
 async def validate_kb_global_embedding_model_dimension(
     db: Session,
     *,
@@ -182,9 +218,17 @@ async def validate_kb_global_embedding_model_dimension(
             idempotency_key=f"syscfg:embed_dim_probe:{model}:{uuid4().hex}",
         )
     except HTTPException as exc:
+        upstream_status = _extract_upstream_status(getattr(exc, "detail", None))
+        message = _extract_upstream_message(getattr(exc, "detail", None))
+        message = (message or "").strip()
+        message = message[:500] if message else ""
+        status_hint = upstream_status if upstream_status is not None else int(exc.status_code)
+        detail = f"Embedding 试跑失败（upstream_status={status_hint}），已拒绝切换"
+        if message:
+            detail = f"{detail}：{message}"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Embedding 试跑失败（upstream status={exc.status_code}），已拒绝切换",
+            detail=detail,
         ) from exc
     if not vec:
         raise HTTPException(

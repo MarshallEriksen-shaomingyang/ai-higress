@@ -3,12 +3,12 @@
 import {
   Send,
   Loader2,
-  Plus,
   Image as ImageIcon,
   MessageSquare,
   SlidersHorizontal,
   Mic,
   Volume2,
+  ChevronDown,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { useI18n } from "@/lib/i18n-context";
 import type { ModelParameters } from "@/components/chat/chat-input/types";
 import { composerModeLabelKeys, composerModes } from "@/lib/chat/composer-modes";
 import type { ComposerMode } from "@/lib/chat/composer-modes";
+import { cn } from "@/lib/utils";
 
 export type { ComposerMode } from "@/lib/chat/composer-modes";
 
@@ -79,29 +80,50 @@ export function ChatToolbar({
     speech: Volume2,
   };
 
+  // 当前模式的颜色配置
+  const modeColors: Record<ComposerMode, string> = {
+    chat: "text-blue-600 dark:text-blue-400",
+    image: "text-purple-600 dark:text-purple-400",
+    speech: "text-emerald-600 dark:text-emerald-400",
+  };
+
+  const CurrentModeIcon = modeIcons[mode];
+
   return (
     <div className="flex items-center justify-between px-2 py-2 border-t bg-muted/30">
       <div className="flex items-center gap-1">
-        {/* Mode Switcher */}
+        {/* Mode Switcher with Current Mode Indicator */}
         {!hideModeSwitcher && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="sm"
                 disabled={disabled || isSending}
                 title={t("chat.image_gen.switch_mode")}
+                className="h-7 gap-1.5 px-2"
               >
-                <Plus className="size-4" />
+                <CurrentModeIcon className={cn("size-4", modeColors[mode])} />
+                <span className={cn("text-xs font-medium", modeColors[mode])}>
+                  {t(composerModeLabelKeys[mode])}
+                </span>
+                <ChevronDown className="size-3 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               {composerModes.map((m) => {
                 const Icon = modeIcons[m];
+                const isActive = m === mode;
                 return (
-                  <DropdownMenuItem key={m} onClick={() => onModeChange?.(m)}>
-                    <Icon className="size-4 mr-2" />
-                    {t(composerModeLabelKeys[m])}
+                  <DropdownMenuItem
+                    key={m}
+                    onClick={() => onModeChange?.(m)}
+                    className={cn(isActive && "bg-accent")}
+                  >
+                    <Icon className={cn("size-4 mr-2", isActive && modeColors[m])} />
+                    <span className={cn(isActive && "font-medium")}>
+                      {t(composerModeLabelKeys[m])}
+                    </span>
                   </DropdownMenuItem>
                 );
               })}
