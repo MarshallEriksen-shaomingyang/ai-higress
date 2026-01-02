@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api.auth_routes import router as auth_router
 from .api.logical_model_routes import router as logical_model_router
+from .api.memory_metrics_routes import router as memory_metrics_router
 from .api.metrics_dashboard_v2_routes import router as metrics_dashboard_v2_router
 from .api.metrics_routes import router as metrics_router
 from .api.provider_preset_routes import router as provider_preset_router
@@ -133,6 +134,15 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Failed to initialize metrics buffer flushers")
 
+    # Ensure memory metrics buffer flusher is running
+    try:
+        from app.services.memory_metrics_buffer import ensure_memory_metrics_started
+
+        ensure_memory_metrics_started()
+        logger.info("Memory metrics buffer flusher ready")
+    except Exception:
+        logger.exception("Failed to initialize memory metrics buffer flusher")
+
     # 启动工作流运行时（Bridge 全局分发器）
     try:
         from app.services.workflow_runtime import get_workflow_runtime
@@ -159,6 +169,13 @@ async def lifespan(app: FastAPI):
         shutdown_metrics_buffers(flush=True)
     except Exception:
         logger.exception("Failed to shutdown metrics buffers")
+
+    try:
+        from app.services.memory_metrics_buffer import shutdown_memory_metrics_buffer
+
+        shutdown_memory_metrics_buffer(flush=True)
+    except Exception:
+        logger.exception("Failed to shutdown memory metrics buffer")
 
     try:
         from app.services.workflow_runtime import get_workflow_runtime
@@ -293,6 +310,7 @@ def create_app() -> FastAPI:
     # Metrics
     app.include_router(metrics_router)
     app.include_router(metrics_dashboard_v2_router)
+    app.include_router(memory_metrics_router)
 
     # 用户与 API Key 管理
     app.include_router(user_router)

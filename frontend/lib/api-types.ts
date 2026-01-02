@@ -355,6 +355,18 @@ export interface GatewayConfig {
   probe_prompt?: string | null;
 }
 
+export interface AdminSystemConfig {
+  key: string;
+  value: string | null;
+  source: 'db' | 'env';
+}
+
+export interface AdminSystemConfigUpsertRequest {
+  key: string;
+  value: string | null;
+  description?: string | null;
+}
+
 export interface ProviderLimits {
   default_user_private_provider_limit: number;
   max_user_private_provider_limit: number;

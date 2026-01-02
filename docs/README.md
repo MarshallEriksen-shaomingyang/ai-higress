@@ -32,45 +32,66 @@
 ---
 
 ### 🎨 前端文档
-**位置**: [`docs/fronted/`](./fronted/) & [`docs/frontend/`](./frontend/)
+**位置**: [`docs/frontend/`](./frontend/)
 
-前端采用 **“新中式数字水墨 (Digital Ink)”** 设计哲学，追求呼吸感、秩序感与琉璃质感的统一。
+前端采用 **"新中式数字水墨 (Digital Ink)"** 设计哲学，追求呼吸感、秩序感与琉璃质感的统一。
 
 #### 核心设计与视觉
 - [设计规范 v2.0 (ui-prompt)](../ui-prompt.md) - 全局设计灵魂与 AI 提示词
 - [Chat UI 设计规范](./frontend/chat-ui-design.md) - 对话流视觉美学
-- [Dashboard 概览重构](./fronted/dashboard-overview-refactor.md) - 便当盒布局实践
+- [SEO 与响应式设计](./frontend/seo-and-responsive.md) - SEO 和响应式设计
+- [PWA 桌面安装计划](./frontend/pwa-desktop-installation-plan.md) - PWA 功能规划
 
 #### 功能模块文档
-**位置**: [`docs/fronted/features/`](./fronted/features/)
+**位置**: [`docs/frontend/features/`](./frontend/features/)
 
 按功能模块组织的设计文档：
 
-- **认证模块** ([`auth/`](./fronted/features/auth/))
-  - [架构设计](./fronted/features/auth/architecture.md)
-  - [中间件方案](./fronted/features/auth/middleware-approach.md)
-  - [测试指南](./fronted/features/auth/testing-guide.md)
+- **认证模块** ([`auth/`](./frontend/features/auth/))
+  - [架构设计](./frontend/features/auth/architecture.md)
+  - [中间件方案](./frontend/features/auth/middleware-approach.md)
+  - [测试指南](./frontend/features/auth/testing-guide.md)
 
-- **路由模块** ([`routing/`](./fronted/features/routing/))
-  - [架构设计](./fronted/features/routing/architecture.md)
+- **路由模块** ([`routing/`](./frontend/features/routing/))
+  - [架构设计](./frontend/features/routing/architecture.md)
 
-- **提供商模块** ([`providers/`](./fronted/features/providers/))
-  - [密钥管理设计](./fronted/features/providers/keys-management-design.md)
+- **提供商模块** ([`providers/`](./frontend/features/providers/))
+  - [密钥管理设计](./frontend/features/providers/keys-management-design.md)
 
-- **权限模块** ([`permissions/`](./fronted/features/permissions/))
-  - [管理设计](./fronted/features/permissions/management-design.md)
+- **权限模块** ([`permissions/`](./frontend/features/permissions/))
+  - [管理设计](./frontend/features/permissions/management-design.md)
 
-- **通知模块** ([`notifications/`](./fronted/features/notifications/))
-  - [系统设计](./fronted/features/notifications/system-design.md)
+- **通知模块** ([`notifications/`](./frontend/features/notifications/))
+  - [系统设计](./frontend/features/notifications/system-design.md)
 
-- **积分模块** ([`credits/`](./fronted/features/credits/))
-  - [页面设计](./fronted/features/credits/page-design.md)
+- **积分模块** ([`credits/`](./frontend/features/credits/))
+  - [页面设计](./frontend/features/credits/page-design.md)
 
-- **管理员模块** ([`admin/`](./fronted/features/admin/))
-  - [权限管理](./fronted/features/admin/permission-management.md)
+- **管理员模块** ([`admin/`](./frontend/features/admin/))
+  - [权限管理](./frontend/features/admin/permission-management.md)
+
+- **系统模块** ([`system/`](./frontend/features/system/))
+  - [上游代理管理](./frontend/features/system/upstream-proxy-management.md)
+
+- [工作流自动化](./frontend/features/workflow-automation.md) - 工作流功能设计
+
+#### OAuth 集成文档
+- [OAuth 集成指南](./frontend/oauth-integration.md) - OAuth 完整指南
+- [OAuth 快速开始](./frontend/oauth-quick-start.md) - 快速接入指南
+- [Linuxdo OAuth 集成](./frontend/oauth-linuxdo-integration.md) - Linuxdo 平台集成
+
+#### 聊天与图像功能
+- [聊天图像生成集成](./frontend/chat-image-generation-integration.md) - 图像生成功能
+- [聊天助手历史评估集成](./frontend/chat-assistants-history-eval-integration.md) - 助手系统集成
+- [CLI 配置集成](./frontend/cli-config-integration.md) - CLI 配置管理
+
+#### UI 组件文档
+- [Neon Card 使用指南](./frontend/neon-card-usage.md) - Neon 卡片组件
+- [Theme Card 使用指南](./frontend/theme-card-usage.md) - 主题卡片组件
+- [图像主机配置](./frontend/image-hostname-config.md) - 图像配置
 
 #### 已完成项目归档
-- [归档文档](./fronted/archived/) - 已完成的实现计划和任务总结
+- [归档文档](./frontend/archived/) - 已完成的实现计划和任务总结
 
 ---
 
@@ -107,15 +128,15 @@
 → [安全加固](./backend/security-hardening.md)
 
 #### 前端架构
-→ [认证架构](./fronted/features/auth/architecture.md)  
-→ [路由架构](./fronted/features/routing/architecture.md)
+→ [认证架构](./frontend/features/auth/architecture.md)
+→ [路由架构](./frontend/features/routing/architecture.md)
 
 #### 特定功能实现
-→ 查看 [`fronted/features/`](./fronted/features/) 对应模块
+→ 查看 [`frontend/features/`](./frontend/features/) 对应模块
 
 #### 已完成的项目
-→ [`backend/archived/`](./backend/archived/)  
-→ [`fronted/archived/`](./fronted/archived/)
+→ [`backend/archived/`](./backend/archived/)
+→ [`frontend/archived/`](./frontend/archived/)
 
 ---
 
@@ -124,7 +145,7 @@
 ### 新增文档时
 1. **API 文档**: 更新 `docs/api/API_Documentation.md`
 2. **后端设计**: 添加到 `docs/backend/`
-3. **前端功能**: 添加到 `docs/fronted/features/<模块>/`
+3. **前端功能**: 添加到 `docs/frontend/features/<模块>/`
 4. **已完成项目**: 移动到对应的 `archived/` 目录
 
 ### 文档命名规范
@@ -144,11 +165,12 @@
 
 | 类型 | 数量 | 说明 |
 |------|------|------|
-| API 文档 | 1 | 完整的 API 参考 |
-| 后端核心文档 | 4 | 架构和核心功能设计 |
-| 前端核心文档 | 3 | 系统级设计和规划 |
+| API 文档 | 12 | 完整的 API 参考 |
+| 后端核心文档 | 8 | 架构和核心功能设计 |
+| 前端核心文档 | 17 | 系统级设计和规划 |
 | 功能模块文档 | 10 | 按功能组织的设计文档 |
-| 已归档文档 | 20+ | 已完成的项目文档 |
+| 已归档文档 | 22 | 已完成的项目文档 |
+| 开发文档 | 2 | 环境配置和开发指南 |
 
 ---
 
@@ -166,10 +188,10 @@
 ## 📞 获取帮助
 
 - 查看 [API 文档](./api/API_Documentation.md) 了解接口详情
-- 查看 [功能模块文档](./fronted/features/) 了解实现方案
+- 查看 [功能模块文档](./frontend/features/) 了解实现方案
 - 查看 [归档文档](./backend/archived/) 了解历史项目
 
 ---
 
-**最后更新**: 2025-12-11  
+**最后更新**: 2026-01-02
 **维护者**: AI Higress Team

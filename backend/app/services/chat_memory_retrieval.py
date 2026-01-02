@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import re
+import time
 from typing import Any
 from uuid import UUID
 
@@ -17,6 +19,7 @@ from app.auth import AuthenticatedAPIKey
 from app.qdrant_client import QdrantNotConfigured, get_qdrant_client, qdrant_is_configured
 from app.settings import settings
 from app.services.embedding_service import embed_text
+from app.services.memory_metrics_buffer import get_memory_metrics_recorder
 from app.services.system_config_service import get_kb_global_embedding_logical_model
 from app.storage.qdrant_kb_collections import get_kb_user_collection_name
 from app.storage.qdrant_kb_store import QDRANT_DEFAULT_VECTOR_NAME, search_points
@@ -221,19 +224,45 @@ async def maybe_retrieve_user_memory_context(
     Returns a system-message content string to be injected into the prompt,
     or empty string if retrieval is skipped/failed.
     """
+    # Metrics tracking
+    start_time = time.perf_counter()
+    window_start = dt.datetime.now(dt.timezone.utc).replace(second=0, microsecond=0)
+    recorder = get_memory_metrics_recorder()
+
+    def _record_metrics(
+        triggered: bool,
+        success: bool | None,
+        raw_hits: int = 0,
+        valid_hits: int = 0,
+    ) -> None:
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        recorder.record_retrieval(
+            user_id=owner_user_id,
+            project_id=project_id,
+            window_start=window_start,
+            triggered=triggered,
+            success=success,
+            latency_ms=latency_ms,
+            raw_hits=raw_hits,
+            valid_hits=valid_hits,
+        )
+
     if not qdrant_is_configured():
+        _record_metrics(triggered=False, success=None)
         return ""
 
     if not should_retrieve_user_memory(user_text):
+        _record_metrics(triggered=False, success=None)
         return ""
 
     embedding_model = str(get_kb_global_embedding_logical_model(db) or "").strip()
     if not embedding_model:
         # MVP expects global embedding; fallback to project-level only when global is not set.
+        _record_metrics(triggered=False, success=None)
         return ""
 
     query = build_retrieval_query(user_text=user_text, summary_text=summary_text)
-    
+
     # 2. Enhanced Rewriting (LLM-based)
     # Trigger condition: Heuristic detected pronouns OR short query with summary context available.
     # We reuse the project's configured router model (often a cheaper/faster model).
@@ -241,10 +270,11 @@ async def maybe_retrieve_user_memory_context(
     # Also fallback to chat_title_logical_model if router not set, as it's usually cheap.
     if not router_model:
         router_model = (getattr(api_key, "chat_title_logical_model", None) or "").strip()
-        
+
     should_rewrite = bool(router_model and (_PRONOUN_RE.search(user_text) or (summary_text and len(user_text) < 20)))
-    
+
     if should_rewrite:
+        rewrite_start = time.perf_counter()
         rewritten = await rewrite_search_query(
             db,
             redis=redis,
@@ -256,18 +286,30 @@ async def maybe_retrieve_user_memory_context(
             summary_text=summary_text,
             idempotency_key=f"{idempotency_key}:rewrite",
         )
+        rewrite_latency_ms = (time.perf_counter() - rewrite_start) * 1000
+        recorder.record_rewrite(
+            user_id=owner_user_id,
+            project_id=project_id,
+            window_start=window_start,
+            triggered=True,
+            success=bool(rewritten and rewritten != user_text),
+            latency_ms=rewrite_latency_ms,
+        )
         if rewritten:
             query = rewritten
 
     if not query:
+        _record_metrics(triggered=True, success=False)
         return ""
 
     try:
         qdrant = get_qdrant_client()
     except QdrantNotConfigured:
+        _record_metrics(triggered=True, success=None)
         return ""
 
     try:
+        embed_start = time.perf_counter()
         vec = await embed_text(
             db,
             redis=redis,
@@ -278,12 +320,21 @@ async def maybe_retrieve_user_memory_context(
             text=query,
             idempotency_key=idempotency_key,
         )
+        embed_latency_ms = (time.perf_counter() - embed_start) * 1000
+        recorder.record_embedding(
+            user_id=owner_user_id,
+            project_id=project_id,
+            window_start=window_start,
+            latency_ms=embed_latency_ms,
+        )
+
         if not vec:
+            _record_metrics(triggered=True, success=False)
             return ""
 
         collection_name = get_kb_user_collection_name(owner_user_id, embedding_model=embedding_model)
         qfilter = _build_secure_user_memory_filter(owner_user_id=owner_user_id, project_id=project_id)
-        
+
         # 3. Dynamic Retrieval (Top-K + Score Threshold)
         # We ask for a bit more candidates (limit=10) to allow for score filtering and deduplication.
         raw_hits = await search_points(
@@ -294,53 +345,62 @@ async def maybe_retrieve_user_memory_context(
             query_filter=qfilter,
             vector_name=QDRANT_DEFAULT_VECTOR_NAME,
         )
-        
+
         # Minimum score to be considered relevant (0.0-1.0 cosine similarity)
         # TODO: Move to project config
         MIN_SCORE_THRESHOLD = 0.75
-        
+
         valid_hits = []
         seen_content_hashes = set()
-        
+
         for h in raw_hits:
             if not isinstance(h, dict):
                 continue
-                
+
             score = h.get("score")
             # If score is available and too low, skip
             if isinstance(score, (int, float)) and score < MIN_SCORE_THRESHOLD:
                 continue
-                
+
             p = h.get("payload")
             if not isinstance(p, dict):
                 continue
-                
+
             text = (p.get("text") or "").strip()
             if not text:
                 continue
-                
+
             # Deduplication: simple exact match or very short content collision
             # For more advanced dedup, we could use MinHash or just Levenshtein, but exact match is a safe start.
             # We also dedupe based on ID just in case.
             pid = str(h.get("id"))
             if pid in seen_content_hashes:
                 continue
-            
+
             # Content-based hash (simple)
             content_hash = hash(text[:128]) # Optimization: only hash prefix
             if content_hash in seen_content_hashes:
                 continue
-                
+
             seen_content_hashes.add(pid)
             seen_content_hashes.add(content_hash)
-            
+
             valid_hits.append(p)
-            
+
             # Dynamic Top-K: stop if we have enough high-quality hits
             if len(valid_hits) >= top_k:
                 break
 
         ctx = _format_retrieved_payloads(valid_hits, limit=top_k)
+
+        # Record metrics with hit/miss info
+        _record_metrics(
+            triggered=True,
+            success=len(valid_hits) > 0,
+            raw_hits=len(raw_hits),
+            valid_hits=len(valid_hits),
+        )
+
         if memory_debug_logger.isEnabledFor(logging.DEBUG):
             memory_debug_logger.debug(
                 "memory_retrieval: done (user_id=%s project_id=%s should=%s rewritten=%s query_chars=%s dim=%s raw_hits=%s valid_hits=%s)",
@@ -355,6 +415,7 @@ async def maybe_retrieve_user_memory_context(
             )
         return ctx
     except Exception:
+        _record_metrics(triggered=True, success=None)
         if memory_debug_logger.isEnabledFor(logging.DEBUG):
             memory_debug_logger.debug(
                 "memory_retrieval: failed (user_id=%s project_id=%s)", str(owner_user_id), str(project_id), exc_info=True

@@ -170,16 +170,22 @@ async def validate_kb_global_embedding_model_dimension(
         allowed_provider_ids=[],
     )
 
-    vec = await embed_text(
-        db,
-        redis=redis,
-        client=client,
-        api_key=auth_key,
-        effective_provider_ids=providers,
-        embedding_logical_model=model,
-        text="dimension probe",
-        idempotency_key=f"syscfg:embed_dim_probe:{model}:{uuid4().hex}",
-    )
+    try:
+        vec = await embed_text(
+            db,
+            redis=redis,
+            client=client,
+            api_key=auth_key,
+            effective_provider_ids=providers,
+            embedding_logical_model=model,
+            text="dimension probe",
+            idempotency_key=f"syscfg:embed_dim_probe:{model}:{uuid4().hex}",
+        )
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Embedding 试跑失败（upstream status={exc.status_code}），已拒绝切换",
+        ) from exc
     if not vec:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
+import time
 from dataclasses import dataclass
 from typing import Any, Literal
+from uuid import UUID
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -14,6 +17,7 @@ except ModuleNotFoundError:  # pragma: no cover
 from app.api.v1.chat.request_handler import RequestHandler
 from app.auth import AuthenticatedAPIKey
 from app.services.kb_attribute_schema import filter_structured_ops, get_allowed_keys_description
+from app.services.memory_metrics_buffer import get_memory_metrics_recorder
 from app.utils.response_utils import extract_first_choice_text, parse_json_response_body
 
 MemoryScope = Literal["none", "user", "system"]
@@ -236,18 +240,38 @@ async def route_chat_memory(
     router_logical_model: str,
     transcript: str,
     idempotency_key: str,
+    user_id: UUID | None = None,
+    project_id: UUID | None = None,
 ) -> MemoryRouteDecision:
+    start_time = time.perf_counter()
+    window_start = dt.datetime.now(dt.timezone.utc).replace(second=0, microsecond=0)
+    recorder = get_memory_metrics_recorder()
+
+    def _record_routing(decision: MemoryRouteDecision) -> None:
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        recorder.record_routing(
+            user_id=user_id,
+            project_id=project_id,
+            window_start=window_start,
+            scope=decision.scope,
+            latency_ms=latency_ms,
+        )
+
     model = str(router_logical_model or "").strip()
     if not model:
-        return MemoryRouteDecision(
+        decision = MemoryRouteDecision(
             should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
         )
+        _record_routing(decision)
+        return decision
 
     text = (transcript or "").strip()
     if not text:
-        return MemoryRouteDecision(
+        decision = MemoryRouteDecision(
             should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
         )
+        _record_routing(decision)
+        return decision
 
     payload: dict[str, Any] = {
         "model": model,
@@ -271,7 +295,9 @@ async def route_chat_memory(
     )
     response_payload = parse_json_response_body(resp)
     text_out = (extract_first_choice_text(response_payload) or "").strip()
-    return parse_memory_route_decision(text_out)
+    decision = parse_memory_route_decision(text_out)
+    _record_routing(decision)
+    return decision
 
 
 async def route_chat_memory_with_raw(
@@ -284,24 +310,38 @@ async def route_chat_memory_with_raw(
     router_logical_model: str,
     transcript: str,
     idempotency_key: str,
+    user_id: UUID | None = None,
+    project_id: UUID | None = None,
 ) -> tuple[MemoryRouteDecision, str]:
+    start_time = time.perf_counter()
+    window_start = dt.datetime.now(dt.timezone.utc).replace(second=0, microsecond=0)
+    recorder = get_memory_metrics_recorder()
+
+    def _record_routing(decision: MemoryRouteDecision) -> None:
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        recorder.record_routing(
+            user_id=user_id,
+            project_id=project_id,
+            window_start=window_start,
+            scope=decision.scope,
+            latency_ms=latency_ms,
+        )
+
     model = str(router_logical_model or "").strip()
     if not model:
-        return (
-            MemoryRouteDecision(
-                should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
-            ),
-            "",
+        decision = MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
         )
+        _record_routing(decision)
+        return (decision, "")
 
     text = (transcript or "").strip()
     if not text:
-        return (
-            MemoryRouteDecision(
-                should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
-            ),
-            "",
+        decision = MemoryRouteDecision(
+            should_store=False, scope="none", memory_text="", memory_items=[], structured_ops=[]
         )
+        _record_routing(decision)
+        return (decision, "")
 
     payload: dict[str, Any] = {
         "model": model,
@@ -325,7 +365,9 @@ async def route_chat_memory_with_raw(
     )
     response_payload = parse_json_response_body(resp)
     raw_text = (extract_first_choice_text(response_payload) or "").strip()
-    return parse_memory_route_decision(raw_text), raw_text
+    decision = parse_memory_route_decision(raw_text)
+    _record_routing(decision)
+    return decision, raw_text
 
 
 __all__ = [
