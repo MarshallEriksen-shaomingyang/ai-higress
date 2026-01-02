@@ -18,6 +18,23 @@ async def _try_infer_vector_size_from_any_user_collection(qdrant: httpx.AsyncCli
 
     This avoids requiring a manual "dimension" configuration.
     """
+    strategy = str(getattr(settings, "qdrant_kb_user_collection_strategy", "shared") or "shared").strip().lower()
+    if strategy == "shared":
+        shared = str(getattr(settings, "qdrant_kb_user_shared_collection", "kb_shared_v1") or "kb_shared_v1").strip()
+        if not shared:
+            shared = "kb_shared_v1"
+        try:
+            size = await get_collection_vector_size(
+                qdrant,
+                collection_name=shared,
+                vector_name=QDRANT_DEFAULT_VECTOR_NAME,
+            )
+            if isinstance(size, int) and size > 0:
+                return int(size)
+        except Exception:
+            return None
+        return None
+
     prefix = str(getattr(settings, "qdrant_kb_user_collection", "kb_user") or "kb_user").strip()
     if not prefix:
         prefix = "kb_user"
@@ -112,4 +129,3 @@ async def ensure_system_collection_ready(*, vector_size_hint: int | None = None)
 
 
 __all__ = ["ensure_system_collection_ready"]
-

@@ -149,11 +149,20 @@ class Settings(BaseSettings):
             "<QDRANT_KB_USER_COLLECTION>_<user_id_hex>。"
         ),
     )
+    qdrant_kb_user_shared_collection: str = Field(
+        "kb_shared_v1",
+        alias="QDRANT_KB_USER_SHARED_COLLECTION",
+        description=(
+            "当 QDRANT_KB_USER_COLLECTION_STRATEGY=shared 时使用的 user 大集合 collection 名。"
+            "建议带版本号（例如 kb_shared_v1），便于未来做 v2 迁移/双写。"
+        ),
+    )
     qdrant_kb_user_collection_strategy: str = Field(
-        "per_user",
+        "shared",
         alias="QDRANT_KB_USER_COLLECTION_STRATEGY",
         description=(
             "user 维度 collection 拆分策略："
+            "shared（单一大集合，逻辑隔离）；"
             "per_user（每用户一个 collection，物理隔离）；"
             "sharded_by_model（按 embedding 模型分片，collection 数量与用户规模解耦）。"
         ),
@@ -164,6 +173,15 @@ class Settings(BaseSettings):
         description="当 QDRANT_KB_USER_COLLECTION_STRATEGY=sharded_by_model 时的分片数量（>0）。",
         ge=1,
         le=1024,
+    )
+
+    kb_global_embedding_logical_model: str | None = Field(
+        default=None,
+        alias="KB_GLOBAL_EMBEDDING_LOGICAL_MODEL",
+        description=(
+            "全平台统一使用的 embedding 逻辑模型（推荐 MVP 方案）。"
+            "当该值非空时，将忽略项目级的 kb_embedding_logical_model 配置。"
+        ),
     )
     auto_apply_db_migrations: bool = Field(
         True,

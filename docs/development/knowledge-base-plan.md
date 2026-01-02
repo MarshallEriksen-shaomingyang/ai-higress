@@ -6,6 +6,31 @@
 
 ---
 
+## 0. 当前落地状态（Implementation Status，已实现）
+
+> 截至 2026-01-02：本仓库已实现“写入 + 读取”最小闭环，并把关键决策锁定为 **全平台统一 embedding + 单一大集合（shared）+ 强制隔离 filter**。
+
+### 0.1 核心决策（MVP 锁定）
+- **Embedding 全局统一**：由 `KB_GLOBAL_EMBEDDING_LOGICAL_MODEL` 指定；在 `QDRANT_KB_USER_COLLECTION_STRATEGY=shared` 下该值必须配置，避免“维度地狱”。
+- **user 维度单一大集合**：默认 `kb_shared_v1`（可通过 `QDRANT_KB_USER_SHARED_COLLECTION` 改名），以 payload 逻辑隔离（`owner_user_id` + `project_id` 强制 must filter）。
+- **named vector 固定**：向量名固定为 `text`（代码内置），不再通过环境变量手填维度；维度由 embedding 结果长度决定。
+
+### 0.2 已实现的关键能力（读写闭环）
+- **Write（旁路异步 + 增量游标）**：Celery 任务 `tasks.extract_chat_memory`，idle 5 分钟触发；采用 `Conversation.last_memory_extracted_sequence` 做 DB 游标增量抽取，并用“尾递归自派发”追赶积压：`backend/app/tasks/chat_memory.py`。
+- **Read（按需检索注入）**：聊天主链路在构建 payload 后、调用上游前，best-effort 检索用户记忆并注入 system message（默认不检索，有 gating）：`backend/app/services/chat_memory_retrieval.py` + `backend/app/services/chat_app_service.py`。
+- **灰测接口（验证路由模型能力）**：`POST /v1/projects/{project_id}/memory-route/dry-run`：`backend/app/api/v1/project_memory_routes.py`。
+- **开发专用日志**：`apiproxy.memory_debug` 仅非生产落盘 `memory-debug.log`，另有生产可用的 `biz=memory` 结构化 INFO 日志：`backend/app/logging_config.py`、`backend/app/tasks/chat_memory.py`。
+
+### 0.3 代码落点速查
+- Qdrant Client：`backend/app/qdrant_client.py`
+- Qdrant store（create/upsert/search）：`backend/app/storage/qdrant_kb_store.py`
+- collection 命名与策略（shared/per_user/sharded_by_model）：`backend/app/storage/qdrant_kb_collections.py`
+- system collection bootstrap：`backend/app/services/qdrant_bootstrap_service.py`
+- embedding 统一调用：`backend/app/services/embedding_service.py`
+- 记忆路由 Prompt/解析：`backend/app/services/chat_memory_router.py`
+
+---
+
 ## 1. 目标与非目标
 
 ### 1.1 目标
@@ -121,7 +146,9 @@ system 维度的写入必须走管道：
 
 ### 4.1 推荐的 Collection 列表（MVP 可先做 2 个）
 - `kb_system`：系统通用知识（system）
-- `kb_user_<user_id>`：用户私有记忆（user，**每用户一个 collection**，随用户创建自动创建/兜底懒创建）
+- `kb_shared_v1`：用户私有记忆（user，**单一大集合**，用 payload 强制隔离；建议带版本号便于迁移）
+  - 可通过 `QDRANT_KB_USER_SHARED_COLLECTION` 修改名称
+  - 可通过 `QDRANT_KB_USER_COLLECTION_STRATEGY` 切回 `per_user` 或 `sharded_by_model`（非 MVP 默认）
 - （可选后续）`semantic_cache`：语义缓存（问答对）
 - （可选后续）`fewshot_examples`：动态 Few-shot 示例库
 - （可选后续）`guardrails_intents`：语义风控样本库
@@ -130,23 +157,25 @@ system 维度的写入必须走管道：
 所有 points 建议带以下 payload 以便过滤与审计：
 ```json
 {
-  "scope": "system | user",
-  "owner_user_id": "uuid | null",
-  "source_type": "chat_summary | document | faq | manual | rule",
-  "source_id": "string | null",
-  "title": "string | null",
+  "scope": "system|user",
+  "approved": true,
+  "owner_user_id": "uuid|null",
+  "project_id": "uuid|null",
+  "submitted_by_user_id": "uuid|null",
+  "source_type": "chat_memory_route",
+  "source_id": "conversation_id",
   "text": "string",
-  "tags": ["string"],
-  "created_at": "iso8601",
-  "updated_at": "iso8601",
-  "ttl_days": 30,
-  "redacted": true
+  "categories": ["user_profile|preference|project_context|fact"],
+  "keywords": ["string"],
+  "memory_items": [{"content":"...","category":"...","keywords":["..."]}],
+  "embedding_model": "logical_model",
+  "created_at": "iso8601"
 }
 ```
 
 过滤规则：
-- `kb_user_<user_id>`：collection 级别隔离 + 仍建议保留 `owner_user_id==当前用户` 作为二次防线/审计字段
-- `kb_system` 不带 owner，但必须保证只写入“已脱敏/已审核”的内容
+- `kb_shared_v1`：**必须** `must(owner_user_id==当前用户 && project_id==当前项目 && scope=user && approved=true)`（由服务层强制注入，业务层不可绕过）
+- `kb_system`：不带 owner，但必须保证只检索 `approved=true`；用户投稿进入 system 时默认 `approved=false`，需要审核发布
 
 补充说明（为何采用 per-user collection）：
 - 权限边界更直观：默认无法跨用户检索，减少误配置导致的数据泄露面。
@@ -174,7 +203,11 @@ system 维度的写入必须走管道：
   - 可检索的记忆单元（chunk）+ 绑定来源（conversation_id、message_ids、时间戳等，拟新增审计字段）
 
 触发策略（Trigger Policy，先做简单可靠的版本）：
-- **idle 5 分钟**后触发一次“最近 10 条消息”的提取（避免每句话都存）。
+- **idle 5 分钟**后触发一次“增量游标”提取（避免每句话都存，同时保证不漏消息）：
+  - 游标字段：`Conversation.last_memory_extracted_sequence`
+  - 增量切片：`(cursor, until_sequence]`，按序处理，批大小 `_BATCH_LIMIT`
+  - 积压追赶：批满时采用“尾递归自派发”继续处理下一批（避免单 task while 跑完）
+  - 上下文背景：把 `Conversation.summary_text` 拼到 transcript 顶部作为背景（替代 overlap 窗口）
 - 记忆路由模型建议使用“低成本 chat 逻辑模型”（由项目设置 `kb_memory_router_logical_model` 决定，避免写死）。
 - 路由模型输出结构化决策：是否存储、存储到 `user` 还是 `system`。
 - 只有当路由决策为 should_store=true 且 memory_text 非空时才会做 embedding 与写入 Qdrant。
@@ -243,25 +276,28 @@ system 维度的写入必须走管道：
 ### 8.2 Qdrant 基础设施（已落地到仓库）
 - 配置项（后端读取点）：`backend/app/settings.py`
   - `QDRANT_ENABLED` / `QDRANT_URL` / `QDRANT_API_KEY` / `QDRANT_TIMEOUT_SECONDS`
-  - `QDRANT_KB_SYSTEM_COLLECTION` / `QDRANT_KB_USER_COLLECTION`
+  - `QDRANT_KB_SYSTEM_COLLECTION`
+  - `QDRANT_KB_USER_COLLECTION_STRATEGY` / `QDRANT_KB_USER_SHARED_COLLECTION` / `QDRANT_KB_USER_COLLECTION`
+  - `KB_GLOBAL_EMBEDDING_LOGICAL_MODEL`（shared 策略必填）
 - Docker Compose（开发/镜像两种）：`docker-compose.develop.yml`、`docker-compose.images.yml`
   - 新增 `qdrant` service（HTTP 端口 6333，宿主映射到 `127.0.0.1:16333`）。
 - Qdrant 客户端封装：`backend/app/qdrant_client.py`
   - 按 event loop 缓存 client，并提供 `close_qdrant_client_for_current_loop()` 供 Celery/短生命周期 loop 使用。
 - Collection 初始化辅助：`backend/app/services/qdrant_collection_service.py`
-  - `ensure_collection_ready()`：当 `preferred_model=None`（聊天自动记忆）时，使用项目默认 embedding 模型初始化；并支持传入 `preferred_vector_size` 避免额外探测调用。
+  - `ensure_collection_ready()`：shared 策略下强制要求全局统一 embedding；并支持传入 `preferred_vector_size` 避免额外探测调用。
 - 连通性探测：`backend/app/storage/qdrant_service.py`
   - `qdrant_ping()`：用于未来做健康探测/熔断的最小能力。
+ - 记忆检索注入（Read path）：`backend/app/services/chat_memory_retrieval.py`（gating + filter + inject）
 
 ### 8.3 MVP（Phase 1）建议的“真实任务清单”（按依赖顺序）
 1) Embedding 统一入口（不暴露给前端也可先做内部接口）
    - 目标：给定文本 → 返回向量（并可观测、可超时、可降级）。
-   - 重要约束：**embedding 逻辑模型必须可由用户/项目配置选择**，不能在代码里写死（后端可提供默认值，但必须可覆盖）。
+   - MVP 约束：**全平台统一 embedding 模型**（由 `KB_GLOBAL_EMBEDDING_LOGICAL_MODEL` 指定）。
 2) `kb_user/kb_system` 写入闭环
    - 输入：对话增量（优先走“摘要/增量摘要”入口）+ 用户显式“记住”片段
    - 处理：抽取记忆单元（fact/preference/constraint/todo/summary）→ 脱敏/去重/合并 → TTL 分层
    - 输出：写入 Qdrant
-     - user：`kb_user_<user_id>`（每用户一个 collection）
+     - user：`kb_shared_v1`（单一大集合；强制 payload 隔离）
      - system：`kb_system`（仅审核发布进入）
      并在 PostgreSQL 留一份索引表用于审计/删除/导出。
 3) `kb_user/kb_system` 检索闭环（默认不触发）
@@ -271,13 +307,13 @@ system 维度的写入必须走管道：
 
 ### 8.4 推荐的代码模块拆分（便于后续 Phase 2/3 扩展）
 建议把“是否检索/怎么检索/怎么写入”拆为三层，避免把逻辑塞进 `RequestHandler`：
-- `app/services/embedding_service.py`（拟新增）
-  - 职责：统一“文本→向量”调用（后续可做批量、缓存、模型选择与降级）。
-- `app/storage/qdrant_kb_store.py`（拟新增）
+- `app/services/embedding_service.py`（已实现）
+  - 职责：统一“文本→向量”调用（后续可做批量、缓存、降级）。
+- `app/storage/qdrant_kb_store.py`（已实现）
   - 职责：封装 Qdrant 的 upsert/search/delete/scroll，负责 payload filter 组装与错误分类（连接失败/鉴权失败/超时）。
-- `app/services/knowledge_base_service.py`（拟新增）
-  - 职责：gating + query 改写（可选）+ 检索 + 上下文组装（token budget）+ 写入队列（异步）。
-- `app/repositories/knowledge_base_repository.py`（拟新增）
+- `app/services/chat_memory_retrieval.py`（已实现）
+  - 职责：gating + 构造检索 query（MVP 先不用额外 LLM 改写）+ 强制 filter + 注入 system context。
+- `app/repositories/knowledge_base_repository.py`（TODO）
   - 职责：PostgreSQL 侧的审计索引表（point_id、owner、source、状态、TTL、删除标记等），支撑“列表/删除/导出/审核发布”。
 
 ### 8.5 降级策略（落地时必须先写清）
@@ -288,6 +324,25 @@ system 维度的写入必须走管道：
 
 ### 8.6 “用户选择 embedding 模型”与“每用户 collection 自动创建”的一致性约束（必须提前定）
 由于 Qdrant collection 的向量参数（size/distance）是固定的，而不同 embedding 模型可能有不同维度：
-- 推荐做法：把 embedding 模型选择收敛到“项目级配置”（project/api_key 维度），并在**首次写入/检索前**用一次 embedding 返回的向量长度确定该用户 collection 的 vector size，然后创建 collection。
-- 若允许用户后续切换到不同维度的 embedding 模型：需要策略（例如创建新 collection 版本并迁移/重新写入，或使用 Qdrant 的 named vectors 方案）。
-- 实现上建议：用户创建时触发后台任务“预创建”（best-effort）；若预创建失败，首次 KB 使用时再兜底创建，且任何失败都必须降级为“不检索”而不是阻断聊天主流程。
+- MVP 推荐做法：**全平台统一 embedding 模型 + 单一大集合**（shared），从根源消除“不同维度无法混存”的问题。
+- 若未来要更换 embedding 模型：采用版本化迁移（新建 `kb_shared_v2`、双写、回填、切读），避免在同一 collection 混用不同维度。
+
+---
+
+## 9. TODO 与可增强点（按优先级建议）
+
+### 9.1 MVP 后优先做（建议优先级：高）
+- [ ] 检索 Query 改写（LLM 小模型）：将 `build_retrieval_query()` 从启发式升级为“结构化改写”，并保留成本门禁
+- [ ] 检索阈值与去噪：增加 score 阈值、去重、top-k 动态调整，避免“检索污染”
+- [ ] system 维度检索（只读 approved=true）：支持在合适场景注入 system 记忆（仍保持 default-not-retrieve）
+- [ ] system 投稿审核/发布闭环：提供“候选列表→审核→发布→回滚”能力（防投毒）
+
+### 9.2 平台治理与运维（建议优先级：中）
+- [ ] Qdrant scroll + 批量 backfill 工具：支持迁移/重算 embedding（v1→v2）
+- [ ] 记忆删除/导出：用户侧“查看/删除/导出我的记忆”（shared 策略下必须支持按 owner filter 删除）
+- [ ] 指标与告警：记忆检索触发率、命中率、额外延迟、每会话积压批次数（识别异常/成本暴涨）
+
+### 9.3 体验与智能化（建议优先级：中/低）
+- [ ] 记忆去重/合并：同一事实多次出现合并为一条（可用哈希或小模型判等）
+- [ ] 记忆 TTL/权重：按类型设置 TTL 与检索权重（偏好/项目规范 > 临时事实）
+- [ ] 更精细 gating：关键词 → 小模型判定 need_retrieval → 改写/检索（三级漏斗）

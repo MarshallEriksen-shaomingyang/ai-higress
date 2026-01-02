@@ -131,10 +131,57 @@ async def upsert_point(
     resp.raise_for_status()
 
 
+async def search_points(
+    qdrant: httpx.AsyncClient,
+    *,
+    collection_name: str,
+    vector: list[float],
+    limit: int = 3,
+    query_filter: dict[str, Any] | None = None,
+    with_payload: bool = True,
+    vector_name: str = QDRANT_DEFAULT_VECTOR_NAME,
+) -> list[dict[str, Any]]:
+    """
+    Search points from Qdrant and return raw hit items (each includes payload/score/id).
+
+    This is intentionally a thin wrapper around Qdrant REST:
+    POST /collections/{collection}/points/search
+    """
+    name = str(collection_name or "").strip()
+    if not name:
+        raise ValueError("empty collection_name")
+    if not isinstance(vector, list) or not vector:
+        raise ValueError("empty vector")
+    k = int(limit or 0)
+    if k <= 0:
+        k = 3
+    k = max(1, min(k, 50))
+
+    vn = str(vector_name or QDRANT_DEFAULT_VECTOR_NAME).strip() or QDRANT_DEFAULT_VECTOR_NAME
+    body: dict[str, Any] = {
+        "vector": {vn: vector},
+        "limit": k,
+        "with_payload": bool(with_payload),
+    }
+    if query_filter is not None:
+        body["filter"] = query_filter
+
+    resp = await qdrant.post(f"/collections/{name}/points/search", json=body)
+    if resp.status_code == 404:
+        return []
+    resp.raise_for_status()
+    payload = resp.json()
+    result = payload.get("result")
+    if isinstance(result, list):
+        return [it for it in result if isinstance(it, dict)]
+    return []
+
+
 __all__ = [
     "QDRANT_DEFAULT_VECTOR_NAME",
     "create_collection",
     "ensure_collection_vector_size",
     "get_collection_vector_size",
+    "search_points",
     "upsert_point",
 ]

@@ -29,9 +29,27 @@ from app.utils.response_utils import safe_text_from_message_content
 
 
 _IDLE_SECONDS = 300
-_RECENT_MESSAGES = 10
+_BATCH_LIMIT = 50
 
 memory_debug_logger = logging.getLogger("apiproxy.memory_debug")
+
+
+def _enqueue_next_batch_best_effort(*, conversation_id: UUID, user_id: UUID, until_sequence: int) -> None:
+    """
+    Tail-recursion style: process one batch per task, then self-dispatch if backlog remains.
+
+    Must be best-effort: enqueue failures must not break the current batch completion.
+    """
+    try:
+        from app.celery_app import celery_app
+
+        celery_app.send_task(
+            "tasks.extract_chat_memory",
+            args=[str(conversation_id), str(user_id), int(until_sequence)],
+            countdown=0,
+        )
+    except Exception:  # pragma: no cover
+        pass
 
 
 def _preview_text(value: str | None, *, limit: int = 200) -> str:
@@ -41,8 +59,14 @@ def _preview_text(value: str | None, *, limit: int = 200) -> str:
     return text[:limit].rstrip() + "…"
 
 
-def _build_transcript(messages: list[Message]) -> str:
+def _build_transcript(*, summary_text: str | None, messages: list[Message]) -> str:
     lines: list[str] = []
+    summary = (summary_text or "").strip()
+    if summary:
+        lines.append("Conversation summary:")
+        lines.append(summary)
+        lines.append("")
+        lines.append("New messages:")
     for msg in messages:
         role = str(getattr(msg, "role", "") or "").strip() or "user"
         text = safe_text_from_message_content(getattr(msg, "content", None))
@@ -114,17 +138,31 @@ async def extract_and_store_chat_memory(
         if max_seq_int > int(until_sequence):
             return "skipped:new_messages"
 
+        last_extracted = int(getattr(conv, "last_memory_extracted_sequence", 0) or 0)
+        if last_extracted >= int(until_sequence):
+            return "skipped:no_new_messages"
+
         stmt = (
             select(Message)
             .where(Message.conversation_id == conversation_id)
-            .order_by(Message.sequence.desc())
-            .limit(_RECENT_MESSAGES)
+            .where(Message.sequence > int(last_extracted))
+            .where(Message.sequence <= int(until_sequence))
+            .order_by(Message.sequence.asc())
+            .limit(_BATCH_LIMIT)
         )
-        recent_desc = list(db.execute(stmt).scalars().all())
-        recent = list(reversed(recent_desc))
-        transcript = _build_transcript(recent)
+        new_messages = list(db.execute(stmt).scalars().all())
+        if not new_messages:
+            return "skipped:no_new_messages"
+
+        transcript = _build_transcript(
+            summary_text=getattr(conv, "summary_text", None),
+            messages=new_messages,
+        )
         if not transcript:
             return "skipped:empty_transcript"
+        batch_last_seq = int(getattr(new_messages[-1], "sequence", 0) or 0)
+        if batch_last_seq <= 0:
+            return "skipped:bad_message_sequence"
 
         cfg = get_or_default_project_eval_config(db, project_id=UUID(str(api_key.id)))
         effective_provider_ids = get_effective_provider_ids_for_user(
@@ -142,7 +180,12 @@ async def extract_and_store_chat_memory(
         if not router_model:
             router_model = (getattr(api_key, "chat_default_logical_model", None) or "").strip() or "auto"
 
-        embedding_model = (getattr(api_key, "kb_embedding_logical_model", None) or "").strip()
+        embedding_model = (getattr(settings, "kb_global_embedding_logical_model", None) or "").strip()
+        if not embedding_model:
+            # Backward compatibility: allow project-level override only when not using shared strategy.
+            strategy = str(getattr(settings, "qdrant_kb_user_collection_strategy", "shared") or "shared").strip().lower()
+            if strategy != "shared":
+                embedding_model = (getattr(api_key, "kb_embedding_logical_model", None) or "").strip()
         if not embedding_model:
             if memory_debug_logger.isEnabledFor(logging.DEBUG):
                 memory_debug_logger.debug(
@@ -160,11 +203,13 @@ async def extract_and_store_chat_memory(
             async with CurlCffiClient(timeout=60.0, impersonate="chrome120", trust_env=True) as client:
                 if memory_debug_logger.isEnabledFor(logging.DEBUG):
                     memory_debug_logger.debug(
-                        "chat_memory: route_start (conversation_id=%s user_id=%s until=%s msgs=%s transcript_chars=%s router_model=%s embedding_model=%s)",
+                        "chat_memory: route_start (conversation_id=%s user_id=%s cursor=%s until=%s batch_last=%s msgs=%s transcript_chars=%s router_model=%s embedding_model=%s)",
                         str(conversation_id),
                         str(user.id),
+                        int(last_extracted),
                         int(until_sequence),
-                        len(recent),
+                        int(batch_last_seq),
+                        len(new_messages),
                         len(transcript),
                         router_model,
                         embedding_model,
@@ -177,28 +222,75 @@ async def extract_and_store_chat_memory(
                     effective_provider_ids=effective_provider_ids,
                     router_logical_model=router_model,
                     transcript=transcript,
-                    idempotency_key=f"mem_route:{conversation_id}:{until_sequence}",
+                    idempotency_key=f"mem_route:{conversation_id}:{batch_last_seq}",
                 )
 
                 if not decision.should_store or not decision.memory_text:
                     if memory_debug_logger.isEnabledFor(logging.DEBUG):
                         memory_debug_logger.debug(
-                            "chat_memory: route_done (conversation_id=%s user_id=%s until=%s should_store=%s scope=%s items=%s memory_preview=%s) -> skipped",
+                            "chat_memory: route_done (conversation_id=%s user_id=%s cursor=%s batch_last=%s until=%s should_store=%s scope=%s items=%s memory_preview=%s) -> skipped",
                             str(conversation_id),
                             str(user.id),
+                            int(last_extracted),
+                            int(batch_last_seq),
                             int(until_sequence),
                             bool(decision.should_store),
                             str(decision.scope),
                             len(decision.memory_items or []),
                             _preview_text(decision.memory_text, limit=160),
                         )
+                    # Cursor must advance even if no memory extracted, to avoid repeated processing.
+                    committed = False
+                    try:
+                        conv.last_memory_extracted_sequence = max(
+                            int(getattr(conv, "last_memory_extracted_sequence", 0) or 0),
+                            int(batch_last_seq),
+                        )
+                        db.add(conv)
+                        db.commit()
+                        committed = True
+                    except Exception:
+                        db.rollback()
+                        committed = False
+
+                    has_more = int(batch_last_seq) < int(until_sequence)
+                    if committed:
+                        if len(new_messages) >= _BATCH_LIMIT and has_more:
+                            logger.info(
+                                "chat_memory: batch_full requeue (conversation_id=%s user_id=%s cursor_from=%s cursor_to=%s until=%s processed=%s)",
+                                str(conversation_id),
+                                str(user.id),
+                                int(last_extracted),
+                                int(batch_last_seq),
+                                int(until_sequence),
+                                len(new_messages),
+                                extra={"biz": "memory"},
+                            )
+                            _enqueue_next_batch_best_effort(
+                                conversation_id=conversation_id,
+                                user_id=UUID(str(user.id)),
+                                until_sequence=int(until_sequence),
+                            )
+                        else:
+                            logger.info(
+                                "chat_memory: up_to_date (conversation_id=%s user_id=%s cursor_from=%s cursor_to=%s until=%s processed=%s)",
+                                str(conversation_id),
+                                str(user.id),
+                                int(last_extracted),
+                                int(batch_last_seq),
+                                int(until_sequence),
+                                len(new_messages),
+                                extra={"biz": "memory"},
+                            )
                     return "skipped:no_new_memory"
 
                 if memory_debug_logger.isEnabledFor(logging.DEBUG):
                     memory_debug_logger.debug(
-                        "chat_memory: route_done (conversation_id=%s user_id=%s until=%s should_store=%s scope=%s items=%s memory_preview=%s)",
+                        "chat_memory: route_done (conversation_id=%s user_id=%s cursor=%s batch_last=%s until=%s should_store=%s scope=%s items=%s memory_preview=%s)",
                         str(conversation_id),
                         str(user.id),
+                        int(last_extracted),
+                        int(batch_last_seq),
                         int(until_sequence),
                         bool(decision.should_store),
                         str(decision.scope),
@@ -214,14 +306,15 @@ async def extract_and_store_chat_memory(
                     effective_provider_ids=effective_provider_ids,
                     embedding_logical_model=embedding_model,
                     text=decision.memory_text,
-                    idempotency_key=f"mem_embed:{conversation_id}:{until_sequence}",
+                    idempotency_key=f"mem_embed:{conversation_id}:{batch_last_seq}",
                 )
                 if not vec:
                     if memory_debug_logger.isEnabledFor(logging.DEBUG):
                         memory_debug_logger.debug(
-                            "chat_memory: skipped (conversation_id=%s user_id=%s until=%s reason=%s)",
+                            "chat_memory: skipped (conversation_id=%s user_id=%s batch_last=%s until=%s reason=%s)",
                             str(conversation_id),
                             str(user.id),
+                            int(batch_last_seq),
                             int(until_sequence),
                             "embedding_failed",
                         )
@@ -229,9 +322,10 @@ async def extract_and_store_chat_memory(
 
                 if memory_debug_logger.isEnabledFor(logging.DEBUG):
                     memory_debug_logger.debug(
-                        "chat_memory: embedded (conversation_id=%s user_id=%s until=%s vector_dim=%s)",
+                        "chat_memory: embedded (conversation_id=%s user_id=%s batch_last=%s until=%s vector_dim=%s)",
                         str(conversation_id),
                         str(user.id),
+                        int(batch_last_seq),
                         int(until_sequence),
                         len(vec),
                     )
@@ -281,6 +375,7 @@ async def extract_and_store_chat_memory(
                 payload = {
                     "scope": target_scope,
                     "owner_user_id": str(user.id) if target_scope == "user" else None,
+                    "project_id": str(api_key.id) if target_scope == "user" else None,
                     # system scope is always treated as "pending approval" by default.
                     "approved": True if target_scope == "user" else False,
                     "submitted_by_user_id": str(user.id) if target_scope == "system" else None,
@@ -303,9 +398,10 @@ async def extract_and_store_chat_memory(
                 )
                 if memory_debug_logger.isEnabledFor(logging.DEBUG):
                     memory_debug_logger.debug(
-                        "chat_memory: stored (conversation_id=%s user_id=%s until=%s scope=%s collection=%s point_id=%s approved=%s vector_dim=%s)",
+                        "chat_memory: stored (conversation_id=%s user_id=%s batch_last=%s until=%s scope=%s collection=%s point_id=%s approved=%s vector_dim=%s)",
                         str(conversation_id),
                         str(user.id),
+                        int(batch_last_seq),
                         int(until_sequence),
                         target_scope,
                         collection_name,
@@ -313,6 +409,49 @@ async def extract_and_store_chat_memory(
                         bool(payload.get("approved")),
                         len(vec),
                     )
+                # Advance cursor on successful processing.
+                committed = False
+                try:
+                    conv.last_memory_extracted_sequence = max(
+                        int(getattr(conv, "last_memory_extracted_sequence", 0) or 0),
+                        int(batch_last_seq),
+                    )
+                    db.add(conv)
+                    db.commit()
+                    committed = True
+                except Exception:
+                    db.rollback()
+                    committed = False
+
+                has_more = int(batch_last_seq) < int(until_sequence)
+                if committed:
+                    if len(new_messages) >= _BATCH_LIMIT and has_more:
+                        logger.info(
+                            "chat_memory: batch_full requeue (conversation_id=%s user_id=%s cursor_from=%s cursor_to=%s until=%s processed=%s)",
+                            str(conversation_id),
+                            str(user.id),
+                            int(last_extracted),
+                            int(batch_last_seq),
+                            int(until_sequence),
+                            len(new_messages),
+                            extra={"biz": "memory"},
+                        )
+                        _enqueue_next_batch_best_effort(
+                            conversation_id=conversation_id,
+                            user_id=UUID(str(user.id)),
+                            until_sequence=int(until_sequence),
+                        )
+                    else:
+                        logger.info(
+                            "chat_memory: up_to_date (conversation_id=%s user_id=%s cursor_from=%s cursor_to=%s until=%s processed=%s)",
+                            str(conversation_id),
+                            str(user.id),
+                            int(last_extracted),
+                            int(batch_last_seq),
+                            int(until_sequence),
+                            len(new_messages),
+                            extra={"biz": "memory"},
+                        )
                 return f"stored:{target_scope}"
         except QdrantNotConfigured:
             return "skipped:qdrant_not_configured"

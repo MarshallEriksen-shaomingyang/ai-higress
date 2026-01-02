@@ -39,3 +39,10 @@ def test_get_kb_user_collection_name_sharded_by_model(monkeypatch: pytest.Monkey
     uid = UUID("00000000-0000-0000-0000-000000000001")
     # sha1("embed-model-x")[:12] == d5bc9d262b9f
     assert get_kb_user_collection_name(uid, embedding_model="embed-model-x") == "kb_users_d5bc9d262b9f_shard_0001"
+
+
+def test_get_kb_user_collection_name_shared(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "qdrant_kb_user_collection_strategy", "shared", raising=False)
+    monkeypatch.setattr(settings, "qdrant_kb_user_shared_collection", "kb_shared_v1", raising=False)
+    uid = UUID("00000000-0000-0000-0000-000000000001")
+    assert get_kb_user_collection_name(uid) == "kb_shared_v1"

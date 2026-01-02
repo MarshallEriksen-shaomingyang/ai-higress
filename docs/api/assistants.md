@@ -170,7 +170,9 @@ Response:
 说明：
 - `default_logical_model`：项目默认聊天模型；当助手的 `default_logical_model` 设置为 `"__project__"` 时生效。
 - `title_logical_model`：项目默认标题模型；当助手的 `title_logical_model` 设置为 `"__project__"` 时生效；为空表示不自动命名。
-- `kb_embedding_logical_model`：项目级 embedding 模型（用于知识库/向量化能力，例如 Qdrant/RAG）。为空表示未配置（由上层策略决定是否启用/如何选择）。
+- `kb_embedding_logical_model`：项目级 embedding 模型（用于知识库/向量化能力，例如 Qdrant/RAG）。
+  - 当后端配置了 `KB_GLOBAL_EMBEDDING_LOGICAL_MODEL`（全局统一 embedding）时，该字段将被忽略。
+  - 为空表示未配置（由上层策略决定是否启用/如何选择）。
 - `kb_memory_router_logical_model`：项目级“聊天记忆路由模型”，用于判断是否写入记忆，以及写入 user/system 维度。为空表示由后端选择默认。
 
 ### PUT `/v1/projects/{project_id}/chat-settings`

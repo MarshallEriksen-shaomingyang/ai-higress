@@ -60,5 +60,12 @@ class Conversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         doc="摘要最后更新时间（UTC）",
     )
 
+    last_memory_extracted_sequence: Mapped[int] = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="聊天记忆（Qdrant）旁路抽取已处理到的最后一条消息序号（含）；0 表示未处理过",
+    )
+
 
 __all__ = ["Conversation"]

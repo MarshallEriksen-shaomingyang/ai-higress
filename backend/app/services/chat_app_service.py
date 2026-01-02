@@ -51,6 +51,7 @@ from app.services.chat_history_service import (
 )
 from app.services.conversation_summary_service import maybe_update_conversation_summary
 from app.services.chat_run_service import build_openai_request_payload, create_run_record, execute_run_non_stream
+from app.services.chat_memory_retrieval import inject_memory_context_into_messages, maybe_retrieve_user_memory_context
 from app.services.context_features_service import build_rule_context_features
 from app.services.credit_service import InsufficientCreditsError, ensure_account_usable
 from app.services.eval_service import execute_run_stream
@@ -979,6 +980,30 @@ async def send_message_and_run_baseline(
     )
     t_stage = _log_timing("7_build_payload", t_stage, request_id, f"messages_count={len(payload.get('messages', []))}")
 
+    # Read path: best-effort memory retrieval (default-not-retrieve, gated).
+    try:
+        auth_key = _to_authenticated_api_key(api_key=ctx.api_key, current_user=current_user)
+        mem_ctx = await maybe_retrieve_user_memory_context(
+            db,
+            redis=redis,
+            client=client,
+            api_key=auth_key,
+            effective_provider_ids=effective_provider_ids,
+            owner_user_id=UUID(str(current_user.id)),
+            project_id=UUID(str(ctx.project_id)),
+            user_text=(content or ""),
+            summary_text=getattr(conv, "summary_text", None),
+            top_k=3,
+            idempotency_key=f"mem_read:{conv.id}:{user_message.id}",
+        )
+        if mem_ctx:
+            payload["messages"] = inject_memory_context_into_messages(
+                list(payload.get("messages", []) or []),
+                memory_context=mem_ctx,
+            )
+    except Exception:  # pragma: no cover - best-effort only
+        pass
+
     t_bridge_start = time.perf_counter()
     payload, effective_bridge_agent_ids, _tool_filters, openai_tools, tool_name_map = await _load_bridge_tools_for_payload(
         base_payload=payload,
@@ -1240,6 +1265,30 @@ async def stream_message_and_run_baseline(
         model_preset_override=model_preset,
     )
     t_stage = _log_timing("7_build_payload", t_stage, request_id, f"messages_count={len(payload.get('messages', []))}")
+
+    # Read path: best-effort memory retrieval (default-not-retrieve, gated).
+    try:
+        auth_key = _to_authenticated_api_key(api_key=ctx.api_key, current_user=current_user)
+        mem_ctx = await maybe_retrieve_user_memory_context(
+            db,
+            redis=redis,
+            client=client,
+            api_key=auth_key,
+            effective_provider_ids=effective_provider_ids,
+            owner_user_id=UUID(str(current_user.id)),
+            project_id=UUID(str(ctx.project_id)),
+            user_text=(content or ""),
+            summary_text=getattr(conv, "summary_text", None),
+            top_k=3,
+            idempotency_key=f"mem_read:{conv.id}:{user_message.id}",
+        )
+        if mem_ctx:
+            payload["messages"] = inject_memory_context_into_messages(
+                list(payload.get("messages", []) or []),
+                memory_context=mem_ctx,
+            )
+    except Exception:  # pragma: no cover - best-effort only
+        pass
 
     t_bridge_start = time.perf_counter()
     payload, effective_bridge_agent_ids, _tool_filters, openai_tools, tool_name_map = await _load_bridge_tools_for_payload(
@@ -1602,13 +1651,6 @@ async def regenerate_assistant_message(
         model_preset_override=model_preset,
     )
 
-    payload, effective_bridge_agent_ids, _tool_filters, openai_tools, tool_name_map = await _load_bridge_tools_for_payload(
-        base_payload=payload,
-        bridge_agent_id=bridge_agent_id,
-        bridge_agent_ids=bridge_agent_ids,
-        bridge_tool_selections=bridge_tool_selections,
-    )
-
     effective_provider_ids = get_effective_provider_ids_for_user(
         db,
         user_id=UUID(str(current_user.id)),
@@ -1617,6 +1659,37 @@ async def regenerate_assistant_message(
             getattr(get_or_default_project_eval_config(db, project_id=ctx.project_id), "provider_scopes", None)
             or DEFAULT_PROVIDER_SCOPES
         ),
+    )
+
+    # Read path: best-effort memory retrieval (default-not-retrieve, gated).
+    try:
+        auth_key = _to_authenticated_api_key(api_key=ctx.api_key, current_user=current_user)
+        mem_ctx = await maybe_retrieve_user_memory_context(
+            db,
+            redis=redis,
+            client=client,
+            api_key=auth_key,
+            effective_provider_ids=effective_provider_ids,
+            owner_user_id=UUID(str(current_user.id)),
+            project_id=UUID(str(ctx.project_id)),
+            user_text=user_text,
+            summary_text=getattr(conv, "summary_text", None),
+            top_k=3,
+            idempotency_key=f"mem_read:{conv.id}:{user_msg.id}",
+        )
+        if mem_ctx:
+            payload["messages"] = inject_memory_context_into_messages(
+                list(payload.get("messages", []) or []),
+                memory_context=mem_ctx,
+            )
+    except Exception:  # pragma: no cover - best-effort only
+        pass
+
+    payload, effective_bridge_agent_ids, _tool_filters, openai_tools, tool_name_map = await _load_bridge_tools_for_payload(
+        base_payload=payload,
+        bridge_agent_id=bridge_agent_id,
+        bridge_agent_ids=bridge_agent_ids,
+        bridge_tool_selections=bridge_tool_selections,
     )
 
     run = create_run_record(

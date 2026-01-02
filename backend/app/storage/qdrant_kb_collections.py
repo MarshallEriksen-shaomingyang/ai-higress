@@ -58,6 +58,9 @@ def get_kb_user_collection_name(
         prefix = "kb_user"
 
     strategy = str(getattr(settings, "qdrant_kb_user_collection_strategy", "per_user") or "per_user").strip().lower()
+    if strategy == "shared":
+        shared = str(getattr(settings, "qdrant_kb_user_shared_collection", "kb_shared_v1") or "kb_shared_v1").strip()
+        return shared or "kb_shared_v1"
     if strategy == "sharded_by_model":
         shards = int(getattr(settings, "qdrant_kb_user_collection_shards", 16) or 16)
         if shards <= 0:
