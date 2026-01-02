@@ -21,8 +21,19 @@ export type ImageComposerSubmitPayload = {
   params: ImageGenParams;
 };
 
-export type ComposerSubmitPayload = ChatComposerSubmitPayload | ImageComposerSubmitPayload;
+export type SpeechComposerSubmitPayload = {
+  mode: "speech";
+  content: string;
+  voice_audio?: {
+    audio_id: string;
+    format: "wav" | "mp3";
+  } | null;
+  model_preset?: Record<string, number>;
+  parameters: ModelParameters;
+};
+
+export type ComposerSubmitPayload = ChatComposerSubmitPayload | ImageComposerSubmitPayload | SpeechComposerSubmitPayload;
 
 export function isComposerMode(value: string): value is ComposerMode {
-  return value === "chat" || value === "image";
+  return value === "chat" || value === "image" || value === "speech";
 }

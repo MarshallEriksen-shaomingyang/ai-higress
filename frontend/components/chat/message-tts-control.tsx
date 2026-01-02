@@ -61,11 +61,25 @@ export function MessageTtsControl({
     if (!key) return null;
     return s.preferences.preferredTtsSpeedByProject?.[key] ?? null;
   });
+  const selectedVoiceAudio = useUserPreferencesStore((s) => {
+    const key = (projectId || "").trim();
+    if (!key) return null;
+    return s.preferences.selectedVoiceAudioByProject?.[key] ?? null;
+  });
+  const speechModeEnabled = useUserPreferencesStore((s) => {
+    const key = (projectId || "").trim();
+    if (!key) return false;
+    return s.preferences.speechModeEnabledByProject?.[key] ?? false;
+  });
   const effectiveModel = preferredTtsModel || fallbackModel;
   const effectiveFormat = preferredTtsFormat || "mp3";
   const effectiveVoice = preferredTtsVoice || "alloy";
   const effectiveSpeedRaw = Number.isFinite(preferredTtsSpeed) ? (preferredTtsSpeed as number) : 1.0;
   const effectiveSpeed = Math.min(4.0, Math.max(0.25, effectiveSpeedRaw));
+  // 当语音模式开启且有选定参考音频时，传递 prompt_audio_id
+  const effectivePromptAudioId = speechModeEnabled && selectedVoiceAudio?.audio_id
+    ? selectedVoiceAudio.audio_id
+    : undefined;
 
   const payload = useMemo<MessageSpeechRequest>(
     () => ({
@@ -73,8 +87,9 @@ export function MessageTtsControl({
       voice: effectiveVoice,
       response_format: effectiveFormat,
       speed: effectiveSpeed,
+      prompt_audio_id: effectivePromptAudioId,
     }),
-    [effectiveFormat, effectiveModel, effectiveSpeed, effectiveVoice]
+    [effectiveFormat, effectiveModel, effectivePromptAudioId, effectiveSpeed, effectiveVoice]
   );
 
   const resetAudio = useCallback(() => {

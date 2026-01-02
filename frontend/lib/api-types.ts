@@ -1069,6 +1069,8 @@ export interface MessageSpeechRequest {
   voice?: TtsVoice;
   response_format?: TtsResponseFormat;
   speed?: number;
+  /** 参考音频 ID（用于语音克隆） */
+  prompt_audio_id?: string;
 }
 
 export interface RunSummary {

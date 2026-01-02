@@ -4,6 +4,17 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 /**
+ * 选定的参考音频信息
+ */
+export interface SelectedVoiceAudio {
+  audio_id: string;
+  object_key: string;
+  url: string;
+  filename?: string;
+  format: "wav" | "mp3";
+}
+
+/**
  * 用户偏好设置类型
  */
 export interface UserPreferences {
@@ -27,6 +38,10 @@ export interface UserPreferences {
   >;
   /** 用户偏好的语速（TTS speed，按项目存储） */
   preferredTtsSpeedByProject: Record<string, number>;
+  /** 语音输出模式是否开启（按项目存储） */
+  speechModeEnabledByProject: Record<string, boolean>;
+  /** 选定的参考语音音频（按项目存储，用于语音克隆） */
+  selectedVoiceAudioByProject: Record<string, SelectedVoiceAudio>;
 }
 
 /**
@@ -47,6 +62,8 @@ interface UserPreferencesState {
     format: UserPreferences["preferredTtsFormatByProject"][string] | null
   ) => void;
   setPreferredTtsSpeed: (projectId: string | null | undefined, speed: number | null) => void;
+  setSpeechModeEnabled: (projectId: string | null | undefined, enabled: boolean) => void;
+  setSelectedVoiceAudio: (projectId: string | null | undefined, audio: SelectedVoiceAudio | null) => void;
   resetPreferences: () => void;
 }
 
@@ -61,6 +78,8 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   preferredTtsVoiceByProject: {},
   preferredTtsFormatByProject: {},
   preferredTtsSpeedByProject: {},
+  speechModeEnabledByProject: {},
+  selectedVoiceAudioByProject: {},
 };
 
 /**
@@ -166,14 +185,44 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
             preferences: { ...state.preferences, preferredTtsSpeedByProject: next },
           };
         }),
-      
+
+      setSpeechModeEnabled: (projectId, enabled) =>
+        set((state) => {
+          const key = (projectId || "").trim();
+          if (!key) return state;
+          const next = { ...state.preferences.speechModeEnabledByProject };
+          if (!enabled) {
+            delete next[key];
+          } else {
+            next[key] = enabled;
+          }
+          return {
+            preferences: { ...state.preferences, speechModeEnabledByProject: next },
+          };
+        }),
+
+      setSelectedVoiceAudio: (projectId, audio) =>
+        set((state) => {
+          const key = (projectId || "").trim();
+          if (!key) return state;
+          const next = { ...state.preferences.selectedVoiceAudioByProject };
+          if (!audio) {
+            delete next[key];
+          } else {
+            next[key] = audio;
+          }
+          return {
+            preferences: { ...state.preferences, selectedVoiceAudioByProject: next },
+          };
+        }),
+
       resetPreferences: () =>
         set({ preferences: DEFAULT_PREFERENCES }),
     }),
     {
       name: "user-preferences", // localStorage key
       storage: createJSONStorage(() => localStorage),
-      version: 5,
+      version: 6,
       migrate: (persistedState: unknown, version: number) => {
         if (!persistedState || typeof persistedState !== "object") {
           return { preferences: DEFAULT_PREFERENCES };
@@ -193,10 +242,12 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
           preferredTtsVoiceByProject: (prefs as any).preferredTtsVoiceByProject ?? {},
           preferredTtsFormatByProject: (prefs as any).preferredTtsFormatByProject ?? {},
           preferredTtsSpeedByProject: (prefs as any).preferredTtsSpeedByProject ?? {},
+          speechModeEnabledByProject: (prefs as any).speechModeEnabledByProject ?? {},
+          selectedVoiceAudioByProject: (prefs as any).selectedVoiceAudioByProject ?? {},
         };
 
         // 如果版本号未变化，也直接返回合并后的结构
-        if (version >= 5) {
+        if (version >= 6) {
           return { preferences: next };
         }
         return { preferences: next };

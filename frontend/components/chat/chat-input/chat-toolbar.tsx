@@ -8,6 +8,7 @@ import {
   MessageSquare,
   SlidersHorizontal,
   Mic,
+  Volume2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ interface ChatToolbarProps {
   hideModeSwitcher?: boolean;
   onOpenImageSettings?: () => void;
   onOpenAudioSettings?: () => void;
+  onOpenVoiceSelector?: () => void;
 }
 
 export function ChatToolbar({
@@ -68,11 +70,13 @@ export function ChatToolbar({
   hideModeSwitcher = false,
   onOpenImageSettings,
   onOpenAudioSettings,
+  onOpenVoiceSelector,
 }: ChatToolbarProps) {
   const { t } = useI18n();
   const modeIcons: Record<ComposerMode, typeof MessageSquare> = {
     chat: MessageSquare,
     image: ImageIcon,
+    speech: Volume2,
   };
 
   return (
@@ -151,6 +155,19 @@ export function ChatToolbar({
             disabled={disabled || isSending}
             title={t("chat.image_gen.params")}
             aria-label={t("chat.image_gen.params")}
+          >
+            <SlidersHorizontal className="size-4" />
+          </Button>
+        ) : null}
+
+        {mode === "speech" && onOpenVoiceSelector ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onOpenVoiceSelector}
+            disabled={disabled || isSending}
+            title={t("chat.voice_selector.settings")}
+            aria-label={t("chat.voice_selector.settings")}
           >
             <SlidersHorizontal className="size-4" />
           </Button>

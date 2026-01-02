@@ -27,8 +27,10 @@ import {
   AudioInputSettingsDrawer,
   type UploadedAudioAttachment,
 } from "./chat-input/audio-input-settings-drawer";
+import { VoiceSelectorDrawer } from "./chat-input/voice-selector-drawer";
 import { audioService } from "@/http/audio";
 import { Button } from "@/components/ui/button";
+import type { SelectedVoiceAudio } from "@/lib/stores/user-preferences-store";
 
 export type { ModelParameters } from "./chat-input/types";
 export type { ImageGenParams };
@@ -109,7 +111,10 @@ export function SlateChatInput({
   className,
 }: SlateChatInputProps) {
   const { t } = useI18n();
-  const { preferences } = useUserPreferencesStore();
+  const {
+    preferences,
+    setSelectedVoiceAudio,
+  } = useUserPreferencesStore();
   const [editor] = useState(() => withHistory(withReact(createEditor())));
   const [isSending, setIsSending] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -120,6 +125,12 @@ export function SlateChatInput({
   const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
   const [audioAttachment, setAudioAttachment] = useState<UploadedAudioAttachment | null>(null);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [voiceSelectorOpen, setVoiceSelectorOpen] = useState(false);
+
+  // 语音模式：选中的参考音频
+  const selectedVoiceAudio = projectId
+    ? preferences.selectedVoiceAudioByProject[projectId] ?? null
+    : null;
 
   // 模型参数状态（持久化）：用户设置后后续每次发送都会沿用
   const parameters = useChatModelParametersStore((s) => s.parameters);
@@ -275,6 +286,25 @@ export function SlateChatInput({
             params: imageGenParams,
           });
         }
+      } else if (mode === "speech") {
+        // 语音模式：发送文本内容用于语音合成
+        if (!content) {
+          toast.error(t("chat.message.input_placeholder"));
+          return;
+        }
+        const model_preset = buildModelPreset(parameters);
+        const voice_audio = selectedVoiceAudio
+          ? { audio_id: selectedVoiceAudio.audio_id, format: selectedVoiceAudio.format }
+          : null;
+        if (onSubmit) {
+          await onSubmit({
+            mode: "speech",
+            content,
+            voice_audio,
+            model_preset,
+            parameters,
+          });
+        }
       } else {
         const composed = composeMessageContent(content, images);
         if (!composed && !audioAttachment) {
@@ -384,12 +414,27 @@ export function SlateChatInput({
   }, [imageSettingsOpen, mode]);
 
   useEffect(() => {
-    if (mode !== "chat") {
+    if (mode !== "chat" && mode !== "speech") {
       setAudioSettingsOpen(false);
       setAudioAttachment(null);
       setIsUploadingAudio(false);
     }
+    if (mode !== "speech") {
+      setVoiceSelectorOpen(false);
+    }
   }, [mode]);
+
+  const handleSelectVoice = useCallback(
+    (voice: SelectedVoiceAudio | null) => {
+      if (!projectId) return;
+      setSelectedVoiceAudio(projectId, voice);
+    },
+    [projectId, setSelectedVoiceAudio]
+  );
+
+  const handleOpenVoiceSelector = useCallback(() => {
+    setVoiceSelectorOpen(true);
+  }, []);
 
   return (
     <div className={cn("relative flex h-full flex-col bg-background", className)}>
@@ -423,6 +468,24 @@ export function SlateChatInput({
             </div>
           ) : null}
 
+          {mode === "speech" && selectedVoiceAudio ? (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-primary/50 bg-primary/5 px-3 py-2">
+              <div className="text-xs text-primary truncate">
+                {t("chat.voice_selector.selected")}:{" "}
+                {selectedVoiceAudio.filename || selectedVoiceAudio.audio_id}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={disabled || isSending}
+                onClick={() => setVoiceSelectorOpen(true)}
+              >
+                {t("chat.action.edit")}
+              </Button>
+            </div>
+          ) : null}
+
           <div
             className={cn(
               "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl md:rounded-2xl border bg-background shadow-[0_8px_24px_rgba(0,0,0,0.08)] md:shadow-[0_16px_48px_rgba(0,0,0,0.10)]",
@@ -438,9 +501,13 @@ export function SlateChatInput({
               disabled={disabled}
               isSending={isSending}
               placeholder={
-                disabled 
-                  ? t("chat.conversation.archived_notice") 
-                  : (mode === "image" ? t("chat.image_gen.prompt") : t("chat.message.input_placeholder"))
+                disabled
+                  ? t("chat.conversation.archived_notice")
+                  : mode === "image"
+                    ? t("chat.image_gen.prompt")
+                    : mode === "speech"
+                      ? t("chat.speech.prompt")
+                      : t("chat.message.input_placeholder")
               }
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
@@ -471,11 +538,18 @@ export function SlateChatInput({
                   : undefined
               }
               onOpenAudioSettings={mode === "chat" ? () => setAudioSettingsOpen(true) : undefined}
+              onOpenVoiceSelector={mode === "speech" && projectId ? handleOpenVoiceSelector : undefined}
             />
           </div>
 
           <div className="text-[10px] md:text-xs text-muted-foreground text-center px-2">
-            {isSending ? (mode === "image" ? t("chat.image_gen.generating") : t("chat.message.sending")) : sendHint}
+            {isSending
+              ? mode === "image"
+                ? t("chat.image_gen.generating")
+                : mode === "speech"
+                  ? t("chat.speech.generating")
+                  : t("chat.message.sending")
+              : sendHint}
           </div>
         </div>
       </div>
@@ -529,6 +603,15 @@ export function SlateChatInput({
             setIsUploadingAudio(false);
           }
         }}
+      />
+
+      <VoiceSelectorDrawer
+        open={voiceSelectorOpen}
+        onOpenChange={setVoiceSelectorOpen}
+        disabled={disabled || isSending}
+        selectedVoice={selectedVoiceAudio}
+        onSelectVoice={handleSelectVoice}
+        conversationId={conversationId}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { Image as ImageIcon, MessageSquare } from "lucide-react";
+import { Image as ImageIcon, MessageSquare, Volume2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ export function ChatModeButtons({
   const icons: Record<ComposerMode, typeof MessageSquare> = {
     chat: MessageSquare,
     image: ImageIcon,
+    speech: Volume2,
   };
 
   return (

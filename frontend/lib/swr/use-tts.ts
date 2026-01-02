@@ -29,7 +29,8 @@ function buildAudioCacheKey(messageId: string, payload: MessageSpeechRequest): s
   const voice = payload.voice ?? "alloy";
   const responseFormat = payload.response_format ?? "mp3";
   const speed = Number.isFinite(payload.speed) ? String(payload.speed) : "1";
-  return `msg:${messageId}|m:${model}|v:${voice}|f:${responseFormat}|s:${speed}`;
+  const promptAudioId = String(payload.prompt_audio_id ?? "").trim();
+  return `msg:${messageId}|m:${model}|v:${voice}|f:${responseFormat}|s:${speed}|pa:${promptAudioId}`;
 }
 
 function pruneAudioCache(now: number) {
@@ -96,6 +97,7 @@ export function useMessageSpeechAudio(messageId: string) {
         voice: arg?.voice ?? "alloy",
         response_format: arg?.response_format ?? "mp3",
         speed: arg?.speed ?? 1.0,
+        prompt_audio_id: arg?.prompt_audio_id,
       };
       if (!payload.model || !String(payload.model).trim()) {
         throw new Error("Missing TTS model");

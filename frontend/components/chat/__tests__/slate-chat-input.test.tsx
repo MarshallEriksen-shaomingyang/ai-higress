@@ -20,7 +20,19 @@ vi.mock("@/lib/i18n-context", () => ({
 describe("SlateChatInput", () => {
   beforeEach(() => {
     localStorage.clear();
-    useUserPreferencesStore.setState({ preferences: { sendShortcut: "ctrl-enter" } });
+    useUserPreferencesStore.setState({
+      preferences: {
+        sendShortcut: "ctrl-enter",
+        preferredChatModelByProject: {},
+        preferredImageModelByProject: {},
+        preferredTtsModelByProject: {},
+        preferredTtsVoiceByProject: {},
+        preferredTtsFormatByProject: {},
+        preferredTtsSpeedByProject: {},
+        speechModeEnabledByProject: {},
+        selectedVoiceAudioByProject: {},
+      },
+    });
     useChatModelParametersStore.getState().reset();
   });
 
@@ -85,7 +97,19 @@ describe("SlateChatInput", () => {
   });
 
   it("在 Enter 模式下按 Enter 应发送消息", async () => {
-    useUserPreferencesStore.setState({ preferences: { sendShortcut: "enter" } });
+    useUserPreferencesStore.setState({
+      preferences: {
+        sendShortcut: "enter",
+        preferredChatModelByProject: {},
+        preferredImageModelByProject: {},
+        preferredTtsModelByProject: {},
+        preferredTtsVoiceByProject: {},
+        preferredTtsFormatByProject: {},
+        preferredTtsSpeedByProject: {},
+        speechModeEnabledByProject: {},
+        selectedVoiceAudioByProject: {},
+      },
+    });
     const onSend = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
 
